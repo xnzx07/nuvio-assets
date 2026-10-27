@@ -10,6 +10,14 @@ import { feuilles } from "./statique.js";
 export const NOUVEAUTES = [
   {
     date: "2026-10-27",
+    titre: "Des collections qui s'ouvrent comme l'accueil",
+    points: [
+      "Nouvelle case « Ouvrir les collections comme l'accueil », dans Les collections : une tuile ouverte montre ses rangées comme l'accueil, au lieu des onglets.",
+      "Sur Nuvio TV, la bande-annonce du film choisi se lance alors dans le fond, si elle est activée dans les réglages de l'accueil (Paramètres → Disposition). Réimporte les collections (« Tout envoyer dans Nuvio »).",
+    ],
+  },
+  {
+    date: "2026-10-27",
     titre: "La VF vérifiée dans le fichier, et des sagas qui défilent bien",
     points: [
       "« Dispo depuis peu », « Bientôt dispo », les fiches et les affiches suivent maintenant le même avis VF, lu dans le fichier lui-même : un film seulement en VF québécoise n'est plus annoncé dispo, et un film arrivé en VF dans la journée reprend ses couleurs sans attendre le lendemain.",

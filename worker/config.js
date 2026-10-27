@@ -117,6 +117,7 @@ export function defaults(rows, discover) {
     t: {},            // tuiles masquées par collection : { idCollection: [positions] }
     to: {},           // ordre des tuiles par collection : { idCollection: [positions dans l'ordre voulu] }
     u: false,         // titres pas encore regardables dans les Tendances (masqués par défaut)
+    ca: false,        // collections affichées comme l'accueil (bandes-annonces sur Nuvio TV) plutôt qu'en onglets
     ac: [],           // place des collections sur l'accueil : [{ id, n: rangées avant elle }] (les autres après les rangées)
     k: "",            // clé Gemini personnelle (IA avec le quota de l'utilisateur)
     al: "",           // jeton d'alerte : lien de l'hébergeur d'une copie (rangée « Mise à jour »)
@@ -257,6 +258,7 @@ export function decodeConfig(segment, rows, discover) {
     f: raw.f === 1 || raw.f === true,
     h: fromMask(raw.h, SEASON_KEYS.map(([k]) => k)) ?? base.h,
     u: raw.u === 1 || raw.u === true,
+    ca: raw.ca === 1 || raw.ca === true,
     k: geminiKeyOf(raw.k),
     al: typeof raw.al === "string" && /^[a-f0-9]{24}$/.test(raw.al) ? raw.al : "",
     custom: true,

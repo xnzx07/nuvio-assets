@@ -518,6 +518,17 @@ test("collections_ordre_des_tuiles", async () => {
   assert.deepEqual(await ids({ t: { 2: [3] } }), ["a", "b", "c"]);
 });
 
+// « Comme l'accueil » : toutes les collections en FOLLOW_LAYOUT (bandes-annonces sur Nuvio TV) ; sinon celles du fichier.
+test("collections_comme_l_accueil", async () => {
+  const folders = [{ id: "a", title: "A" }];
+  globalThis.fetch = async (url) => new Response(String(url).endsWith("/collections/collections.json")
+    ? JSON.stringify([{ id: "genres", title: "Genres", viewMode: "TABBED_GRID", folders }, { id: "sagas", title: "Sagas", viewMode: "ROWS", folders }])
+    : "{}", { headers: { "Content-Type": "application/json" } });
+  const modes = async (cfg) => (await (await get(`/${seg(cfg)}/collections.json`)).json()).map((c) => c.viewMode);
+  assert.deepEqual(await modes({ c: ["genres", "sagas"] }), ["TABBED_GRID", "ROWS"]);
+  assert.deepEqual(await modes({ c: ["genres", "sagas"], ca: 1 }), ["FOLLOW_LAYOUT", "FOLLOW_LAYOUT"]);
+});
+
 test("studios_ordre_par_defaut", async () => {
   const folders = ["studio-33", "studio-1", "studio-3", "marvel-studios", "warner-bros", "dc-comics"].map((id) => ({ id, title: id }));
   globalThis.fetch = async (url) => new Response(String(url).endsWith("/collections/collections.json")

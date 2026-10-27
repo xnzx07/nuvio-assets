@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.43.9";
+const VERSION = "5.44.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -2685,7 +2685,9 @@ async function collections(cfg, url) {
         .sort((a, b) => (c.id === "plateformes-streaming" ? rangPlateforme(a, cfg) - rangPlateforme(b, cfg) || 0 : 0))
         .map((f) => (filtered && f.sources ? { ...f, sources: f.sources.map((src) => filterSource(src, cfg)) } : f))
         .map((f) => (url && f.sources ? { ...f, sources: f.sources.map((src) => notreAddon(src, addonId(url))) } : f));
-      return { ...c, folders };
+      // « Comme l'accueil » : Nuvio TV ouvre la tuile avec la disposition de l'accueil, et ses
+      // bandes-annonces au survol si elles y sont activées (les onglets n'en ont pas).
+      return { ...c, ...(cfg.ca ? { viewMode: "FOLLOW_LAYOUT" } : {}), folders };
     })
     .filter((c) => c.folders.length);
 }

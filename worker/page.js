@@ -131,7 +131,7 @@ hoteRefresh();
 
 
 export function configurePage({ origin, cfg, rows, discover, providers, collections, defaults, regions, genres, languages, sorts, seasons, maxCustom, season, copy = false, fixed = "", fixedOk = false, apercus = origin }) {
-  const plain = (c) => ({ n: c.n, r: c.r, p: c.p, d: c.d, c: c.c, o: c.o, x: c.x, g: c.g, e: c.e, m: c.m, a: c.a, f: c.f, h: c.h, t: c.t, to: c.to || {}, ac: c.ac || [], u: c.u, k: c.k, al: c.al });
+  const plain = (c) => ({ n: c.n, r: c.r, p: c.p, d: c.d, c: c.c, o: c.o, x: c.x, g: c.g, e: c.e, m: c.m, a: c.a, f: c.f, h: c.h, t: c.t, to: c.to || {}, ac: c.ac || [], u: c.u, ca: c.ca, k: c.k, al: c.al });
   const data = {
     origin, maxCustom, fixed, fixedOk,
     cfg: plain(cfg),
@@ -280,6 +280,7 @@ ${copy ? "" : `        <p class="sub">Le lien partagé sature ? <a href="${origi
           <div class="coll-dlg-body"><p class="coll-intro">Coche les collections et choisis leurs tuiles. Leur place sur l'accueil, avant ou après tes rangées, se règle dans « Ordre de l'accueil ».</p><div id="collections" style="display:grid;gap:10px"></div></div>
         </dialog>
         <button type="button" class="btn line" id="acc-ouvrir">Ordre de l'accueil</button>
+        <label class="switch"><input type="checkbox" id="g-coll-accueil"><span><b>Ouvrir les collections comme l'accueil</b><small>Une tuile ouverte montre ses rangées comme l'accueil, au lieu des onglets. Sur Nuvio TV, la bande-annonce du film choisi se lance alors dans le fond, si elle est activée dans les réglages de l'accueil (Paramètres → Disposition). Sur téléphone, rien ne change pour les bandes-annonces.</small></span></label>
         <dialog id="acc-dialog" aria-labelledby="acc-titre">
           <div class="coll-dlg-head"><h2 id="acc-titre">L'ordre de l'accueil</h2><button type="button" class="btn line" id="acc-fermer">Fermer</button></div>
           <div class="coll-dlg-body">
@@ -1219,6 +1220,7 @@ function compact(st) {
   if (st.a) o.a = st.a;
   if (st.f) o.f = 1;
   if (st.u) o.u = 1;
+  if (st.ca) o.ca = 1;
   if (st.k) o.k = st.k;
   if (st.al) o.al = st.al;
   if (!same(st.h, df.h)) o.h = mask(st.h, D.seasons.map(s => s[0]));
@@ -2491,6 +2493,7 @@ function renderAll() {
   $("g-vote").value = state.m; $("g-vote-out").textContent = fmtVote(state.m); paintRange($("g-vote"));
   $("g-year").value = String(state.a); $("g-family").checked = state.f;
   $("g-unreleased").checked = !state.u;
+  $("g-coll-accueil").checked = state.ca;
   renderCollections();
   update();
 }
@@ -2502,6 +2505,7 @@ $("g-vote").addEventListener("input", () => { state.m = Number($("g-vote").value
 $("g-year").addEventListener("change", () => { state.a = Number($("g-year").value); update(); });
 $("g-family").addEventListener("change", () => { state.f = $("g-family").checked; update(); });
 $("g-unreleased").addEventListener("change", () => { state.u = !$("g-unreleased").checked; update(); });
+$("g-coll-accueil").addEventListener("change", () => { state.ca = $("g-coll-accueil").checked; update(); });
 
 function copy(btn, node, label) {
   const ok = () => {
