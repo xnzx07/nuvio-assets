@@ -10,6 +10,15 @@ import { feuilles } from "./statique.js";
 export const NOUVEAUTES = [
   {
     date: "2026-10-27",
+    titre: "L'ordre de ton accueil, réglé sur le site",
+    points: [
+      "Nouveau bouton « Ordre de l'accueil » sous les collections : monte ou descends tes rangées et tes collections (Plateformes reste tout en haut). L'aperçu de l'écran suit.",
+      "Dans Nuvio, l'ordre arrive avec « Tout envoyer dans Nuvio » (case « L'ordre de l'accueil »). Par défaut : Plateformes, tes rangées, puis les autres collections.",
+      "Chaque thème des Sagas s'ouvre maintenant en haut, sur sa première saga.",
+    ],
+  },
+  {
+    date: "2026-10-27",
     titre: "TF1+, france.tv et M6+ dans tes plateformes",
     points: [
       "Coche-les dans « Mes plateformes » : leur tuile arrive dans la collection Plateformes (titres du moment chaque lundi), et leurs nouveautés dans « Nouveautés sur tes plateformes ».",

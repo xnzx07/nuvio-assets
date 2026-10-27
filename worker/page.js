@@ -131,7 +131,7 @@ hoteRefresh();
 
 
 export function configurePage({ origin, cfg, rows, discover, providers, collections, defaults, regions, genres, languages, sorts, seasons, maxCustom, season, copy = false, fixed = "", fixedOk = false, apercus = origin }) {
-  const plain = (c) => ({ n: c.n, r: c.r, p: c.p, d: c.d, c: c.c, o: c.o, x: c.x, g: c.g, e: c.e, m: c.m, a: c.a, f: c.f, h: c.h, t: c.t, to: c.to || {}, u: c.u, k: c.k, al: c.al });
+  const plain = (c) => ({ n: c.n, r: c.r, p: c.p, d: c.d, c: c.c, o: c.o, x: c.x, g: c.g, e: c.e, m: c.m, a: c.a, f: c.f, h: c.h, t: c.t, to: c.to || {}, ac: c.ac || [], u: c.u, k: c.k, al: c.al });
   const data = {
     origin, maxCustom, fixed, fixedOk,
     cfg: plain(cfg),
@@ -270,12 +270,20 @@ ${copy ? "" : `        <p class="sub">Le lien partagé sature ? <a href="${origi
 
       <section class="act" id="s-collections">
         <header><span>Grand écran</span><h2>Les collections</h2></header>
-        <p class="sub">Les grandes tuiles de l'accueil, à importer avec le second lien de ton billet. Plateformes reste tout en haut ; les autres viennent après tes rangées. Choisis les collections, puis les tuiles de chacune et leur ordre.</p>
+        <p class="sub">Les grandes tuiles de l'accueil, à importer avec le second lien de ton billet. Plateformes reste tout en haut ; les autres viennent après tes rangées, ou à la place que tu choisis dans « Ordre de l'accueil ». Choisis les collections, puis les tuiles de chacune et leur ordre.</p>
         <p class="coll-resume" id="coll-resume"></p>
         <button type="button" class="btn solid" id="coll-ouvrir">Choisir les collections</button>
         <dialog id="coll-dialog" aria-labelledby="coll-titre">
           <div class="coll-dlg-head"><h2 id="coll-titre">Les collections</h2><button type="button" class="btn line" id="coll-fermer">Fermer</button></div>
           <div class="coll-dlg-body"><div id="collections" style="display:grid;gap:10px"></div></div>
+        </dialog>
+        <button type="button" class="btn line" id="acc-ouvrir">Ordre de l'accueil</button>
+        <dialog id="acc-dialog" aria-labelledby="acc-titre">
+          <div class="coll-dlg-head"><h2 id="acc-titre">L'ordre de l'accueil</h2><button type="button" class="btn line" id="acc-fermer">Fermer</button></div>
+          <div class="coll-dlg-body">
+            <p class="sub">Tes rangées et tes collections, du haut de l'accueil vers le bas : monte ou descends chacune. Plateformes reste tout en haut. Dans Nuvio, l'ordre arrive avec « Tout envoyer dans Nuvio » (case « L'ordre de l'accueil »).</p>
+            <ol id="accueil-ordre" class="tiles"></ol>
+          </div>
         </dialog>
       </section>
 
@@ -593,8 +601,8 @@ aside.long .stage:not(.big) { position: sticky; top: var(--stage-top, 18px); }
 .btn.full { grid-column: 1 / -1; }
 /* Collections : 19 avec les facultatives, choisies dans une fenêtre ; la page n'en garde qu'un résumé. */
 .coll-resume { margin: 0 0 12px; font-weight: 700; }
-#coll-dialog { width: min(920px, calc(100vw - 24px)); max-height: calc(100vh - 32px); padding: 0; border: 2px solid var(--ink); border-radius: 14px; background: var(--cream); color: var(--ink); }
-#coll-dialog::backdrop { background: rgba(5,3,4,.72); }
+#coll-dialog, #acc-dialog { width: min(920px, calc(100vw - 24px)); max-height: calc(100vh - 32px); padding: 0; border: 2px solid var(--ink); border-radius: 14px; background: var(--cream); color: var(--ink); }
+#coll-dialog::backdrop, #acc-dialog::backdrop { background: rgba(5,3,4,.72); }
 .coll-dlg-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--cream); border-bottom: 2px solid var(--ink); }
 .coll-dlg-head h2 { margin: 0; }
 .coll-dlg-body { padding: 14px 16px 18px; }
@@ -1191,6 +1199,9 @@ function compact(st) {
   if (Object.keys(t).length) o.t = t;
   if (Object.keys(to).length) o.to = to;
   if (o.t || o.to) o.tv = 2; // positions d'après les Studios (Marvel, Warner, DC) et les Sagas en thèmes (config.js)
+  // Place des collections sur l'accueil : [position de la collection, rangées avant elle], dans l'ordre voulu.
+  const ac = (st.ac || []).map(p => [D.collections.findIndex(c => c.id === p.id), p.n]).filter(v => v[0] >= 0);
+  if (ac.length) o.ac = ac;
   return o;
 }
 function enc(obj) {
@@ -1402,16 +1413,15 @@ function renderScreen() {
   const token = ++screenToken, base = currentBase;
   clearTimeout(screenTimer);
   screenTimer = setTimeout(async () => {
-    const [man, colls] = await Promise.all([fetchJSON(base + "/manifest.json"), fetchJSON(base + "/collections.json")]);
+    const [man, colls, acc] = await Promise.all([fetchJSON(base + "/manifest.json"), fetchJSON(base + "/collections.json"), fetchJSON(base + "/accueil.json")]);
     if (token !== screenToken) return;
     const keep = E.rangees.scrollTop;
     E.vider();
     const collections = Array.isArray(colls) ? colls : ((colls && colls.collections) || []);
     const accueil = ((man && man.catalogs) || []).filter((c) => c.showInHome !== false && !(c.extra || []).some((x) => x.isRequired));
     const rangeeTuiles = (c) => { const { piste } = E.rangee(c.title); (c.folders || []).forEach((f) => piste.append(NV.tuile(f, c.title, c.id))); };
-    collections.filter((c) => c.pinToTop).forEach(rangeeTuiles);
     const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { io.unobserve(e.target); e.target._charge(); } }), { root: E.rangees, rootMargin: "300px 0px" });
-    accueil.forEach((c) => {
+    const rangeeCatalogue = (c) => {
       const { section, piste } = E.rangee(c.name);
       for (let k = 0; k < 8; k++) piste.append(NV.carte(null));
       section._charge = () => fetchJSON(base + "/catalog/" + c.type + "/" + encodeURIComponent(c.id) + ".json").then((d) => {
@@ -1423,8 +1433,18 @@ function renderScreen() {
         E.pret();
       });
       io.observe(section);
+    };
+    // Dans l'ordre de l'accueil choisi (/accueil.json) ; sans lui, Plateformes, les rangées, puis les autres collections.
+    const ordre = acc && Array.isArray(acc.ordre) ? acc.ordre : null;
+    if (ordre) ordre.forEach((o) => {
+      const c = o.collection ? collections.find((x) => x.id === o.collection) : accueil.find((x) => x.type === o.type && x.id === o.id);
+      if (c) (o.collection ? rangeeTuiles : rangeeCatalogue)(c);
     });
-    collections.filter((c) => !c.pinToTop).forEach(rangeeTuiles);
+    else {
+      collections.filter((c) => c.pinToTop).forEach(rangeeTuiles);
+      accueil.forEach(rangeeCatalogue);
+      collections.filter((c) => !c.pinToTop).forEach(rangeeTuiles);
+    }
     if (!E.rangees.children.length) { const { piste } = E.rangee("Écran noir"); piste.append(NV.mkd("p", "vide", "Coche au moins une rangée ou une collection.")); }
     E.rangees.scrollTop = keep;
     E.pret();
@@ -2164,6 +2184,9 @@ function setBig(on) {
 $("zoom").addEventListener("click", () => setBig(!stageEl.classList.contains("big")));
 $("big-close").addEventListener("click", () => setBig(false));
 $("coll-ouvrir").addEventListener("click", () => $("coll-dialog").showModal());
+$("acc-ouvrir").addEventListener("click", () => { renderAccueil(); $("acc-dialog").showModal(); });
+$("acc-fermer").addEventListener("click", () => $("acc-dialog").close());
+$("acc-dialog").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $("coll-fermer").addEventListener("click", () => $("coll-dialog").close());
 // Clic sur le fond assombri (hors de la fenêtre) : on ferme.
 $("coll-dialog").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
@@ -2278,6 +2301,63 @@ function renderCollections() {
   $("coll-resume").textContent = choisies.length
     ? choisies.length + " collection" + (choisies.length > 1 ? "s" : "") + " sur " + D.collections.length + " : " + choisies.join(", ") + "."
     : "Aucune collection.";
+}
+// L'accueil de haut en bas, sans Plateformes (épinglée, toujours en tête) : les rangées, et chaque collection à sa place
+// (state.ac : après n rangées), sinon après les rangées. Même calcul que /accueil.json (worker/index.js).
+function accueilListe() {
+  const rangees = state.r.filter(id => rowInfo(id));
+  const places = new Map((state.ac || []).map((p, i) => [p.id, { n: p.n, i }]));
+  const colls = byPos(D.collections).filter(c => state.c.includes(c.id) && c.id !== "plateformes-streaming")
+    .map((c, k) => { const p = places.get(c.id); return { c, n: Math.min(p ? p.n : rangees.length, rangees.length), i: p ? p.i : 1000 + k }; })
+    .sort((a, b) => a.n - b.n || a.i - b.i);
+  const liste = [];
+  let k = 0;
+  for (let n = 0; n <= rangees.length; n++) {
+    while (k < colls.length && colls[k].n === n) liste.push({ coll: colls[k++].c });
+    if (n < rangees.length) liste.push({ row: rangees[n] });
+  }
+  return liste;
+}
+// Un ordre choisi dans la fenêtre : les rangées dans state.r (et la bobine), les collections dans state.ac. Toutes
+// après les rangées, dans l'ordre habituel : rien à garder dans le lien.
+function appliqueAccueil(liste) {
+  const rows = liste.filter(it => it.row).map(it => it.row);
+  state.r = rows.concat(state.r.filter(id => !rows.includes(id)));
+  order = state.r.concat(order.filter(id => !state.r.includes(id)));
+  const ac = [];
+  let n = 0;
+  liste.forEach(it => { if (it.row) n++; else ac.push({ id: it.coll.id, n }); });
+  const habituel = ac.every(p => p.n === rows.length) && same(ac.map(p => p.id), byPos(D.collections).filter(c => ac.some(p => p.id === c.id)).map(c => c.id));
+  state.ac = habituel ? [] : ac;
+}
+function renderAccueil(moved) {
+  const ol = $("accueil-ordre");
+  ol.textContent = "";
+  const epinglee = D.collections.find(c => c.id === "plateformes-streaming");
+  if (epinglee && state.c.includes(epinglee.id)) ol.append(el("li", null, el("span", null, el("b", { text: epinglee.name }), " ", el("small", { text: "toujours en haut" }))));
+  const liste = accueilListe();
+  liste.forEach((it, k) => {
+    const nom = it.coll ? it.coll.name : (state.o[it.row] || rowInfo(it.row).name);
+    const cle = it.coll ? "c:" + it.coll.id : "r:" + it.row;
+    const li = el("li", { "data-cle": cle }, el("span", null, el("b", { text: nom }), " ", el("small", { text: it.coll ? "collection" : "rangée" })));
+    [["↑", -1, "Monter"], ["↓", 1, "Descendre"]].forEach(([t, d, a]) => {
+      const j = k + d;
+      const bt = el("button", { type: "button", class: "arrow", text: t, "aria-label": a + " " + nom });
+      bt.disabled = j < 0 || j >= liste.length;
+      bt.addEventListener("click", () => {
+        [liste[k], liste[j]] = [liste[j], liste[k]];
+        appliqueAccueil(liste); renderAccueil({ cle, a }); renderRows(); update();
+      });
+      li.append(bt);
+    });
+    ol.append(li);
+  });
+  // La flèche suit la ligne déplacée (l'autre flèche quand elle arrive au bout).
+  if (moved) {
+    const arrows = [...ol.querySelectorAll('li[data-cle="' + CSS.escape(moved.cle) + '"] .arrow')];
+    const again = arrows.find(b => b.getAttribute("aria-label").startsWith(moved.a) && !b.disabled) || arrows.find(b => !b.disabled);
+    if (again) again.focus();
+  }
 }
 // Tuiles d'une collection dans l'ordre choisi (positions dans le fichier) ; les autres suivent, ordre habituel.
 function tileOrder(c) {

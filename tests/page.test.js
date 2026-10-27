@@ -79,7 +79,7 @@ test("adresse_de_la_page_relue_par_le_serveur", () => {
     n: "Ma salle à moi ✨", r: ["perso-0", "c", "a"], p: [PROVIDERS[0].id, PROVIDERS[2].id], d: ["d2"], c: [COLLECTIONS[1].id],
     o: { a: "Mes films", "perso-0": "Peur" }, x: [{ n: "Frissons", t: 1, g: [2, 5], w: [0], l: LANGUAGES[1][0], y: [2000, 2020], v: 7, s: 2 }],
     g: REGIONS[1].id, e: [GENRES[3][0]], m: 7, a: 1990, f: true, h: [SEASON_KEYS[0][0]], t: { [COLLECTIONS[0].id]: [1, 3] },
-    to: { [COLLECTIONS[0].id]: [3, 0, 1] }, u: true, k: KEY, al: "a".repeat(24),
+    to: { [COLLECTIONS[0].id]: [3, 0, 1] }, ac: [{ id: COLLECTIONS[3].id, n: 2 }, { id: COLLECTIONS[1].id, n: 0 }], u: true, k: KEY, al: "a".repeat(24),
   });
   assert.deepEqual(lire(st), st);
   // Billet offert (sans clé ni jeton) : relu sans eux, le reste identique.
@@ -290,4 +290,31 @@ test("collections_dans_une_fenetre", () => {
   assert.match(html, /<dialog id="coll-dialog"[^>]*>[\s\S]*<div id="collections"[\s\S]*<\/dialog>/);
   assert.match(html, /id="coll-resume"/);
   assert.match(html, /\$\("coll-ouvrir"\)\.addEventListener\("click", \(\) => \$\("coll-dialog"\)\.showModal\(\)\)/);
+});
+
+// L'ordre de l'accueil (fenêtre « Ordre de l'accueil ») : rangées et collections mêlées, Plateformes à part (toujours
+// en haut). La liste se calcule comme /accueil.json ; chaque déplacement s'écrit dans state.r et state.ac.
+test("ordre_de_l_accueil_sur_le_site", () => {
+  const html = page();
+  assert.match(html, /<dialog id="acc-dialog"[^>]*>[\s\S]*<ol id="accueil-ordre"[\s\S]*<\/dialog>/);
+  assert.match(html, /id="acc-ouvrir"/);
+  const src = /function accueilListe\(\) \{[\s\S]*?\n\}\n/.exec(html)[0] + /function appliqueAccueil\(liste\) \{[\s\S]*?\n\}\n/.exec(html)[0];
+  const D = { collections: [{ id: "plateformes-streaming", name: "P", pos: 0 }, { id: "genres", name: "G", pos: 1 }, { id: "sagas", name: "S", pos: 2 }] };
+  const state = { r: ["a", "b", "c"], c: ["plateformes-streaming", "genres", "sagas"], ac: [], o: {} };
+  const f = new Function("D", "state", "let order = [...state.r, \"z\"]; const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);"
+    + " const byPos = (l) => [...l].sort((a, b) => (a.pos ?? 99) - (b.pos ?? 99)); const rowInfo = (id) => ({ name: id });\n"
+    + src + "\nreturn { accueilListe, appliqueAccueil, order: () => order };")(D, state);
+  const cles = () => f.accueilListe().map((it) => (it.coll ? "c:" + it.coll.id : "r:" + it.row));
+  assert.deepEqual(cles(), ["r:a", "r:b", "r:c", "c:genres", "c:sagas"]);
+  const par = (liste) => liste.map((k) => f.accueilListe().find((it) => (it.coll ? "c:" + it.coll.id : "r:" + it.row) === k));
+  f.appliqueAccueil(par(["r:a", "c:genres", "r:b", "r:c", "c:sagas"]));
+  assert.deepEqual(state.ac, [{ id: "genres", n: 1 }, { id: "sagas", n: 3 }]);
+  assert.deepEqual(cles(), ["r:a", "c:genres", "r:b", "r:c", "c:sagas"]);
+  f.appliqueAccueil(par(["c:sagas", "r:b", "r:a", "c:genres", "r:c"]));
+  assert.deepEqual(state.r, ["b", "a", "c"]);
+  assert.deepEqual(state.ac, [{ id: "sagas", n: 0 }, { id: "genres", n: 2 }]);
+  assert.deepEqual(f.order(), ["b", "a", "c", "z"]);
+  // Revenu à l'ordre habituel (collections après les rangées) : rien dans le lien.
+  f.appliqueAccueil(par(["r:b", "r:a", "r:c", "c:genres", "c:sagas"]));
+  assert.deepEqual(state.ac, []);
 });

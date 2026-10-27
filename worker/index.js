@@ -13,6 +13,7 @@
  *   /f<id>/manifest.json        lien fixe : les mêmes réglages, gardés dans la base (voir fixe.js)
  *   /lien-fixe[/<id>]           création et modification d'un lien fixe (POST, page de personnalisation)
  *   /<config>/collections.json  collections Nuvio filtrées selon la config
+ *   /<config>/accueil.json      l'ordre de l'accueil (collections et rangées), écrit dans le compte Nuvio par le site
  *   /catalog/<type>/<id>.json
  *   /catalog/<type>/<id>/<genre=…&skip=…>.json
  *   /seance/<code>              le guide demande si « séance <code> » a été tapé dans Nuvio (voir seance.js)
@@ -63,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.41.0";
+const VERSION = "5.42.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -2509,7 +2510,7 @@ function json(data, maxAge) {
   });
 }
 
-const RESERVED = new Set(["manifest.json", "catalog", "configure", "collections.json", "guide", "tv", "trailer", "lien", "meta", "logo.png", "debug", "affiche", "prefetch", "dossier", "hote", "statique", "copie", "lien-fixe", "tendances", "sf", "saison.json", "seance", "diagnostic", "nouveautes", "cpu", "reserve", "compte-nuvio"]);
+const RESERVED = new Set(["manifest.json", "catalog", "configure", "collections.json", "accueil.json", "guide", "tv", "trailer", "lien", "meta", "logo.png", "debug", "affiche", "prefetch", "dossier", "hote", "statique", "copie", "lien-fixe", "tendances", "sf", "saison.json", "seance", "diagnostic", "nouveautes", "cpu", "reserve", "compte-nuvio"]);
 
 async function loadCollections() {
   const res = await fetch(`${ASSETS}/collections/collections.json`, { cf: { cacheTtl: 600, cacheEverything: true } });
@@ -2575,6 +2576,26 @@ async function collections(cfg, url) {
       return { ...c, folders };
     })
     .filter((c) => c.folders.length);
+}
+
+/**
+ * L'ordre de l'accueil : { addon, ordre: [{ collection } | { type, id }] }. Les collections épinglées (Plateformes)
+ * en tête, comme Nuvio les montre ; les autres à la place choisie (cfg.ac : après n rangées), sinon après les rangées.
+ * Le site l'écrit dans le compte Nuvio (worker/compte-nuvio.js) et son aperçu le suit.
+ */
+async function ordreAccueil(today, cfg, url) {
+  const colls = await collections(cfg, url);
+  const places = new Map(cfg.ac.map((p, i) => [p.id, { ...p, i }]));
+  const rangees = homeDefs(today, cfg).map((d) => ({ type: d.type, id: d.id }));
+  const libres = colls.filter((c) => !c.pinToTop).map((c) => ({ id: c.id, n: places.has(c.id) ? places.get(c.id).n : Infinity, i: places.has(c.id) ? places.get(c.id).i : Infinity }))
+    .sort((a, b) => Math.min(a.n, rangees.length) - Math.min(b.n, rangees.length) || a.i - b.i);
+  const ordre = colls.filter((c) => c.pinToTop).map((c) => ({ collection: c.id }));
+  let k = 0;
+  for (let n = 0; n <= rangees.length; n++) {
+    while (k < libres.length && Math.min(libres[k].n, rangees.length) === n) ordre.push({ collection: libres[k++].id });
+    if (n < rangees.length) ordre.push(rangees[n]);
+  }
+  return { addon: addonId(url), ordre };
 }
 
 /** Empreinte courte (24 caractères) : clés de cache, en-tête x-prefetch. */
@@ -2735,6 +2756,7 @@ const app = {
       return res;
     }
     if (path === "/collections.json") return json(await collections(cfg, url), CACHE_CLIENT_S);
+    if (path === "/accueil.json") return json(await ordreAccueil(today, cfg, url), CACHE_CLIENT_S);
     // Soirée à deux (salle 2) : les rangées d'un lien, sans clé Gemini ni jeton d'alerte (voir soiree.js).
     if (path === "/programmation.json") return json(programmationPublique(cfg), fixedId ? 60 : 86400);
     // La photo du jour des tendances, lue par le service d'affiches (worker/tendances.js).
