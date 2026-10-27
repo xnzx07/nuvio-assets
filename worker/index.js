@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.43.6";
+const VERSION = "5.43.7";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1105,6 +1105,8 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       _digital: chezSoi.vers ? "" : chezSoi.date,
       _guess: chezSoi.vers ? chezSoi.date : "",
       _vf: vf,
+      // En VF d'après les sources (pas seulement d'après la date) : « Dispo depuis peu » accepte alors une date estimée.
+      _vfLu: !!(lu && lu.vf),
       // Déjà en VF aujourd'hui, avant la date (pour « Bientôt dispo ») : sources VF, sinon une plateforme en France.
       _dejaVf: lu ? lu.vf : !!infos[i].plateformeFr,
       // Déjà chez soi (date passée), mais en VO seulement (sources sans VF) : « Pas encore en VF ».
@@ -1115,7 +1117,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
 }
 
 /** Une fiche sans les champs internes de toMetas (« _digital »…), telle qu'envoyée à Nuvio. */
-const sansInternes = ({ _digital, _guess, _vf, _dejaVf, _vo, ...m }) => m;
+const sansInternes = ({ _digital, _guess, _vf, _vfLu, _dejaVf, _vo, ...m }) => m;
 
 /** Paramètres TMDB d'une recherche « discover », avec les règles de qualité communes
  *  et les réglages de la config (pays, genres masqués, note et année minimales, famille). */
@@ -1596,7 +1598,9 @@ async function fetchVfPage(env, ctx, def, kind, page, today, opts) {
   if (!merged.length) return [];
   const metas = await toMetas(env, ctx, merged.slice(0, MAX_VF), kind, { ...opts, lireSources: true }, today);
   const from = addDays(today, def.digital[0]), to = addDays(today, def.digital[1]);
-  const when = (m) => m._digital || (future ? m._guess : "");
+  // « Dispo depuis peu » : une date estimée passée compte si les sources confirment la VF (la fiche TMDB, gardée un jour,
+  // peut ne pas encore avoir la sortie numérique : Verity le 27 octobre).
+  const when = (m) => m._digital || (future || m._vfLu ? m._guess : "");
   return metas
     .filter((m) => (when(m) && when(m) >= from && when(m) <= to) || (future && m._vo))
     .filter((m) => future || m._vf)   // « Dispo depuis peu » : seulement ceux qui ont sûrement une VF

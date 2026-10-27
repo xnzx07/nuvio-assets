@@ -1309,3 +1309,27 @@ test("dispo_depuis_peu_cherche_aussi_les_sorties_en_salle", async () => {
   const metas = (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), e, ctx)).json()).metas;
   assert.deepEqual(metas.map((m) => m.name), ["Verity"]);
 });
+
+// Sans date numérique connue (fiche TMDB gardée d'avant son ajout, comme Verity le 27 octobre), mais en VF d'après les
+// sources et l'estimation passée : le film est chez soi, il est « Dispo depuis peu ». Sans VF confirmée par les
+// sources, l'estimation seule ne suffit pas.
+test("dispo_depuis_peu_estimation_passee_et_vf_confirmee", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const lancer = async (lumio) => {
+    oublierInfos(); store.clear();
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.startsWith("https://lumio.test/p/stream/movie/tt903.json")) return Response.json({ streams: lumio
+        ? [{ name: "[AD⚡️] Lumio", description: "4K • WEB-DL | 🇫🇷 ✓", url: "https://lumio.test/play/a" }] : [{ name: "⚙️ Lumio", description: "19 sources, mais aucune ne passe vos filtres" }] });
+      if (u.includes("/vf.json")) return sourcesDe({})(u);
+      if (u.includes("/discover/movie")) return new Response(JSON.stringify({ results: [{ id: 3, title: "Verity", original_language: "en", release_date: jour(-50), popularity: 7 }], page: 1, total_pages: 1 }));
+      if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify(filmVod(3, "en", [["US", 3, jour(-50)]])));
+      return new Response(JSON.stringify({ results: [] }));
+    };
+    const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json" };
+    return (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), e, ctx)).json()).metas.map((m) => m.name);
+  };
+  assert.deepEqual(await lancer(true), ["Verity"]);
+  assert.deepEqual(await lancer(false), []);
+});
