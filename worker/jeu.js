@@ -357,6 +357,7 @@ h3 { margin: 0; font: 400 1.4rem/1 var(--display); letter-spacing: .04em; color:
 .essais li.encours { background: rgba(255,207,107,.55); }
 /* Le champ et ses propositions */
 .jouer { display: grid; gap: 12px; padding: 20px; border-radius: 18px; background: var(--velvet-2); border: 1px solid var(--seat); }
+#forme { display: grid; gap: 12px; }
 .champ { position: relative; }
 .champ input { width: 100%; padding: 14px 16px; border-radius: 12px; border: 1.5px solid var(--seat); background: #0f080c; color: var(--cream); font: 600 1.05rem var(--body); }
 .champ input:focus { outline: none; border-color: var(--bulb); box-shadow: 0 0 0 3px rgba(255,207,107,.25); }

@@ -990,6 +990,13 @@ body::after { content: ""; position: fixed; inset: -50%; pointer-events: none; z
 .act { position: relative; overflow: hidden; }
 .act::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: linear-gradient(90deg, transparent, rgba(255,207,107,.5), transparent); }
 .act .sub { font-family: var(--serif); font-size: 1.12rem; line-height: 1.4; color: #cdb8ad; }
+/* Le serif (une seule graisse) ne sert qu'au chapeau sous le titre : les notes qui suivent et les consignes en gras
+   restent dans la police du texte, plus lisible sur plusieurs lignes et sans faux gras. */
+.act .sub:not(header + .sub), .act .sub:has(b) { font-family: var(--body); font-size: .94rem; line-height: 1.55; text-wrap: pretty; }
+.act .sub:not(header + .sub) { margin-top: 0; }
+/* Le bouton d'une section ouvre une fenêtre : lisible sur le velours (l'encre du billet y disparaissait). */
+.act > .btn.solid { justify-self: start; padding: 10px 20px; border-radius: 99px; border: 1.5px solid rgba(255,207,107,.6); background: transparent; color: var(--bulb); }
+.act > .btn.solid:hover { background: rgba(255,207,107,.12); border-color: var(--bulb); }
 .act header span { font-family: var(--type); font-weight: 700; letter-spacing: .14em; background: var(--red); color: #fff; padding: 3px 8px 2px; border-radius: 3px; transform: rotate(-2deg); display: inline-block; }
 .act h2 { font-size: 2.2rem; }
 

@@ -707,6 +707,8 @@ export const STAGE_CSS = `
   display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px; border-radius: 14px; color: var(--ink);
   background: var(--cream); box-shadow: 0 18px 40px rgba(0,0,0,.55); animation: billet-arrive .6s cubic-bezier(.22,1,.36,1) both; }
 .billet-jour.part { animation: billet-part .4s ease forwards; }
+/* Téléphone : la régie passe sur deux lignes à cette hauteur, le billet arrive en bas pour ne rien cacher. */
+@media (max-width: 760px) { .billet-jour { top: auto; bottom: calc(16px + env(safe-area-inset-bottom)); } }
 @keyframes billet-arrive { from { opacity: 0; transform: translateX(40px) rotate(4deg); } }
 @keyframes billet-part { to { opacity: 0; transform: translateX(40px); } }
 .billet-jour .vignette { width: 64px; aspect-ratio: 2 / 3; border-radius: 6px; background: #2a1520 center / cover no-repeat; }
@@ -1149,7 +1151,8 @@ export const STAGE_JS = String.raw`
     if (origin && origin.origin && !sessionStorage.getItem("billet")) {
       sessionStorage.setItem("billet", "1");
       fetch(origin.origin + "/catalog/movie/accueil-top10.json").then((r) => r.json()).then((d) => {
-        const metas = (d.metas || []).filter((m) => m.background && !album.some((b) => b.id === m.id));
+        // Seulement un film avec son titre en français (pas d'écriture chinoise, cyrillique…) : sans VF, pas de billet.
+        const metas = (d.metas || []).filter((m) => m.background && m.name && !/[\u0370-\u1CFF\u2E80-\uD7FF\uF900-\uFAFF]/.test(m.name) && !album.some((b) => b.id === m.id));
         if (!metas.length) return;
         const m = metas[Math.floor(Math.random() * metas.length)];
         const b = { id: m.id, type: m.type || "movie", n: m.name, img: m.background.replace(/[/](original|w1920|w1280)[/]/, "/w300/"), bg: m.background.replace(/[/](original|w1920|w1280)[/]/, "/w780/"), poster: m.poster, desc: m.description || "",

@@ -100,7 +100,7 @@ code { font: .9em "Courier Prime", monospace; background: #0f080c; padding: 1px 
       <ol>
         <li>Crée un fichier <code>docker-compose.yml</code> avec ceci, en mettant ta clé TMDB et ton mot de passe :</li>
       </ol>
-      <div class="code"><pre id="compose">${COMPOSE}</pre></div>
+      <div class="code"><pre id="compose" tabindex="0" aria-label="docker-compose.yml">${COMPOSE}</pre></div>
       <button type="button" class="copier" id="copier">Copier</button>
       <ol start="2">
         <li>Lance <code>docker compose up -d</code>.</li>

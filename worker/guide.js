@@ -710,6 +710,7 @@ a { color: var(--bulb); font-weight: 700; text-underline-offset: 3px; }
 .act .label { font: 700 .74rem var(--type); letter-spacing: .14em; text-transform: uppercase; color: #fff; background: var(--red); padding: 3px 8px 2px; border-radius: 3px; justify-self: start; transform: rotate(-2deg); }
 .act h2 { margin: 0; font: 400 2.2rem/1 var(--display); letter-spacing: .03em; text-wrap: balance; }
 .act .lead { margin: 0; font: 400 1.15rem/1.45 var(--serif); color: #d6c3b8; }
+.act .lead b { font-weight: 400; color: var(--cream); }   /* le serif n'a qu'une graisse : pas de faux gras */
 .act p { margin: 0; }
 .sub-h { margin: 6px 0 0; font: 800 .8rem var(--body); letter-spacing: .18em; text-transform: uppercase; color: var(--bulb); }
 .act ol, .act ul { margin: 0; padding-left: 1.3em; display: grid; gap: 7px; }
