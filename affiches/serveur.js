@@ -37,15 +37,19 @@ const APERCUS_MAX = 400;
  * publique. Le 27 octobre 2026, la nuit l'a déclenché après ~1 400 affiches (300 par minute) : les autres ont gardé
  * les N° de la veille toute la journée.
  */
+/**
+ * Le service : sans réserve, sans le compteur de Vercel (rien à protéger ici), sans demander StreamFusion par le relais
+ * /qualite ; l'avis VF du jour vient de l'addon (/sf : Lumio, sinon StreamFusion), un appel par titre récent et par
+ * demi-heure au plus (lib/qualite.js avisDuJour). Le disjoncteur reste, plus haut : l'adresse publique pourrait être
+ * appelée par n'importe qui.
+ */
+export const envDuService = (env) => ({ ...env, RESERVE: "off", STREAMFUSION: "off", AVIS_DU_JOUR: "on", CPU_BUDGET_MIN: "1000000",
+  RENDUS_MINUTE: env.RENDUS_MINUTE || "300", RENDUS_HEURE: env.RENDUS_HEURE || "6000" });
 export const envDesPassages = (env) => ({ ...env, RENDUS_MINUTE: "1000000000", RENDUS_HEURE: "1000000000" });
 
 export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = Date.now } = {}) {
   const PORT = Number(env.PORT) || 8080, BASE = `http://127.0.0.1:${PORT}`;
-  // Le service : sans réserve, sans le compteur de Vercel (rien à protéger ici), sans StreamFusion (chaque appel à /sf
-  // compte une requête chez l'addon ; les affiches ont l'avis VF de la photo du jour). Le disjoncteur reste, plus haut :
-  // l'adresse publique pourrait être appelée par n'importe qui.
-  const envService = { ...env, RESERVE: "off", STREAMFUSION: "off", CPU_BUDGET_MIN: "1000000",
-    RENDUS_MINUTE: env.RENDUS_MINUTE || "300", RENDUS_HEURE: env.RENDUS_HEURE || "6000" };
+  const envService = envDuService(env);
   const sansCompteur = (url, init) => (/\/cpu\?/.test(String(url)) ? Promise.resolve(Response.json({ ms: 0 })) : fetchImpl(url, init));
   const affiche = makeHandler({ env: envService, fetchImpl: sansCompteur });
   const afficheDesPassages = makeHandler({ env: envDesPassages(envService), fetchImpl: sansCompteur });

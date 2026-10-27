@@ -18,7 +18,7 @@ let memo = new Map();
 // la base) : video → qualité ou null. Posé par serveur.js ; sans lui, rien.
 let secours = null;
 export const definirSecours = (f) => { secours = f; };   // "movie/tt…" ou "series/tt…:saison:1" → { promesse, until }
-export function resetMemo() { memo = new Map(); }
+export function resetMemo() { memo = new Map(); avisMemo = new Map(); }
 export const tailleMemo = () => memo.size;
 
 const UHD = /\b(2160p|4k|uhd)\b/i;
@@ -149,3 +149,32 @@ export function avecStreamFusion(t, avis) {
 
 /** Attente de StreamFusion (lu par l'addon), en plus de celle de Torrentio. */
 export const SF_ATTENTE_MS = 9000;
+
+/** La qualité des sources VF d'un avis ({ u, x, p, f, a }) en champs de qualité, ou null. */
+export const qualiteDeQ = (q) => (q && typeof q === "object"
+  ? { uhd: q.u === 1, extra: q.x === "DV" || q.x === "HDR" ? q.x : null, hdr10p: q.p === 1, fhd: q.f === 1, atmos: q.a === 1 } : null);
+
+/**
+ * L'avis VF du jour de l'addon pour une vidéo récente (« movie/tt… », « series/tt…:S:1 ») : /sf/…, avec RELAIS_KEY
+ * (Lumio, qui lit la langue dans le fichier, sinon StreamFusion ; gardé par l'addon : « pas de VF » 6 heures). Le même
+ * que celui des rangées et des fiches. { vf, sources, qualite? }, ou null (pas d'avis : plafond, panne). Gardé ici
+ * 30 minutes : une affiche redessinée plus tard le redemande.
+ */
+let avisMemo = new Map();
+const AVIS_MEMO_MS = 30 * 60000;
+export function avisDuJour(addon, video, cle, fetchImpl = fetch) {
+  const hit = avisMemo.get(video);
+  if (hit && Date.now() < hit.until) return hit.promesse;
+  const promesse = (async () => {
+    try {
+      const res = await fetchImpl(`${addon}/sf/${video}.json`, { headers: { "X-Relais-Cle": cle }, signal: AbortSignal.timeout(SF_ATTENTE_MS) });
+      if (!res.ok) return null;
+      const d = await res.json();
+      return d && typeof d.vf === "boolean" ? d : null;
+    } catch { return null; }
+  })();
+  avisMemo.delete(video);
+  avisMemo.set(video, { promesse, until: Date.now() + AVIS_MEMO_MS });
+  while (avisMemo.size > MAX_MEMO) avisMemo.delete(avisMemo.keys().next().value);
+  return promesse;
+}

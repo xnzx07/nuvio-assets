@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.42.1";
+const VERSION = "5.43.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -737,7 +737,41 @@ async function sourcesVf(env, imdbs, lire = lireVf) {
   const ids = [...new Set((imdbs || []).filter((x) => /^tt\d{1,10}$/.test(x || "")))].slice(0, 40);
   if (!ids.length) return new Map();
   const lus = await lire(env, ids.map((i) => "movie/" + i));
-  return avecAvisPhoto(env, "movie", new Map(ids.map((i) => [i, lus.get("movie/" + i)]).filter(([, x]) => x)), lire);
+  const vus = await avecAvisPhoto(env, "movie", new Map(ids.map((i) => [i, lus.get("movie/" + i)]).filter(([, x]) => x)), lire);
+  return lire === lireVf ? avecAvisDuJour(env, vus, ids.map((i) => [i, "movie/" + i])) : vus;
+}
+
+/**
+ * L'avis du jour (avisDuJour : Lumio, sinon StreamFusion) par-dessus Torrentio et la photo, pour les rangées et les
+ * fiches : le même que celui des affiches. Seulement avec Lumio (LUMIO_URL) : StreamFusion seul garde son plafond pour
+ * la photo et les affiches. paires : [[imdb, clé]] ; lus : Map imdb → { vf, sources, langue } (complétée ici).
+ */
+async function avecAvisDuJour(env, lus, paires) {
+  if (!env.LUMIO_URL || !paires.length) return lus;
+  const avis = await avisEnLots(env, paires.map(([, cle]) => cle));
+  for (const [imdb, cle] of paires) {
+    const a = avis.get(cle);
+    if (a) lus.set(imdb, { ...(lus.get(imdb) || {}), vf: a.vf, sources: Math.max(1, a.sources || 0) });
+  }
+  return lus;
+}
+
+/** avisDuJour par lots de SF_MAX : chaque lot dans un appel de l'addon à lui-même (son budget de 50 appels sortants). */
+const CLE_AVIS = /^(movie\/tt\d{1,10}|series\/tt\d{1,10}:\d{1,3}:1)$/;
+async function avisEnLots(env, cles) {
+  const lots = [];
+  for (let i = 0; i < cles.length; i += SF_MAX) lots.push(cles.slice(i, i + SF_MAX));
+  const lus = await Promise.all(lots.map(async (lot) => {
+    if (env.SELF) {
+      try {
+        const res = await env.SELF.fetch("https://self/avis/lot", { method: "POST",
+          headers: { "Content-Type": "application/json", "x-tri": await triCle(env) }, body: JSON.stringify({ cles: lot }) });
+        if (res.ok) return new Map(Object.entries((await res.json()).avis || {}));
+      } catch (e) { /* ici même */ }
+    }
+    return (await avisDuJour(env, lot, "rangees")).avis;
+  }));
+  return new Map(lus.flatMap((m) => [...m]));
 }
 
 /** La VF des sources pour des séries ([{ imdb, saison }], 1er épisode de la saison) : Map tt… → { vf, sources }. */
@@ -746,7 +780,8 @@ async function sourcesVfSeries(env, series, lire = lireVf) {
   if (!liste.length) return new Map();
   const cle = (x) => `series/${x.imdb}:${x.saison}:1`;
   const lus = await lire(env, liste.map(cle));
-  return avecAvisPhoto(env, "series", new Map(liste.map((x) => [x.imdb, lus.get(cle(x))]).filter(([, x]) => x)), lire);
+  const vus = await avecAvisPhoto(env, "series", new Map(liste.map((x) => [x.imdb, lus.get(cle(x))]).filter(([, x]) => x)), lire);
+  return lire === lireVf ? avecAvisDuJour(env, vus, liste.map((x) => [x.imdb, cle(x)])) : vus;
 }
 
 /**
@@ -756,7 +791,7 @@ async function sourcesVfSeries(env, series, lire = lireVf) {
 async function sourcesSerie(env, imdb, saison) {
   if (!/^tt\d{1,10}$/.test(imdb || "") || !(saison >= 1)) return null;
   const cle = `series/${imdb}:${saison}:1`;
-  return (await lireVf(env, [cle])).get(cle) || null;
+  return (await avecAvisDuJour(env, new Map([[imdb, (await lireVf(env, [cle])).get(cle)]].filter(([, x]) => x)), [[imdb, cle]])).get(imdb) || null;
 }
 
 /** /vf.json du service d'affiches pour des clés « movie/tt… » ou « series/tt…:S:1 » : Map clé → { vf, sources, langue }. */
@@ -782,6 +817,66 @@ function qualiteDesSources(textes) {
 const SALLE_NOM = /\b(CAM|TeleSync|TeleCine)\b/i;
 const SALLE_FICHIER = /\b(19|20)\d{2}\b.*\b(HD-?CAM|CAM-?RIP|CAM|HD-?TS|TELESYNC|TS|HD-?TC|TELECINE|TC)\b/i;
 const filmeEnSalle = (s) => SALLE_NOM.test(s.name || "") || SALLE_FICHIER.test(`${s.title || ""} ${s.description || ""}`);
+/**
+ * La VF d'après Lumio (secret LUMIO_URL : un lien de profil Lumio réglé sur le français, sans VFQ, langues vérifiées :
+ * il lit la langue dans le fichier, pas dans son nom). Des sources = de la VF ; un message « ⚙️ » qui dit qu'aucune ne
+ * passe les filtres = pas de VF (By Any Means, en VFQ seulement, que Torrentio et le nom « FRENCH » donnaient en VF).
+ * Map clé → { vf, sources, qualite? } ; un titre sans réponse claire (panne, débrideur expiré…) en est absent.
+ */
+async function lireVfLumio(env, cles) {
+  const base = String(env.LUMIO_URL || "").trim().replace(/\/manifest\.json$/, "");
+  if (!/^https:\/\//.test(base)) return new Map();
+  const lus = await Promise.all(cles.slice(0, SF_MAX).map(async (cle) => {
+    try {
+      const res = await fetch(`${base}/stream/${cle}.json`, { signal: AbortSignal.timeout(SF_ATTENTE_MS) });
+      if (!res.ok) return null;
+      const streams = ((await res.json()) || {}).streams || [];
+      const texte = (s) => `${s.name || ""} ${s.title || ""} ${s.description || ""}`;
+      const messages = streams.filter((s) => /^\s*⚙/.test(s.name || ""));
+      const vraies = streams.filter((s) => !messages.includes(s) && !filmeEnSalle(s));
+      if (vraies.length) return [cle, { vf: true, sources: vraies.length, qualite: qualiteDesSources(vraies.map(texte)) }];
+      // « 68 sources, mais aucune ne passe vos filtres » ou « aucun résultat » : il a cherché, rien en VF.
+      const vide = messages.find((s) => /ne passe|aucun(e)? (r[ée]sultat|source)/i.test(texte(s)));
+      if (vide) return [cle, { vf: false, sources: Math.max(1, Number((/(\d+)\s+sources?/i.exec(texte(vide)) || [])[1]) || 0) }];
+      return streams.length && !messages.length ? [cle, { vf: false, sources: 0 }] : null;
+    } catch (e) { return null; }
+  }));
+  return new Map(lus.filter(Boolean));
+}
+
+/**
+ * L'avis VF du jour pour des titres récents (clés « movie/tt… », « series/tt…:S:1 ») : Lumio, sinon StreamFusion (dans
+ * son plafond, compté pour « origine »). Le même pour les affiches, les rangées, les fiches et la photo des tendances.
+ * Gardé par Cloudflare : une VF trouvée toute la journée ; « pas de VF » 6 heures, car la VF arrive souvent le jour
+ * même de la sortie numérique (The Dog Stars, gris tout le 27 octobre avec l'avis pris à 4 h). SF_MAX titres au plus
+ * lus par appel. { avis: Map clé → { vf, sources, qualite? }, plafond: true si StreamFusion était nécessaire mais
+ * son plafond atteint }.
+ */
+const AVIS_NON_MS = 6 * 3600000;
+const avisCache = (cle) => new Request(`https://avis.cache/${parisToday()}/${cle}`);
+async function avisDuJour(env, cles, origine = "affiches") {
+  const avis = new Map(), manque = [];
+  for (const cle of cles) {
+    const hit = await caches.default.match(avisCache(cle)).catch(() => null);
+    const d = hit ? await hit.json().catch(() => null) : null;
+    if (d && d.avis && (d.avis.vf || Date.now() - d.t < AVIS_NON_MS)) avis.set(cle, d.avis); else manque.push(cle);
+  }
+  const lus = manque.length ? await lireVfLumio(env, manque) : new Map();
+  // Lumio et StreamFusion ensemble : SF_MAX appels au plus (la limite de 50 appels sortants par requête).
+  const demandes = env.LUMIO_URL ? Math.min(manque.length, SF_MAX) : 0;
+  const reste = manque.filter((c) => !lus.has(c)).slice(0, Math.max(0, SF_MAX - demandes));
+  let plafond = false;
+  if (reste.length && env.STREAMFUSION_URL) {
+    if (await reserverStreamFusion(env, reste.length, origine)) (await lireVfStreamFusion(env, reste)).forEach((v, k) => lus.set(k, v));
+    else plafond = true;
+  } else if (reste.length) plafond = true;
+  for (const [cle, a] of lus) {
+    avis.set(cle, a);
+    await caches.default.put(avisCache(cle), new Response(JSON.stringify({ avis: a, t: Date.now() }), { headers: { "Cache-Control": "public, max-age=86400" } })).catch(() => {});
+  }
+  return { avis, plafond: plafond && cles.some((c) => !avis.has(c)) };
+}
+
 async function lireVfStreamFusion(env, cles) {
   const base = String(env.STREAMFUSION_URL || "").trim().replace(/\/manifest\.json$/, "");
   if (!/^https:\/\//.test(base)) return new Map();
@@ -844,21 +939,15 @@ async function routeStreamFusion(request, env, cle) {
   if (!env.RELAIS_KEY || (await sha256(request.headers.get("X-Relais-Cle") || "")) !== (await sha256(env.RELAIS_KEY))) {
     return new Response(JSON.stringify({ error: "refusé" }), { status: 403, headers: entete });
   }
-  const cache = new Request(`https://sf.cache/${parisToday()}/${cle}`);
-  const hit = await caches.default.match(cache);
-  if (hit) return new Response(await hit.text(), { headers: entete });
-  if (!(await reserverStreamFusion(env, 1))) return new Response(JSON.stringify({ plafond: true }), { headers: entete });
-  const avis = (await lireVfStreamFusion(env, [cle])).get(cle);
-  if (!avis) return new Response(JSON.stringify({ erreur: true }), { headers: entete });
-  const corps = JSON.stringify(avis);
-  await caches.default.put(cache, new Response(corps, { headers: { "Cache-Control": "public, max-age=86400" } }));
-  return new Response(corps, { headers: entete });
+  const { avis, plafond } = await avisDuJour(env, [cle]);
+  const a = avis.get(cle);
+  return new Response(JSON.stringify(a || (plafond ? { plafond: true } : { erreur: true })), { headers: entete });
 }
 
-/** La VF pour la photo du jour : StreamFusion s'il est réglé (dans le plafond du jour), Torrentio (lireVf) pour ce qu'il n'a pas dit. */
+/** La VF pour la photo du jour : l'avis du jour (Lumio, sinon StreamFusion), Torrentio (lireVf) pour ce qu'il n'a pas dit. */
 async function lireVfPhoto(env, cles) {
   const pris = cles.slice(0, SF_MAX);
-  const sf = pris.length && (await reserverStreamFusion(env, pris.length, "photo")) ? await lireVfStreamFusion(env, pris) : new Map();
+  const sf = pris.length ? (await avisDuJour(env, pris, "photo")).avis : new Map();
   const reste = cles.filter((c) => !sf.has(c));
   const tr = reste.length ? await lireVf(env, reste) : new Map();
   return new Map([...tr, ...sf]);
@@ -2864,6 +2953,13 @@ const app = {
     }
     // Un lot de films des tendances à trier pour la photo du jour (appel de l'addon à lui-même, voir trierLot). Clé
     // tirée de la clé TMDB de l'instance : un appel venu d'ailleurs ne peut pas dépenser StreamFusion.
+    // L'avis VF du jour d'un lot de titres (appel de l'addon à lui-même, voir avisEnLots).
+    if (path === "/avis/lot" && request.method === "POST") {
+      if (!same(request.headers.get("x-tri") || "", await triCle(env))) return json({ error: "interdit" }, 0);
+      const body = await request.json().catch(() => ({}));
+      const cles = (Array.isArray(body.cles) ? body.cles : []).filter((c) => typeof c === "string" && CLE_AVIS.test(c)).slice(0, SF_MAX);
+      return json({ avis: Object.fromEntries((await avisDuJour(env, cles, "rangees")).avis) }, 0);
+    }
     if (path === "/tendances/tri" && request.method === "POST") {
       if (!same(request.headers.get("x-tri") || "", await triCle(env))) return json({ error: "interdit" }, 0);
       const body = await request.json().catch(() => ({}));

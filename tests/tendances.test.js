@@ -199,6 +199,8 @@ test("photo_publie_l_avis_vf", async () => {
   };
   const d = await (await get("/tendances/movie.json")).json();
   assert.deepEqual(d.vf, { 61: 1, 62: 0 });
+  // Le même avis par identifiant IMDb, pour les rangées et les fiches (il se perdait en route avant le 27 octobre).
+  assert.deepEqual(d.vfi, { tt9661: 1, tt9662: 0 });
   assert.deepEqual(d.ids.slice(0, 2), [61, 0]);
 });
 

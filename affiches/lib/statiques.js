@@ -170,7 +170,8 @@ export async function dessinerStatique(affiche, base, chemin) {
     const r = await affiche(new Request(`${base}/api/affiche?${p}`));
     if (r.status === 308) { p = new URLSearchParams((r.headers.get("Location") || "").split("?")[1] || ""); continue; }
     if (r.status === 200 && (r.headers.get("Content-Type") || "").startsWith("image/")) {
-      return { jpg: Buffer.from(await r.arrayBuffer()), retard: r.headers.get("X-Affiche-Etat") === "retard" };
+      const etat = r.headers.get("X-Affiche-Etat");
+      return { jpg: Buffer.from(await r.arrayBuffer()), retard: etat === "retard", revoir: etat === "revoir" };
     }
     return { statut: r.status };
   }
@@ -182,6 +183,7 @@ export async function dessinerStatique(affiche, base, chemin) {
  * `dessiner(chemin)`, `enMemeTemps` à la fois. parChemin (Map chemin → { chemin, hash, taille, cree }) : ce qui est en
  * ligne, mis à jour ici (change : true pour ce qui doit partir). { nouveaux (empreinte → JPEG), faits, reessais, bilan }.
  */
+const REVOIR_MIN = 6 * 60;
 export async function dessinerTout(liste, dessiner, parChemin, { enMemeTemps = 4, maintenant = new Date().toISOString() } = {}) {
   const nouveaux = new Map(), faits = [], reessais = [], bilan = { dessinees: 0, inchangees: 0, retard: 0, inconnues: 0, ratees: 0 };
   let i = 0;
@@ -196,7 +198,10 @@ export async function dessinerTout(liste, dessiner, parChemin, { enMemeTemps = 4
         else { bilan.dessinees++; nouveaux.set(hash, r.jpg); }
         parChemin.set(chemin, { chemin, hash, taille: r.jpg.length, cree: avant ? avant.cree : maintenant, change: !avant || avant.hash !== hash || !!(avant && avant.change) });
         // Torrentio trop lent : publiée sans badge de qualité, et redessinée au prochain passage.
-        if (r.retard) { bilan.retard++; reessais.push([chemin, (essais || 0) + 1, 10]); } else if (essais !== null) faits.push(chemin);
+        if (r.retard) { bilan.retard++; reessais.push([chemin, (essais || 0) + 1, 10]); }
+        // Titre récent sans VF d'après l'avis du jour : redessiné dans 6 heures (la VF sort souvent dans la journée).
+        else if (r.revoir) reessais.push([chemin, 0, REVOIR_MIN]);
+        else if (essais !== null) faits.push(chemin);
       } else if (essais !== null) {
         // Titre inconnu : redemandé dans un jour seulement (Nuvio redemande l'affiche à chaque passage sur la carte) ;
         // au troisième jour, il sort de la file (il y reviendra si Nuvio le redemande).
@@ -235,8 +240,11 @@ export async function publierEtEnregistrer(cf, parChemin, nouveaux, { faits = []
   }
   // La file, seulement une fois publié : une affiche absente reste demandée tant qu'elle n'est pas en ligne.
   for (let j = 0; j < faits.length; j += 200) await cf.sql(`DELETE FROM demandes WHERE chemin IN (${faits.slice(j, j + 200).map(texte).join(", ")})`);
-  for (const [chemin, essais, minutes] of reessais) {
-    await cf.sql("UPDATE demandes SET essais = ?, apres = ? WHERE chemin = ?", [essais, new Date(Date.now() + minutes * 60000).toISOString(), chemin]);
+  // Mis en file même s'il n'y était pas (affiche redessinée la nuit, à revoir ou en retard), par lots de 25.
+  const lignes = reessais.map(([chemin, essais, minutes]) => [chemin, maintenant, essais, new Date(Date.now() + minutes * 60000).toISOString()]);
+  for (let j = 0; j < lignes.length; j += 25) {
+    const lot = lignes.slice(j, j + 25);
+    await cf.sql(`INSERT INTO demandes (chemin, vu, essais, apres) VALUES ${lot.map(() => "(?, ?, ?, ?)").join(", ")} ON CONFLICT(chemin) DO UPDATE SET essais = excluded.essais, apres = excluded.apres`, lot.flat());
   }
   return { publie, envoyes, retirees: retirees.length };
 }

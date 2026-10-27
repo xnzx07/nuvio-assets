@@ -61,12 +61,13 @@ async function prendre(env, kind, classer) {
   if (!titres) return null;
   const ids = titres.map((it) => it.id);
   const classe = classer ? await classer(env, kind, titres).catch((e) => { console.warn(`classement des tendances : ${e && e.message}`); return null; }) : null;
-  // classer rend { ids, vf } (ou les identifiants seuls).
+  // classer rend { ids, vf, q, vfi } (ou les identifiants seuls).
   const rangs = Array.isArray(classe) ? classe : classe && classe.ids;
   if (!Array.isArray(rangs)) return { ids, vf: {}, provisoire: true };
   const premiers = new Set(rangs);
   const q = classe && classe.q && Object.keys(classe.q).length ? { q: classe.q } : {};
-  return { ids: [...rangs, ...ids.filter((id) => !premiers.has(id))], vf: (classe && classe.vf) || {}, ...q, provisoire: false };
+  const vfi = classe && classe.vfi && Object.keys(classe.vfi).length ? { vfi: classe.vfi } : {};
+  return { ids: [...rangs, ...ids.filter((id) => !premiers.has(id))], vf: (classe && classe.vf) || {}, ...q, ...vfi, provisoire: false };
 }
 
 /**

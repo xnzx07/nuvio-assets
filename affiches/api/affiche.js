@@ -11,8 +11,8 @@
  */
 import { titleFacts } from "../lib/tmdb.js";
 import { lireNoteImdb } from "../lib/notes.js";
-import { lireRang, secondesAvantBascule } from "../lib/tendances.js";
-import { qualityOf } from "../lib/qualite.js";
+import { lireRang, secondesAvantBascule, ADDON_URL } from "../lib/tendances.js";
+import { qualityOf, avisDuJour, qualiteDeQ } from "../lib/qualite.js";
 import { posterContent, contentKey } from "../lib/contenu.js";
 import { etatSortie, sourcesUtiles, dispoChezSoi, estimationDe, besoinEstimation, LIBELLES_FIN } from "../lib/statut.js";
 import { lireEstimations } from "../lib/estimations.js";
@@ -244,6 +244,12 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       const aujourdhui = jourParis();
       // Les sources (lues avec la qualité) disent si le titre est en VF : lues aussi sans le badge, pour un titre récent.
       const lireSources = qualite || langue || (env.QUALITE !== "off" && sourcesUtiles(facts, aujourdhui));
+      // L'avis VF du jour de l'addon (le même que ses rangées et ses fiches), pour un titre récent : seulement sur le
+      // serveur des affiches (AVIS_DU_JOUR=on, avec la clé du relais), pas sur Vercel ni la machine GitHub.
+      const ilYaUnAn = new Date(Date.parse(aujourdhui) - 365 * 86400000).toISOString().slice(0, 10);
+      const recent = env.QUALITE !== "off" && (type === "series" ? !!facts.firstAir && facts.firstAir <= aujourdhui && facts.firstAir >= ilYaUnAn : sourcesUtiles(facts, aujourdhui));
+      const videoAvis = env.AVIS_DU_JOUR === "on" && env.RELAIS_KEY && recent && facts.imdbId
+        ? (type === "series" ? `series/${facts.imdbId}:${facts.lastSeason || 1}:1` : `movie/${facts.imdbId}`) : null;
       // Pas encore sorti avec la note cachée : les autres notes ne seraient pas dessinées non plus.
       const notesCachees = reglages.sortie.cacherNote && !etatSortie(facts, aujourdhui).sorti;
       const notesUtiles = autresNotes && !notesCachees;
@@ -264,6 +270,7 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
         sagaVoulue ? chrono.mesure("saga", filmsDeLaSaga(env, facts.collection, fetchImpl)) : null,
         saisonVoulue ? chrono.mesure("saison", lireSaison(env, fetchImpl)) : null,
         malVoulue && !notesCachees ? chrono.mesure("mal", noteMal(env, type, facts.tmdbId, fetchImpl)) : null,
+        videoAvis ? chrono.mesure("avis", avisDuJour(env.ADDON_URL || ADDON_URL, videoAvis, env.RELAIS_KEY, fetchImpl)) : null,
       ]);
       lectures.catch(() => {});
       // L'image « sans texte » porte notre logo : on vérifie qu'elle n'a vraiment pas de texte (TMDB y range
@@ -286,10 +293,13 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       const peutDessiner = brouillon.full || brouillon.statut || brouillon.gris || brouillon.bandeau || brouillon.coin || tendance || qualite || langue
         || reglages.infos.culte || reglages.infos.saga || !!brouillon.styles.retouche || !!brouillon.styles.cadre || (reglages.saison.on && type === "movie");
       if (peutDessiner && !request.headers.get("If-None-Match")) imageUrls(brouillon).forEach((u) => images(u).catch(() => {}));
-      const [{ note: imdbRating, manque: imdbManque }, photoLue, { enRetard: qualiteEnRetard, quality: qualiteTorrentio }, notesLues, filmsSaga, rangee, mal] = await chrono.mesure("lectures", lectures);
+      const [{ note: imdbRating, manque: imdbManque }, photoLue, { enRetard: qualiteEnRetard, quality: qualiteTorrentio }, notesLues, filmsSaga, rangee, mal, avisJour] = await chrono.mesure("lectures", lectures);
       const notes = mal ? { ...(notesLues || {}), mal } : notesLues;
       const place = tendance ? photoLue.rang : null, photoIllisible = tendance && photoLue.illisible;
-      const quality = avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
+      // L'avis du jour prime sur celui de la photo de 4 h (The Dog Stars : sans VF à 4 h, en VF dans la journée).
+      const quality = avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, qualiteDeQ(avisJour.qualite)) : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
+      // Récent sans VF d'après l'avis du jour : « revoir », le serveur la redessine quelques heures plus tard.
+      const aRevoir = !!avisJour && avisJour.vf === false;
       const saga = sagaVoulue ? rangSaga(filmsSaga, facts.tmdbId, aujourdhui) : null;
       // Une donnée qui manque pour une panne passagère (fichier IMDb pas lu : note TMDB en attendant ; photo des
       // tendances illisible : pas de N° ; image sans texte pas vérifiée) : cache court, pour l'avoir ensuite.
@@ -334,7 +344,7 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       const pourquoi = `${sortieVue.sorti ? "sorti" : "pas-sorti"} statut=${sortieVue.statut || "-"} vf=${quality ? quality.vf : "?"} sources=${quality ? quality.sources : "?"}`
         + (chezSoi ? ` dispo=${chezSoi.date ? chezSoi.date + (chezSoi.vers ? "~" : "") : "-"}` : "")
         + ` plateforme-fr=${facts.plateformeFrance ? 1 : 0} tmdb-fr=${facts.plateformesVues || "-"} premiere=${facts.firstAir || facts.releaseDate || "-"} jour=${aujourdhui}`;
-      const headers = { ...CORS, "Access-Control-Expose-Headers": "X-Affiche-Etat, X-Affiche-Sortie, Server-Timing", "X-Affiche-Etat": enRetard ? "retard" : "complete",
+      const headers = { ...CORS, "Access-Control-Expose-Headers": "X-Affiche-Etat, X-Affiche-Sortie, Server-Timing", "X-Affiche-Etat": enRetard ? "retard" : aRevoir ? "revoir" : "complete",
         "X-Affiche-Sortie": pourquoi, ...cache, ETag: etag };
       if (request.headers.get("If-None-Match") === etag) return new Response(null, { status: 304, headers: { ...headers, "Server-Timing": chrono.entete() } });
       // Une ligne par affiche dans les journaux de Vercel : relue ou dessinée, et ce qui fait dessiner (options, durée

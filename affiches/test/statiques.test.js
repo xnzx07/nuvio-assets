@@ -247,3 +247,45 @@ test("serveur_relance_tout_avec_la_cle", async () => {
   assert.equal((await s.route(req("mauvaise"))).status, 403);
   assert.equal((await s.route(req("k"))).status, 202);
 });
+
+// Titre récent sans VF d'après l'avis du jour (« revoir ») : publié tel quel, et redessiné 6 heures plus tard (The
+// Dog Stars : sans VF à 4 h, en VF dans la journée, resté gris jusqu'au lendemain). Chaque passage : sans compter
+// d'essai, il reste à revoir tant que la VF n'est pas là.
+test("a_revoir_redessinee_six_heures_plus_tard", async () => {
+  const { dessinerTout, dessinerStatique } = await import("../lib/statiques.js");
+  const r = await dessinerTout([["/maison/movie/poster/tt1.jpg", 0], ["/maison/movie/poster/tt2.jpg", null]], async () => ({ jpg: Buffer.from("x"), revoir: true }), new Map());
+  assert.deepEqual(r.reessais, [["/maison/movie/poster/tt1.jpg", 0, 360], ["/maison/movie/poster/tt2.jpg", 0, 360]]);
+  assert.deepEqual(r.faits, []);
+  assert.equal(r.nouveaux.size, 1);
+  const affiche = async () => new Response(Buffer.from("jpg"), { headers: { "Content-Type": "image/jpeg", "X-Affiche-Etat": "revoir" } });
+  const d = await dessinerStatique(affiche, "https://s.test", "/maison/movie/poster/tt1.jpg");
+  assert.equal(d.revoir, true);
+  assert.equal(d.retard, false);
+});
+
+// Le service du serveur demande l'avis VF du jour à l'addon (Lumio, sinon StreamFusion), jamais StreamFusion lui-même.
+test("serveur_avec_l_avis_du_jour", async () => {
+  const { envDuService } = await import("../serveur.js");
+  const e = envDuService({ TMDB_API_KEY: "x", RELAIS_KEY: "k" });
+  assert.equal(e.AVIS_DU_JOUR, "on");
+  assert.equal(e.STREAMFUSION, "off");
+  assert.equal(e.RESERVE, "off");
+});
+
+// Un réessai entre dans la file même s'il n'y était pas (affiche redessinée la nuit, « revoir » ou « retard ») : avant,
+// seule une demande déjà en file était repoussée, les autres n'étaient jamais redessinées avant la nuit suivante.
+// Par lots de 25 (100 valeurs au plus par requête D1).
+test("reessai_mis_en_file_meme_absent", async () => {
+  const { publierEtEnregistrer } = await import("../lib/statiques.js");
+  const requetes = [];
+  const cf = { verrouiller: async () => true, liberer: async () => {}, publier: async () => 1,
+    sql: async (s, v = []) => { requetes.push([s, v]); return []; } };
+  const reessais = Array.from({ length: 30 }, (_, i) => [`/maison/movie/poster/tt${i}.jpg`, 0, 360]);
+  await publierEtEnregistrer(cf, new Map(), new Map(), { reessais });
+  const mises = requetes.filter(([s]) => s.startsWith("INSERT INTO demandes"));
+  assert.equal(mises.length, 2);
+  assert.match(mises[0][0], /ON CONFLICT\(chemin\) DO UPDATE SET essais = excluded\.essais, apres = excluded\.apres/);
+  assert.equal(mises[0][1].length, 100);
+  assert.equal(mises[1][1].length, 20);
+  assert.equal(mises[0][1][0], "/maison/movie/poster/tt0.jpg");
+});

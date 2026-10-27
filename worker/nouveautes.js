@@ -10,6 +10,14 @@ import { feuilles } from "./statique.js";
 export const NOUVEAUTES = [
   {
     date: "2026-10-27",
+    titre: "La VF vérifiée dans le fichier, et des sagas qui défilent bien",
+    points: [
+      "« Dispo depuis peu », « Bientôt dispo », les fiches et les affiches suivent maintenant le même avis VF, lu dans le fichier lui-même : un film seulement en VF québécoise n'est plus annoncé dispo, et un film arrivé en VF dans la journée reprend ses couleurs sans attendre le lendemain.",
+      "Sagas : chaque rangée porte le nom de sa saga et défile seule (avant, elles s'appelaient toutes « Saga » et bougeaient ensemble). Réimporte les collections (« Tout envoyer dans Nuvio »).",
+    ],
+  },
+  {
+    date: "2026-10-27",
     titre: "L'ordre de ton accueil, réglé sur le site",
     points: [
       "Nouveau bouton « Ordre de l'accueil » sous les collections : monte ou descends tes rangées et tes collections (Plateformes reste tout en haut). L'aperçu de l'écran suit.",

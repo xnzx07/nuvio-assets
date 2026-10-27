@@ -1086,6 +1086,30 @@ test("dispo_depuis_peu_suit_l_avis_de_la_photo", async () => {
   assert.deepEqual(await lancer(null), ["Hope"]);
 });
 
+// L'avis du jour (Lumio, qui lit la langue dans le fichier et écarte la VFQ) décide pour les rangées, avant Torrentio et
+// la photo : By Any Means (VFQ seulement, « FRENCH » dans le nom chez Torrentio) n'est plus « Dispo depuis peu », et un
+// film en VF que Torrentio ne voit pas (Verity) y entre.
+test("dispo_depuis_peu_suit_l_avis_du_jour", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const lancer = async (torrentio, lumio) => {
+    oublierInfos(); store.clear();
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.startsWith("https://lumio.test/p/stream/movie/tt903.json")) return Response.json({ streams: lumio
+        ? [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓" }] : [{ name: "⚙️ Lumio", description: "40 sources, mais aucune ne passe vos filtres" }] });
+      if (u.includes("/vf.json")) return sourcesDe({ tt903: { vf: torrentio, sources: 30 } })(u);
+      if (u.includes("/discover/movie")) return new Response(JSON.stringify({ results: [{ id: 3, title: "By Any Means", original_language: "en", release_date: jour(-40), popularity: 7 }], page: 1, total_pages: 1 }));
+      if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify(filmVod(3, "en", [["US", 4, jour(-5)]])));
+      return new Response(JSON.stringify({ results: [] }));
+    };
+    const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json" };
+    return (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), e, ctx)).json()).metas.map((m) => m.name);
+  };
+  assert.deepEqual(await lancer(true, false), []);
+  assert.deepEqual(await lancer(false, true), ["By Any Means"]);
+});
+
 test("rangees_selon_le_calendrier_americain", async () => {
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   globalThis.fetch = async (url) => {

@@ -835,3 +835,28 @@ test("server_timing_donne_chaque_etape", async () => {
   assert.ok(etapes.total >= etapes.dessin);
   assert.match(res.headers.get("Access-Control-Expose-Headers"), /Server-Timing/);
 });
+
+// L'avis VF du jour de l'addon (/sf : Lumio, sinon StreamFusion ; serveur des affiches, AVIS_DU_JOUR=on) prime sur
+// Torrentio et sur la photo de 4 h, pour un titre récent : By Any Means (« FRENCH » chez Torrentio, VFQ seulement) est
+// gris, The Dog Stars (VF sortie dans la journée) en couleur. Sans VF : « revoir », redessinée quelques heures plus tard.
+test("avis_du_jour_de_l_addon_prime", async () => {
+  const lancer = async (torrentioVf, avis, e = { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test", AVIS_DU_JOUR: "on" }) => {
+    r4();   // l'avis est gardé 30 minutes par vidéo : chaque cas repart de rien
+    const cles = [];
+    const base = internet({ detail: avecSorties([4, jour(-20)]),
+      torrentio: () => json({ streams: [{ name: "Torrentio\n1080p", title: torrentioVf ? "Film.2026.TRUEFRENCH.1080p.WEB" : "Film.2026.1080p.WEB" }] }) });
+    const f = async (url, opts = {}) => {
+      if (String(url) === "https://addon.test/sf/movie/tt15239678.json") { cles.push(new Headers(opts.headers || {}).get("X-Relais-Cle")); return json(avis); }
+      return base(url, opts);
+    };
+    const res = await makeHandler({ fetchImpl: f, env: e })(req("type=movie&shape=poster&id=tt15239678"));
+    assert.equal(res.status, 200);
+    return { vf: /vf=(\w+)/.exec(res.headers.get("X-Affiche-Sortie"))[1], etat: res.headers.get("X-Affiche-Etat"), cles };
+  };
+  assert.deepEqual(await lancer(true, { vf: false, sources: 68 }), { vf: "false", etat: "revoir", cles: ["cle"] });
+  assert.deepEqual(await lancer(false, { vf: true, sources: 9, qualite: { u: 1, x: "DV", p: 0, f: 1, a: 0 } }), { vf: "true", etat: "complete", cles: ["cle"] });
+  // L'addon sans avis (plafond, panne) : Torrentio.
+  assert.deepEqual(await lancer(true, { plafond: true }), { vf: "true", etat: "complete", cles: ["cle"] });
+  // Ailleurs que sur le serveur (Vercel, machine GitHub) : jamais demandé.
+  assert.deepEqual(await lancer(true, { vf: false, sources: 3 }, { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test" }), { vf: "true", etat: "complete", cles: [] });
+});
