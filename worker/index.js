@@ -2547,6 +2547,12 @@ function displayOrder(c, folders) {
   const rank = (f) => { const i = order.indexOf(f.id); return i < 0 ? order.length : i; };
   return [...folders].sort((a, b) => rank(a) - rank(b));
 }
+/** Place d'une tuile de la collection Plateformes : celle de sa plateforme dans cfg.p (les autres après). */
+function rangPlateforme(f, cfg) {
+  const p = PROVIDERS.find((x) => x.folder === f.id);
+  const k = p ? cfg.p.indexOf(p.id) : -1;
+  return k < 0 ? cfg.p.length : k;
+}
 /** Ordre choisi sur la page (positions dans le fichier) ; les tuiles absentes gardent l'ordre habituel, après. */
 function userOrder(order, folders, pos) {
   if (!order || !order.length) return folders;
@@ -2571,6 +2577,8 @@ async function collections(cfg, url) {
       const folders = userOrder(cfg.to[c.id], displayOrder(c, c.folders), (f) => c.folders.indexOf(f))
         .filter((f) => !hidden.has(c.folders.indexOf(f)))
         .filter((f) => c.id !== "plateformes-streaming" || !platformFolders.has(f.id) || chosenFolders.has(f.id))
+        // Plateformes : dans l'ordre choisi sur le site (« Tes plateformes »), les autres tuiles après.
+        .sort((a, b) => (c.id === "plateformes-streaming" ? rangPlateforme(a, cfg) - rangPlateforme(b, cfg) || 0 : 0))
         .map((f) => (filtered && f.sources ? { ...f, sources: f.sources.map((src) => filterSource(src, cfg)) } : f))
         .map((f) => (url && f.sources ? { ...f, sources: f.sources.map((src) => notreAddon(src, addonId(url))) } : f));
       return { ...c, folders };

@@ -266,8 +266,9 @@ export function decodeConfig(segment, rows, discover) {
 /** Langue TMDB des titres pour cette config. */
 export const langOf = (cfg) => (REGIONS.find((r) => r.id === cfg.g) || REGIONS[0]).lang;
 
-/** Les réglages qui changent le CONTENU des listes (pour la clé de cache). */
-export const contentKey = (cfg) => JSON.stringify([cfg.p, cfg.g, cfg.e, cfg.m, cfg.a, cfg.f, cfg.h, cfg.x, cfg.u]);
+/** Les réglages qui changent le CONTENU des listes (pour la clé de cache). L'ordre des plateformes ne change que
+ * celui des tuiles de Plateformes : il ne compte pas (pas de cache en double, quotas). */
+export const contentKey = (cfg) => JSON.stringify([[...cfg.p].sort(), cfg.g, cfg.e, cfg.m, cfg.a, cfg.f, cfg.h, cfg.x, cfg.u]);
 
 /** Des filtres globaux sont-ils actifs ? */
 export const hasGlobalFilters = (cfg) => cfg.e.length > 0 || cfg.m > 0 || cfg.a > 0 || cfg.f;

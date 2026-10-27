@@ -97,3 +97,10 @@ test("plateformes_francaises_en_option", () => {
   assert.ok(!["1754", "2535", "147"].some((id) => defaults(rows, discover).p.includes(id)));
   assert.ok(decodeConfig(seg({ p: [0, 8] }), rows, discover).p.includes("1754"));
 });
+
+test("ordre_des_plateformes_hors_cle_de_cache", () => {
+  const rows = [{ id: "a", home: true }];
+  const seg = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  assert.equal(contentKey(decodeConfig(seg({ p: [0, 1] }), rows, [])), contentKey(decodeConfig(seg({ p: [1, 0] }), rows, [])));
+  assert.deepEqual(decodeConfig(seg({ p: [1, 0] }), rows, []).p, [PROVIDERS[1].id, PROVIDERS[0].id]);
+});

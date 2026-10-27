@@ -318,3 +318,20 @@ test("ordre_de_l_accueil_sur_le_site", () => {
   f.appliqueAccueil(par(["r:b", "r:a", "r:c", "c:genres", "c:sagas"]));
   assert.deepEqual(state.ac, []);
 });
+
+// Tes plateformes : une plateforme cochée s'ajoute au bout de la liste, l'ordre se change avec ↑ ↓ (ordre des tuiles
+// de la collection Plateformes) ; la fenêtre des collections renvoie à « Ordre de l'accueil ».
+test("ordre_des_plateformes_sur_le_site", () => {
+  const html = page();
+  assert.match(html, /<ol id="prov-ordre"/);
+  const src = /function togglePlateforme\(id, on\) \{[\s\S]*?\n\}\n/.exec(html)[0] + /function bougePlateforme\(id, d\) \{[\s\S]*?\n\}\n/.exec(html)[0];
+  const state = { p: ["8", "119"] };
+  const f = new Function("state", "const update = () => {}; const renderPlateformes = () => {};\n" + src + "\nreturn { togglePlateforme, bougePlateforme };")(state);
+  f.togglePlateforme("147", true);
+  assert.deepEqual(state.p, ["8", "119", "147"]);
+  f.bougePlateforme("147", -1); f.bougePlateforme("147", -1); f.bougePlateforme("147", -1);
+  assert.deepEqual(state.p, ["147", "8", "119"]);
+  f.togglePlateforme("8", false);
+  assert.deepEqual(state.p, ["147", "119"]);
+  assert.match(html, /Ordre de l'accueil/);
+});

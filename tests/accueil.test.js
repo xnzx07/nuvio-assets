@@ -82,3 +82,16 @@ test("fusion_avec_les_reglages_du_compte", () => {
   // Rien dans le compte : notre ordre seul.
   assert.equal(fusionAccueil(null, ordre, ADDON).length, 4);
 });
+
+// L'ordre des plateformes choisi sur le site (cfg.p, dans l'ordre) est celui des tuiles de la collection Plateformes.
+test("tuiles_des_plateformes_dans_l_ordre_choisi", async () => {
+  const { PROVIDERS } = await import("../worker/config.js");
+  const i = (nom) => PROVIDERS.findIndex((p) => p.name === nom);
+  const avant = COLLS[0].folders;
+  COLLS[0].folders = ["netflix", "prime-video", "disney-plus", "m6-plus", "autre"].map((id) => ({ ...tuile, id }));
+  try {
+    const tuiles = async (p) => (await get(`/${seg({ c: 0b11111, p })}/collections.json`)).find((c) => c.id === "plateformes-streaming").folders.map((f) => f.id);
+    assert.deepEqual(await tuiles([i("M6+"), i("Netflix"), i("Disney+")]), ["m6-plus", "netflix", "disney-plus", "autre"]);
+    assert.deepEqual(await tuiles([i("Netflix"), i("Prime Video")]), ["netflix", "prime-video", "autre"]);
+  } finally { COLLS[0].folders = avant; }
+});

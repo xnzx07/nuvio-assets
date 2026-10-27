@@ -231,6 +231,8 @@ ${SOIREE_HTML}
         <header><span>Abonnements</span><h2>Tes plateformes</h2></header>
         <p class="sub">Elles décident du contenu de « Nouveautés sur tes plateformes » et des tuiles de la collection Plateformes.</p>
         <div class="chips" id="providers"></div>
+        <p class="prov-titre">L'ordre de leurs tuiles dans la collection Plateformes</p>
+        <ol id="prov-ordre" class="acc-list prov-ordre"></ol>
         <p class="warn" id="prov-warn" hidden>Aucune plateforme choisie : la rangée « Nouveautés sur tes plateformes » ne s'affichera pas.</p>
       </section>
 
@@ -275,7 +277,7 @@ ${copy ? "" : `        <p class="sub">Le lien partagé sature ? <a href="${origi
         <button type="button" class="btn solid" id="coll-ouvrir">Choisir les collections</button>
         <dialog id="coll-dialog" aria-labelledby="coll-titre">
           <div class="coll-dlg-head"><h2 id="coll-titre">Les collections</h2><button type="button" class="btn line" id="coll-fermer">Fermer</button></div>
-          <div class="coll-dlg-body"><div id="collections" style="display:grid;gap:10px"></div></div>
+          <div class="coll-dlg-body"><p class="coll-intro">Coche les collections et choisis leurs tuiles. Leur place sur l'accueil, avant ou après tes rangées, se règle dans « Ordre de l'accueil ».</p><div id="collections" style="display:grid;gap:10px"></div></div>
         </dialog>
         <button type="button" class="btn line" id="acc-ouvrir">Ordre de l'accueil</button>
         <dialog id="acc-dialog" aria-labelledby="acc-titre">
@@ -623,6 +625,19 @@ aside.long .stage:not(.big) { position: sticky; top: var(--stage-top, 18px); }
 .acc-fleches { display: flex; gap: 6px; }
 .acc-fleches .arrow { border-color: #6a4153; }
 .acc-fleches .arrow:not(:disabled):hover { background: var(--cream); color: var(--ink); }
+.prov-titre { margin: 16px 0 8px; font: 700 .78rem var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--bulb); }
+.prov-ordre { max-width: 520px; }
+.prov-ordre .acc-item { padding: 6px 8px; border-left-color: var(--bulb); background: rgba(255,255,255,.03); }
+.acc-nom .pastille { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; box-shadow: 0 0 0 2px rgba(255,255,255,.1); }
+/* La fenêtre des collections : cartes sombres au texte clair sur le papier ; les décochées en pointillés. */
+#coll-dialog .coll { color: var(--cream); }
+#coll-dialog .coll-head .switch b { color: var(--cream); font-size: 1.02rem; }
+#coll-dialog .coll.off { opacity: 1; background: #241219; border-style: dashed; }
+#coll-dialog .coll.off .coll-head .switch b { color: var(--dim); }
+#coll-dialog .coll.off details { display: none; }
+#coll-dialog .coll-rangees { color: #5b4636; border-color: rgba(42,26,20,.35); }
+#coll-dialog .coll-rangees b { color: var(--red); }
+#coll-dialog .coll-intro { margin: 0 0 12px; color: #5b4636; }
 .btn:disabled { opacity: .6; cursor: wait; }
 /* Lien fixe : un encart pointillé dans le billet, sous le lien de l'addon. */
 .compte-nuvio { display: grid; gap: 6px; }
@@ -2279,6 +2294,45 @@ function update() {
 }
 
 // ---------- tout le reste ----------
+// Tes plateformes, dans l'ordre de leurs tuiles (collection Plateformes) : une cochée s'ajoute au bout.
+function togglePlateforme(id, on) {
+  state.p = state.p.filter(x => x !== id).concat(on ? [id] : []);
+  renderPlateformes(); update();
+}
+function bougePlateforme(id, d) {
+  const k = state.p.indexOf(id), j = k + d;
+  if (k < 0 || j < 0 || j >= state.p.length) return;
+  [state.p[k], state.p[j]] = [state.p[j], state.p[k]];
+  renderPlateformes(); update();
+}
+function renderPlateformes(moved) {
+  const ol = $("prov-ordre");
+  ol.textContent = "";
+  ol.hidden = state.p.length < 2;
+  ol.previousElementSibling.hidden = ol.hidden;
+  state.p.forEach((id, k) => {
+    const pf = D.providers.find(x => x.id === id);
+    if (!pf) return;
+    const li = el("li", { class: "acc-item" + (moved && moved.id === id ? " bouge" : ""), "data-cle": "p:" + id },
+      el("span", { class: "acc-num", text: String(k + 1) }),
+      el("span", { class: "acc-nom" }, el("i", { class: "pastille", style: "--c:" + (pf.color || "var(--dim)") }), el("b", { text: pf.name })));
+    const fleches = el("span", { class: "acc-fleches" });
+    [["↑", -1, "Monter"], ["↓", 1, "Descendre"]].forEach(([t, d, a]) => {
+      const bt = el("button", { type: "button", class: "arrow", text: t, "aria-label": a + " " + pf.name });
+      bt.disabled = k + d < 0 || k + d >= state.p.length;
+      bt.addEventListener("click", () => { bougePlateforme(id, d); renderPlateformes({ id, a }); });
+      fleches.append(bt);
+    });
+    li.append(fleches);
+    ol.append(li);
+  });
+  if (moved) {
+    const arrows = [...ol.querySelectorAll('li[data-cle="p:' + moved.id + '"] .arrow')];
+    const again = arrows.find(b => b.getAttribute("aria-label").startsWith(moved.a) && !b.disabled) || arrows.find(b => !b.disabled);
+    if (again) again.focus();
+    setTimeout(() => ol.querySelectorAll(".acc-item.bouge").forEach(x => x.classList.remove("bouge")), 400);
+  }
+}
 function toggle(key, id, on, all) {
   const set = new Set(state[key]); on ? set.add(id) : set.delete(id);
   state[key] = all.filter(x => set.has(x));
@@ -2305,13 +2359,12 @@ function renderCollections() {
     if (c.folders.length) {
       const list = el("ol", { class: "tiles" });
       drawTiles(c, list, head);
-      const det = el("details", { "data-coll": c.id }, el("summary", { text: "Choisir les tuiles et leur ordre", "data-cle": "tuiles:" + c.id }), list);
+      const det = el("details", { "data-coll": c.id }, el("summary", { text: c.id === "plateformes-streaming" ? "Choisir les tuiles" : "Choisir les tuiles et leur ordre", "data-cle": "tuiles:" + c.id }), list);
       det.open = ouvertes.has(c.id);
-      if (c.id === "plateformes-streaming") det.append(el("p", { class: "sub", style: "margin:8px 0 0", text: "Les tuiles des plateformes suivent aussi tes abonnements." }));
+      if (c.id === "plateformes-streaming") det.append(el("p", { class: "sub", style: "margin:8px 0 0", text: "Les tuiles suivent tes abonnements, dans l'ordre choisi dans « Tes plateformes »." }));
       wrap.append(det);
     }
     box.append(wrap);
-    if (c.id === "plateformes-streaming") box.append(el("p", { class: "coll-rangees" }, "↓ Ici, sur l'accueil : ", el("b", { text: "tes rangées du Catalogue FR" }), " ↓"));
   });
   rendFocus(box, rep);
   const choisies = byPos(D.collections).filter(c => state.c.includes(c.id)).map(c => c.name);
@@ -2402,7 +2455,8 @@ function drawTiles(c, list, head, moved) {
       head.querySelector("small").textContent = n + " tuile" + (n > 1 ? "s" : "") + " sur " + c.folders.length;
       update();
     });
-    [["↑", -1, "Monter"], ["↓", 1, "Descendre"]].forEach(([t, d, a]) => {
+    // Plateformes : l'ordre se choisit dans « Tes plateformes » (celui de la collection le suit).
+    if (c.id !== "plateformes-streaming") [["↑", -1, "Monter"], ["↓", 1, "Descendre"]].forEach(([t, d, a]) => {
       const j = k + d;
       const bt = el("button", { type: "button", class: "arrow", text: t, "aria-label": a + " " + title });
       bt.disabled = j < 0 || j >= tiles.length;
@@ -2428,7 +2482,8 @@ function renderAll() {
   resetOrder(); renderRows();
   seg($("regions"), D.regions.map(r => r.name), D.regions.findIndex(r => r.id === state.g), (i) => { state.g = D.regions[i].id; renderAll(); });
   ["providers", "disc-movie", "disc-series", "seasons", "excl"].forEach(id => { $(id).textContent = ""; });
-  D.providers.forEach(p => chip($("providers"), "prov-" + p.id, p.name, state.p.includes(p.id), on => toggle("p", p.id, on, D.providers.map(x => x.id)), p.color));
+  D.providers.forEach(p => chip($("providers"), "prov-" + p.id, p.name, state.p.includes(p.id), on => togglePlateforme(p.id, on), p.color));
+  renderPlateformes();
   D.discover.forEach(d => chip($(d.type === "series" ? "disc-series" : "disc-movie"), "disc-" + d.id, d.name, state.d.includes(d.id), on => toggle("d", d.id, on, D.discover.map(x => x.id))));
   D.seasons.forEach(([k, label]) => chip($("seasons"), "season-" + k, label, state.h.includes(k), on => toggle("h", k, on, D.seasons.map(s => s[0]))));
   // Téléréalité : déjà masquée partout, sauf dans les rangées sur mesure qui la choisissent.
