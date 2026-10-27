@@ -183,7 +183,7 @@ export async function dessinerStatique(affiche, base, chemin) {
  * `dessiner(chemin)`, `enMemeTemps` à la fois. parChemin (Map chemin → { chemin, hash, taille, cree }) : ce qui est en
  * ligne, mis à jour ici (change : true pour ce qui doit partir). { nouveaux (empreinte → JPEG), faits, reessais, bilan }.
  */
-const REVOIR_MIN = 6 * 60;
+const REVOIR_MIN = 3 * 60;
 export async function dessinerTout(liste, dessiner, parChemin, { enMemeTemps = 4, maintenant = new Date().toISOString() } = {}) {
   const nouveaux = new Map(), faits = [], reessais = [], bilan = { dessinees: 0, inchangees: 0, retard: 0, inconnues: 0, ratees: 0 };
   let i = 0;
@@ -199,7 +199,7 @@ export async function dessinerTout(liste, dessiner, parChemin, { enMemeTemps = 4
         parChemin.set(chemin, { chemin, hash, taille: r.jpg.length, cree: avant ? avant.cree : maintenant, change: !avant || avant.hash !== hash || !!(avant && avant.change) });
         // Torrentio trop lent : publiée sans badge de qualité, et redessinée au prochain passage.
         if (r.retard) { bilan.retard++; reessais.push([chemin, (essais || 0) + 1, 10]); }
-        // Titre récent sans VF d'après l'avis du jour : redessiné dans 6 heures (la VF sort souvent dans la journée).
+        // Titre récent sans VF d'après l'avis du jour : redessiné dans 3 heures (la VF sort souvent dans la journée).
         else if (r.revoir) reessais.push([chemin, 0, REVOIR_MIN]);
         else if (essais !== null) faits.push(chemin);
       } else if (essais !== null) {

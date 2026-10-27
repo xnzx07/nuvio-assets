@@ -156,7 +156,7 @@ export const qualiteDeQ = (q) => (q && typeof q === "object"
 
 /**
  * L'avis VF du jour de l'addon pour une vidéo récente (« movie/tt… », « series/tt…:S:1 ») : /sf/…, avec RELAIS_KEY
- * (Lumio, qui lit la langue dans le fichier, sinon StreamFusion ; gardé par l'addon : « pas de VF » 6 heures). Le même
+ * (Lumio, qui lit la langue dans le fichier, sinon StreamFusion ; gardé par l'addon : « pas de VF » 3 heures). Le même
  * que celui des rangées et des fiches. { vf, sources, qualite? }, ou null (pas d'avis : plafond, panne). Gardé ici
  * 30 minutes : une affiche redessinée plus tard le redemande.
  */

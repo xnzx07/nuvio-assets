@@ -248,13 +248,13 @@ test("serveur_relance_tout_avec_la_cle", async () => {
   assert.equal((await s.route(req("k"))).status, 202);
 });
 
-// Titre récent sans VF d'après l'avis du jour (« revoir ») : publié tel quel, et redessiné 6 heures plus tard (The
+// Titre récent sans VF d'après l'avis du jour (« revoir ») : publié tel quel, et redessiné 3 heures plus tard (The
 // Dog Stars : sans VF à 4 h, en VF dans la journée, resté gris jusqu'au lendemain). Chaque passage : sans compter
 // d'essai, il reste à revoir tant que la VF n'est pas là.
-test("a_revoir_redessinee_six_heures_plus_tard", async () => {
+test("a_revoir_redessinee_trois_heures_plus_tard", async () => {
   const { dessinerTout, dessinerStatique } = await import("../lib/statiques.js");
   const r = await dessinerTout([["/maison/movie/poster/tt1.jpg", 0], ["/maison/movie/poster/tt2.jpg", null]], async () => ({ jpg: Buffer.from("x"), revoir: true }), new Map());
-  assert.deepEqual(r.reessais, [["/maison/movie/poster/tt1.jpg", 0, 360], ["/maison/movie/poster/tt2.jpg", 0, 360]]);
+  assert.deepEqual(r.reessais, [["/maison/movie/poster/tt1.jpg", 0, 180], ["/maison/movie/poster/tt2.jpg", 0, 180]]);
   assert.deepEqual(r.faits, []);
   assert.equal(r.nouveaux.size, 1);
   const affiche = async () => new Response(Buffer.from("jpg"), { headers: { "Content-Type": "image/jpeg", "X-Affiche-Etat": "revoir" } });

@@ -1357,3 +1357,18 @@ test("dispo_depuis_peu_sorties_numeriques_d_abord", async () => {
   const noms = (await (await get("/catalog/movie/accueil-vod-semaine.json")).json()).metas.map((m) => m.name);
   assert.ok(noms.includes("Île"), noms.join(", "));
 });
+
+// Les fiches TMDB des rangées ne sont gardées par Cloudflare que 3 heures (comme en mémoire) : une sortie numérique
+// ajoutée chez TMDB le jour même (Verity) entre dans « Dispo depuis peu » le jour même, pas le lendemain.
+test("fiches_tmdb_des_rangees_gardees_trois_heures", async () => {
+  oublierInfos(); store.clear();
+  const ttl = [];
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (/\/movie\/3\?/.test(u)) ttl.push(init && init.cf && init.cf.cacheTtl);
+    if (u.includes("/discover/movie")) return new Response(JSON.stringify({ results: [{ id: 3, title: "Verity", original_language: "en", release_date: "2026-09-30", popularity: 7 }], page: 1, total_pages: 1 }));
+    return new Response(JSON.stringify({ results: [] }));
+  };
+  await get("/catalog/movie/accueil-vod-semaine.json");
+  assert.ok(ttl.length && ttl.every((s) => s === 3 * 3600), JSON.stringify(ttl));
+});

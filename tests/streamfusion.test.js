@@ -132,9 +132,9 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
   assert.ok(appels.includes("https://lumio.test/p/stream/series/tt834:2:1.json"));
 });
 
-// Un « pas de VF » ne tient que 6 heures : la VF sort souvent le jour même de la sortie numérique (The Dog Stars, gris
+// Un « pas de VF » ne tient que 3 heures : la VF sort souvent le jour même de la sortie numérique (The Dog Stars, gris
 // toute la journée du 27 octobre avec l'avis de 4 h). Une VF trouvée, elle, n'est pas redemandée dans la journée.
-test("pas_de_vf_redemande_six_heures_plus_tard", async () => {
+test("pas_de_vf_redemande_trois_heures_plus_tard", async () => {
   let vf = false;
   globalThis.fetch = async (url) => {
     const u = String(url);
@@ -149,10 +149,10 @@ test("pas_de_vf_redemande_six_heures_plus_tard", async () => {
   try {
     assert.equal((await (await sf("movie/tt841", "cle-relais", e)).json()).vf, false);
     vf = true;
-    horloge.mock.mockImplementation(() => debut + 5 * 3600000);
-    assert.equal((await (await sf("movie/tt841", "cle-relais", e)).json()).vf, false, "gardé moins de 6 h");
-    horloge.mock.mockImplementation(() => debut + 6 * 3600000 + 1000);
-    assert.equal((await (await sf("movie/tt841", "cle-relais", e)).json()).vf, true, "redemandé après 6 h");
+    horloge.mock.mockImplementation(() => debut + 2 * 3600000);
+    assert.equal((await (await sf("movie/tt841", "cle-relais", e)).json()).vf, false, "gardé moins de 3 h");
+    horloge.mock.mockImplementation(() => debut + 3 * 3600000 + 1000);
+    assert.equal((await (await sf("movie/tt841", "cle-relais", e)).json()).vf, true, "redemandé après 3 h");
     vf = false;
     horloge.mock.mockImplementation(() => debut + 13 * 3600000);
     assert.equal((await (await sf("movie/tt841", "cle-relais", e)).json()).vf, true, "une VF trouvée reste dans la journée");

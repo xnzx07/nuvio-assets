@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.43.8";
+const VERSION = "5.43.9";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -370,7 +370,9 @@ async function lireInfo(env, kind, tmdbId, budget) {
   // Sans réponse (limite d'appels de Cloudflare ou de TMDB…) : le titre s'affiche quand même, sans ces infos, et la
   // page est marquée incomplète (rate). Un titre retiré de TMDB (404) n'y changera rien : pas compté.
   let rate = false;
-  let j = await fetch(url, { cf: { cacheTtl: 86400, cacheEverything: true } })
+  // Gardée 3 heures (comme en mémoire, INFOS_MS) : une sortie numérique ajoutée chez TMDB le jour même (Verity, le
+  // 27 octobre) entre dans « Dispo depuis peu » le jour même.
+  let j = await fetch(url, { cf: { cacheTtl: INFOS_MS / 1000, cacheEverything: true } })
     .then((res) => { if (res.ok) return res.json(); rate = res.status !== 404; return null; })
     .catch(() => { rate = true; return null; });
   if (!j) return { imdb: null, rate };
@@ -848,12 +850,12 @@ async function lireVfLumio(env, cles) {
 /**
  * L'avis VF du jour pour des titres récents (clés « movie/tt… », « series/tt…:S:1 ») : Lumio, sinon StreamFusion (dans
  * son plafond, compté pour « origine »). Le même pour les affiches, les rangées, les fiches et la photo des tendances.
- * Gardé par Cloudflare : une VF trouvée toute la journée ; « pas de VF » 6 heures, car la VF arrive souvent le jour
+ * Gardé par Cloudflare : une VF trouvée toute la journée ; « pas de VF » 3 heures, car la VF arrive souvent le jour
  * même de la sortie numérique (The Dog Stars, gris tout le 27 octobre avec l'avis pris à 4 h). SF_MAX titres au plus
  * lus par appel. { avis: Map clé → { vf, sources, qualite? }, plafond: true si StreamFusion était nécessaire mais
  * son plafond atteint }.
  */
-const AVIS_NON_MS = 6 * 3600000;
+const AVIS_NON_MS = 3 * 3600000;
 const avisCache = (cle) => new Request(`https://avis.cache/2/${parisToday()}/${cle}`);
 async function avisDuJour(env, cles, origine = "affiches") {
   const avis = new Map(), manque = [];
