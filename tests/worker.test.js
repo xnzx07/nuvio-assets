@@ -1333,3 +1333,27 @@ test("dispo_depuis_peu_estimation_passee_et_vf_confirmee", async () => {
   assert.deepEqual(await lancer(true), ["Verity"]);
   assert.deepEqual(await lancer(false), []);
 });
+
+// Les sorties en salle ne prennent pas la place des sorties numériques de la fenêtre : 28 candidats au plus, et des
+// films encore au cinéma, plus populaires, en chassaient L'Île des Souvenirs et Tenzing (en VF, sortis cette semaine).
+test("dispo_depuis_peu_sorties_numeriques_d_abord", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  oublierInfos(); store.clear();
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.includes("/vf.json")) return sourcesDe({ tt9999: { vf: true, sources: 9 } })(u);
+    if (u.includes("/discover/movie")) {
+      const salle = new URL(u).searchParams.get("with_release_type") === "3|2";
+      const results = salle ? Array.from({ length: 30 }, (_, i) => ({ id: 100 + i, title: `Salle ${i}`, original_language: "en", release_date: jour(-30), popularity: 100 - i }))
+        : [{ id: 9099, title: "Île", original_language: "en", release_date: jour(-30), popularity: 1 }];
+      return new Response(JSON.stringify({ results, page: 1, total_pages: 1 }));
+    }
+    const m = /\/movie\/(\d+)\?/.exec(u);
+    if (m && m[1] === "9099") return new Response(JSON.stringify({ ...filmVod(9099, "en", [["US", 3, jour(-30)], ["US", 4, jour(-2)]]), imdb_id: "tt9999" }));
+    if (m) return new Response(JSON.stringify(filmVod(Number(m[1]), "en", [["US", 3, jour(-30)]])));
+    return new Response(JSON.stringify({ results: [] }));
+  };
+  const noms = (await (await get("/catalog/movie/accueil-vod-semaine.json")).json()).metas.map((m) => m.name);
+  assert.ok(noms.includes("Île"), noms.join(", "));
+});

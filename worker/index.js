@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.43.7";
+const VERSION = "5.43.8";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1593,7 +1593,10 @@ async function fetchVfPage(env, ctx, def, kind, page, today, opts) {
     d.results = (d.results || []).filter((it) => it.release_date && it.release_date <= today && it.release_date >= addDays(today, -120));
   });
   const seen = new Set(), merged = [];
-  lists.flatMap((d) => d.results || []).sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+  const parPopularite = (l) => l.flatMap((d) => d.results || []).sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+  // « Dispo depuis peu » : les sorties numériques de la fenêtre d'abord, les sorties en salle ensuite (MAX_VF candidats
+  // au plus : des films encore au cinéma, plus populaires, en chassaient L'Île des Souvenirs).
+  (future ? parPopularite(lists) : [...parPopularite(lists.slice(0, 1)), ...parPopularite(lists.slice(1))])
     .forEach((it) => { if (!seen.has(it.id)) { seen.add(it.id); merged.push(it); } });
   if (!merged.length) return [];
   const metas = await toMetas(env, ctx, merged.slice(0, MAX_VF), kind, { ...opts, lireSources: true }, today);
