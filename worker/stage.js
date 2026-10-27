@@ -1889,4 +1889,43 @@ export const STAGE_JS = String.raw`
     document.addEventListener("visibilitychange", run);
   });
 })();
+
+// ---------- Ce qui s'ouvre défile jusqu'à l'écran ----------
+// Juste après un clic ou une touche, ce qui apparaît (attribut hidden retiré, <details> ouvert) et dépasse de l'écran
+// défile juste assez pour se voir en entier ; plus grand que l'écran, son haut vient en haut. Restent en place : ce qui
+// est posé sur la page (fixed, sticky : fenêtres, bulles, colonne de l'écran), l'aperçu de Nuvio (.tv), les listes de
+// propositions, ce qui porte data-sans-defile, et tout ce qu'un autre code fait déjà défiler.
+(() => {
+  let geste = 0, attente = [], prevu = false;
+  const note = () => { geste = Date.now(); };
+  addEventListener("pointerup", note, true); addEventListener("keyup", note, true);
+  const pose = (el) => { for (let e = el; e && e !== document.body; e = e.parentElement) { const p = getComputedStyle(e).position; if (p === "fixed" || p === "sticky") return true; } return false; };
+  const exclu = (el) => !el.isConnected || !!el.closest("dialog, .tv, [role=listbox], [data-sans-defile]") || pose(el);
+  const defiler = () => {
+    prevu = false;
+    const els = attente.filter((el) => !exclu(el) && el.getClientRects().length); attente = [];
+    const seuls = els.filter((el) => !els.some((x) => x !== el && x.contains(el)));
+    if (!seuls.length) return;
+    const y0 = scrollY;
+    setTimeout(() => {
+      if (scrollY !== y0) return;   // un autre code (ou la personne) fait déjà défiler
+      const rs = seuls.map((el) => el.getBoundingClientRect());
+      const haut = Math.min(...rs.map((r) => r.top)), bas = Math.max(...rs.map((r) => r.bottom)), marge = 16;
+      let dy = 0;
+      if (bas - haut > innerHeight - 2 * marge) { if (haut > innerHeight * .6 || haut < 0) dy = haut - marge; }
+      else if (bas > innerHeight - marge) dy = bas - innerHeight + marge;
+      else if (haut < marge) dy = haut - marge;
+      if (Math.abs(dy) > 2) scrollBy({ top: dy, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    }, 120);
+  };
+  new MutationObserver((ms) => {
+    if (Date.now() - geste > 1500) return;
+    for (const m of ms) {
+      const el = m.target;
+      const ouvert = m.attributeName === "hidden" ? m.oldValue !== null && !el.hidden : m.oldValue === null && el.open;
+      if (ouvert) attente.push(el);
+    }
+    if (attente.length && !prevu) { prevu = true; requestAnimationFrame(() => requestAnimationFrame(defiler)); }
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["hidden", "open"], attributeOldValue: true });
+})();
 `;

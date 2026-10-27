@@ -1551,7 +1551,12 @@ if (location.hash.indexOf("#lien=") === 0) {
     etat.textContent = m ? "Voyant « " + nom + " » allumé : " + vues.length + (vues.length > 1 ? " pannes possibles" : " panne possible") + ". Rappuie dessus pour tout revoir."
       : "Tous les voyants sont éteints : voici toutes les pannes connues.";
   };
-  voyants.forEach((v) => v.addEventListener("click", () => { sfx.click(); allumer(v.getAttribute("aria-pressed") === "true" ? "" : v.dataset.moment); }));
+  voyants.forEach((v) => v.addEventListener("click", () => {
+    sfx.click(); allumer(v.getAttribute("aria-pressed") === "true" ? "" : v.dataset.moment);
+    // Les pannes restantes sont sous le pupitre : si elles sont hors de l'écran, la page descend pour les montrer.
+    const premiere = pannes.find((p) => !p.hidden), r = premiere && premiere.getBoundingClientRect();
+    if (r && r.top > innerHeight - 120) scrollBy({ top: r.top - innerHeight * .4, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }));
   allumer(""); pu.hidden = false;
 
   // Le grand rembobinage : chaque geste coché remet de la pellicule sur la bobine.
