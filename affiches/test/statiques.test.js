@@ -223,3 +223,27 @@ test("serveur_apercus_du_site", async () => {
   assert.equal(r.headers.get("Cache-Control"), "public, max-age=3600");
   assert.equal((await s.route({ url: "/affiche/movie/poster/kitsu:1", headers: {} })).status, 404);
 });
+
+// La nuit (tout redessiner après la photo des tendances) passait par le disjoncteur de l'adresse publique (300 dessins
+// par minute) : le 27 octobre 2026, il a sauté après ~1 400 affiches, les autres ont gardé les N° de la veille (Bleach
+// N°15, N°2 du jour). Les passages du serveur ont leur propre service, sans ce plafond.
+test("passages_du_serveur_sans_disjoncteur", async () => {
+  const { envDesPassages } = await import("../serveur.js");
+  const { disjoncteurDe } = await import("../lib/disjoncteur.js");
+  const public_ = disjoncteurDe({ RENDUS_MINUTE: "300", RENDUS_HEURE: "6000" });
+  const passages = disjoncteurDe(envDesPassages({ RENDUS_MINUTE: "300", RENDUS_HEURE: "6000", TMDB_API_KEY: "x" }));
+  for (let i = 0; i < 9000; i++) { public_.compte(); passages.compte(); }
+  assert.ok(public_.plein());
+  assert.ok(!passages.plein());
+  assert.equal(envDesPassages({ TMDB_API_KEY: "x" }).TMDB_API_KEY, "x");
+});
+
+// Relancer « tout » à la main (une nuit ratée) : avec la clé seulement, sans attendre la fin.
+test("serveur_relance_tout_avec_la_cle", async () => {
+  const { creerServeur } = await import("../serveur.js");
+  const s = creerServeur({ env: { RELAIS_KEY: "k", TMDB_API_KEY: "x", PORT: "8796" }, fetchImpl: async () => new Response("{}", { status: 404 }) });
+  const req = (cle) => ({ url: "/passage?tout=1", headers: cle ? { "x-relais-cle": cle } : {} });
+  assert.equal((await s.route(req())).status, 403);
+  assert.equal((await s.route(req("mauvaise"))).status, 403);
+  assert.equal((await s.route(req("k"))).status, 202);
+});

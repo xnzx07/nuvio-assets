@@ -7,6 +7,7 @@
  *   GET /affiche/{type}/{shape}/{id}?imdb=…&s=…     les aperçus des pages du site (comme /affiche/… de l'addon, sans lui)
  *   GET /qualite/… /tendances/… /notes/… /vf.json /anilist.json   les relais de l'addon, comme sur Vercel
  *   GET /etat                                      le bilan du serveur
+ *   GET /passage?tout=1                            (clé X-Relais-Cle) tout redessiner maintenant, après une nuit ratée
  * Il prend aussi la file des affiches demandées pendant son absence (toutes les 5 minutes) et redessine tout chaque
  * nuit après la photo des tendances (4 h 17 UTC), et se signale chaque minute : la machine GitHub ne le fait qu'en
  * secours (scripts/affiches-statiques.mjs).
@@ -31,6 +32,13 @@ import { secondesAvantBascule } from "./lib/tendances.js";
 // Aperçus gardés en mémoire (les mêmes pour tous les visiteurs du site : les rangées du hall, la galerie) ; ~100 Ko chacun.
 const APERCUS_MAX = 400;
 
+/**
+ * Le service des passages du serveur (la nuit, la file) : sans le plafond du disjoncteur, qui protège l'adresse
+ * publique. Le 27 octobre 2026, la nuit l'a déclenché après ~1 400 affiches (300 par minute) : les autres ont gardé
+ * les N° de la veille toute la journée.
+ */
+export const envDesPassages = (env) => ({ ...env, RENDUS_MINUTE: "1000000000", RENDUS_HEURE: "1000000000" });
+
 export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = Date.now } = {}) {
   const PORT = Number(env.PORT) || 8080, BASE = `http://127.0.0.1:${PORT}`;
   // Le service : sans réserve, sans le compteur de Vercel (rien à protéger ici), sans StreamFusion (chaque appel à /sf
@@ -40,6 +48,7 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
     RENDUS_MINUTE: env.RENDUS_MINUTE || "300", RENDUS_HEURE: env.RENDUS_HEURE || "6000" };
   const sansCompteur = (url, init) => (/\/cpu\?/.test(String(url)) ? Promise.resolve(Response.json({ ms: 0 })) : fetchImpl(url, init));
   const affiche = makeHandler({ env: envService, fetchImpl: sansCompteur });
+  const afficheDesPassages = makeHandler({ env: envDesPassages(envService), fetchImpl: sansCompteur });
   const relais = { tendances: makeTendances({ env: envService, fetchImpl }), notes: makeNotes({ env: envService, fetchImpl }), vf: makeVf({ env: envService, fetchImpl }),
     qualite: makeQualite({ env: envService, fetchImpl }), anilist: makeAnilist({ env: envService, fetchImpl }) };
   const cf = env.CLOUDFLARE_API_TOKEN && env.D1_AFFICHES
@@ -126,6 +135,12 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
     if (/^\/notes\/tt\d{1,10}\.json$/.test(p)) return relais.notes(new Request(`${BASE}/api/notes?imdb=${p.slice(7, -5)}${url.searchParams.get("type") === "series" ? "&type=series" : ""}`, { headers: enTetes }));
     if (p === "/vf.json") return relais.vf(new Request(`${BASE}/api/vf${url.search}`, { headers: enTetes }));
     if (p === "/anilist.json") return relais.anilist(new Request(`${BASE}/api/anilist${url.search}`, { headers: enTetes }));
+    // Une nuit ratée : tout redessiner à la main, avec la clé ; la réponse part sans attendre la fin.
+    if (p === "/passage") {
+      if (!cleOk(req)) return new Response(null, { status: 403 });
+      passage({ tout: url.searchParams.get("tout") === "1" });
+      return new Response(null, { status: 202 });
+    }
     if (p === "/etat") return Response.json({ ...etat, enAttente: enAttente.size, memoire: Math.round(process.memoryUsage().rss / 1e6) }, { headers: { "Cache-Control": "no-store" } });
     return new Response("introuvable", { status: 404 });
   }
@@ -151,7 +166,7 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
       const { parChemin, aFaire } = await lireEtat(cf, { tout, connu: tout ? null : connu });
       connu = parChemin;
       for (const c of enAttente.keys()) aFaire.delete(c);
-      const fait = await dessinerTout([...aFaire], (c) => dessinerStatique(affiche, BASE, c), parChemin, { enMemeTemps: Number(env.EN_MEME_TEMPS) || 4 });
+      const fait = await dessinerTout([...aFaire], (c) => dessinerStatique(afficheDesPassages, BASE, c), parChemin, { enMemeTemps: Number(env.EN_MEME_TEMPS) || 4 });
       const pris = [...enAttente];
       for (const [chemin, x] of pris) {
         const avant = parChemin.get(chemin);
