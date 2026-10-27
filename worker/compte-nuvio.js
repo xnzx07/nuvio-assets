@@ -92,81 +92,185 @@ export function compteNuvioPage({ origin }) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Connecter Nuvio · Nuvio en français</title>
+<title>Tout envoyer dans Nuvio · Nuvio en français</title>
 <meta name="robots" content="noindex">
 <link rel="icon" href="${LOGO}">
 ${feuilles("polices.css")}
 <style>
-:root { --velvet: #170c12; --velvet-2: #22121b; --seat: #3d2230; --cream: #f5ead8; --dim: #b9a59c; --bulb: #ffcf6b; --ink: #2a1a14; color-scheme: dark; }
+:root { --velvet: #170c12; --velvet-2: #22121b; --seat: #3d2230; --cream: #f5ead8; --dim: #b9a59c; --bulb: #ffcf6b; --ink: #2a1a14; --red: #e5413a; --green: #5fd39a; color-scheme: dark; }
 * { box-sizing: border-box; }
+::selection { background: var(--bulb); color: var(--ink); }
 body { margin: 0; min-height: 100vh; color: var(--cream); font: 16px/1.5 "Figtree", system-ui, sans-serif;
   background: radial-gradient(ellipse 90% 40% at 50% -5%, rgba(229,65,58,.25), transparent 70%), var(--velvet);
-  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 main { max-width: 560px; margin: 0 auto; display: grid; gap: 16px; }
-.ticket { display: grid; gap: 4px; padding: 16px 18px; border-radius: 14px; background: var(--cream); color: var(--ink); }
+a { color: var(--bulb); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--bulb); outline-offset: 3px; }
+h2:focus { outline: none; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Le billet d'entrée : le titre et la promesse */
+.ticket { display: grid; gap: 6px; padding: 18px 20px; border-radius: 14px; background: var(--cream); color: var(--ink); }
 .ticket small { font: 800 .72rem "Figtree"; letter-spacing: .16em; text-transform: uppercase; color: #7a5a4c; }
-h1 { margin: 0; font: 400 2rem/1 "Bebas Neue", Impact, sans-serif; letter-spacing: .03em; }
-.bloc { display: grid; gap: 10px; padding: 16px; border-radius: 14px; border: 1px solid var(--seat); background: var(--velvet-2); }
-.bloc[hidden] { display: none; }
+h1 { margin: 0; font: 400 2.2rem/1 "Bebas Neue", Impact, sans-serif; letter-spacing: .03em; }
+.ticket p { margin: 0; font-size: .95rem; color: #4a3328; text-wrap: pretty; }
+
+/* Les trois étapes : où on en est */
+.etapes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: e; }
+.etapes li { counter-increment: e; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--seat); color: var(--dim); font: 700 .82rem/1.2 "Figtree", system-ui, sans-serif; }
+.etapes li::before { content: counter(e); flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid currentColor; font: 800 .75rem/1 "Figtree", system-ui, sans-serif; }
+.etapes li.en-cours { color: var(--bulb); border-color: rgba(255,207,107,.55); background: rgba(255,207,107,.07); }
+.etapes li.fait { color: var(--green); border-color: rgba(95,211,154,.35); }
+.etapes li.fait::before { content: "✓"; background: var(--green); border-color: var(--green); color: var(--velvet); }
+
+/* Les blocs d'étape */
+.bloc { display: grid; gap: 12px; padding: 20px; border-radius: 14px; border: 1px solid var(--seat); background: var(--velvet-2); }
+.bloc[hidden], [hidden] { display: none !important; }
+h2 { margin: 0; font: 400 1.6rem/1.05 "Bebas Neue", Impact, sans-serif; letter-spacing: .04em; color: var(--cream); }
+.aide { margin: 0; font-size: .92rem; color: var(--dim); text-wrap: pretty; }
 label { font-weight: 800; }
 input, select { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--seat); background: #0f080c; color: var(--cream); font: .9rem "Figtree", system-ui, sans-serif; }
-button { width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--seat); background: var(--velvet-2); color: var(--cream); font: 800 1rem "Figtree", system-ui, sans-serif; cursor: pointer; }
-button.principal { background: var(--bulb); border-color: var(--bulb); color: var(--ink); }
-button:disabled { opacity: .5; cursor: default; }
-.code { margin: 0; text-align: center; font: 400 2.6rem/1 "Bebas Neue", Impact, sans-serif; letter-spacing: .18em; color: var(--bulb); }
-.qr { width: 200px; margin: 0 auto; }
-.qr svg { display: block; width: 100%; height: auto; border-radius: 8px; }
-.aide { margin: 0; font-size: .9rem; color: var(--dim); }
-.aide a, .bloc a { color: var(--bulb); }
-.etat { min-height: 1.4em; margin: 0; font-weight: 800; color: var(--bulb); text-align: center; }
-/* Les erreurs : le même encadré rouge que sur le reste du site. */
-.erreur { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; border: 1.5px solid #e5413a; background: #3b1216; color: #ffe1d8; font-weight: 600; text-align: left; box-shadow: 0 0 0 3px rgba(229,65,58,.15); }
-.erreur::before { content: "!"; flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #e5413a; color: #fff; font: 800 .85rem/1 "Figtree", system-ui, sans-serif; }
+input:focus, select:focus { outline: none; border-color: var(--bulb); box-shadow: 0 0 0 3px rgba(255,207,107,.22); }
+button, .bouton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; padding: 12px 16px; border-radius: 12px; border: 1.5px solid var(--seat); background: transparent; color: var(--cream);
+  font: 800 1rem "Figtree", system-ui, sans-serif; text-decoration: none; cursor: pointer; transition: background .15s ease, border-color .15s ease, transform .12s ease; }
+button:hover, .bouton:hover { border-color: rgba(255,207,107,.55); }
+button:active, .bouton:active { transform: scale(.98); }
+button.principal, .bouton.principal { background: var(--bulb); border-color: var(--bulb); color: var(--ink); }
+button.principal:hover, .bouton.principal:hover { background: #ffe0a0; }
+button.discret { width: auto; min-height: 0; padding: 6px 2px; border: 0; color: var(--dim); font-weight: 700; font-size: .88rem; text-decoration: underline; text-underline-offset: 3px; }
+button.discret:hover { color: var(--cream); }
+button:disabled { opacity: .5; cursor: default; transform: none; }
 a, button { touch-action: manipulation; }
-.coche { display: flex; gap: 10px; align-items: flex-start; font-weight: 600; cursor: pointer; }
-.coche input { width: auto; margin-top: 4px; accent-color: var(--bulb); }
-.coche span { display: grid; }
-.coche small { font-weight: 400; color: var(--dim); }
-#bilan { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+
+/* Étape 1 bis : le code à approuver */
+.code { margin: 0; text-align: center; font: 400 3rem/1 "Bebas Neue", Impact, sans-serif; letter-spacing: .2em; color: var(--bulb); padding: 14px 0 10px; border-radius: 12px; border: 1.5px dashed rgba(255,207,107,.45); background: #120a0e; user-select: all; }
+.approuver { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 18px; align-items: center; }
+.qr { width: 172px; padding: 8px; border-radius: 12px; background: #fff; }
+.qr:empty { aspect-ratio: 1; background: #120a0e; border: 1px solid var(--seat); }
+.qr svg { display: block; width: 100%; height: auto; }
+.approuver .suite { display: grid; gap: 10px; }
+.attente { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; font-weight: 700; color: var(--cream); }
+.attente::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--bulb); animation: pouls 1.4s ease-in-out infinite; }
+.attente small { margin-left: auto; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@keyframes pouls { 50% { opacity: .25; transform: scale(.7); } }
+/* Sur un téléphone, on ne scanne pas son propre écran : le bouton passe devant, le QR (pour un autre appareil) après. */
+@media (max-width: 560px) {
+  .approuver { grid-template-columns: 1fr; }
+  .qr { order: 2; width: 150px; justify-self: center; }
+}
+
+/* Étape 2 : le compte, le profil, ce qu'on envoie */
+.compte-tete { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.qui { margin: 0; font-size: .9rem; color: var(--dim); overflow-wrap: anywhere; }
+.qui b { color: var(--green); }
+.champ { display: grid; gap: 6px; }
+fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: 8px; }
+legend { padding: 0; margin-bottom: 8px; font-weight: 800; }
+.coche { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--seat); background: #1a0e15; font-weight: 700; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.coche:hover { border-color: rgba(255,207,107,.4); }
+.coche:has(input:checked) { border-color: rgba(255,207,107,.55); background: rgba(255,207,107,.06); }
+.coche input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--bulb); }
+.coche span { display: grid; gap: 2px; }
+.coche small { font-weight: 400; font-size: .85rem; color: var(--dim); }
+details.liens { border-radius: 12px; border: 1px solid var(--seat); }
+details.liens summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none; font-weight: 700; }
+details.liens summary::-webkit-details-marker { display: none; }
+details.liens summary::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid var(--dim); border-bottom: 2px solid var(--dim); transform: rotate(45deg) translateY(-2px); transition: transform .15s ease; }
+details.liens[open] summary::after { transform: rotate(-135deg) translateY(-2px); }
+details.liens summary small { font-weight: 600; color: var(--dim); }
+details.liens summary small.manque { color: #ffb4a8; }
+details.liens .dedans { display: grid; gap: 12px; padding: 0 14px 14px; }
+
+/* Le résultat */
+.etat { min-height: 1.4em; margin: 0; font-weight: 800; text-align: center; color: var(--bulb); }
+.etat:empty { display: none; }
+.etat.reussi { display: grid; gap: 4px; padding: 16px; border-radius: 12px; border: 1.5px solid rgba(95,211,154,.5); background: rgba(95,211,154,.08); color: var(--green); }
+.etat.reussi small { font-weight: 600; color: var(--cream); }
+/* Les erreurs : le même encadré rouge que sur le reste du site. */
+.erreur { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--red); background: #3b1216; color: #ffe1d8; font-weight: 600; text-align: left; box-shadow: 0 0 0 3px rgba(229,65,58,.15); }
+.erreur::before { content: "!"; flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--red); color: #fff; font: 800 .85rem/1 "Figtree", system-ui, sans-serif; }
+#bilan { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 #bilan:empty { display: none; }
-#bilan .ko { color: #ffb4a8; }
+#bilan li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--velvet-2); border: 1px solid var(--seat); font-weight: 600; }
+#bilan li::before { content: "✓"; flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--green); color: var(--velvet); font: 800 .75rem/1 "Figtree", system-ui, sans-serif; }
+#bilan li.ko { color: #ffd2c8; border-color: rgba(229,65,58,.5); }
+#bilan li.ko::before { content: "!"; background: var(--red); color: #fff; }
+.pied { margin: 8px 0 0; text-align: center; font-size: .9rem; color: var(--dim); }
+@media (prefers-reduced-motion: reduce) { .attente::before { animation: none; } button, .bouton, .coche { transition: none; } }
 </style>
 </head>
 <body>
 <main>
-  <div class="ticket"><small>Sans rien coller</small><h1>Connecter Nuvio</h1></div>
-  <p class="aide">L'addon, les collections et tes affiches arrivent dans Nuvio tout seuls, sur tes appareils connectés au même compte Nuvio : plus rien à coller. Ton compte Nuvio reste dans ce navigateur, ce site ne le voit jamais.</p>
-  <section class="bloc" id="b-lien">
-    <label for="lien">Ton lien d'addon</label>
-    <input id="lien" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="${origin}/…/manifest.json">
-    <p class="aide">Celui de ton billet, repris de ta dernière programmation en salle 2 sur cet appareil : l'addon et les collections suivront ses réglages (pays, genres, tuiles). Vide ? Copie-le depuis ton billet.</p>
-    <label for="affiches">Ton lien d'affiches</label>
-    <input id="affiches" type="url" inputmode="url" autocomplete="off" spellcheck="false">
-    <p class="aide">Celui de ton billet, avec les réglages de la régie de ce navigateur.</p>
-  </section>
-  <section class="bloc" id="b-connexion">
+  <header class="ticket">
+    <small>Sans rien coller</small>
+    <h1>Tout envoyer dans Nuvio</h1>
+    <p>L'addon, les collections, l'ordre de l'accueil et tes affiches arrivent tout seuls sur tes appareils connectés à ton compte Nuvio.</p>
+  </header>
+
+  <ol class="etapes" aria-label="Étapes">
+    <li id="p1" class="en-cours">Connecter</li>
+    <li id="p2">Choisir</li>
+    <li id="p3">Envoyer</li>
+  </ol>
+
+  <section class="bloc" id="b-connexion" aria-labelledby="t-connexion">
+    <h2 id="t-connexion" tabindex="-1">Connecte ton compte Nuvio</h2>
+    <p class="aide">Comme pour une TV : un code à approuver avec ton compte Nuvio (gratuit). La connexion reste dans ce navigateur, ce site ne la voit jamais.</p>
     <button type="button" class="principal" id="connecter">Connecter mon compte Nuvio</button>
-    <p class="aide">Il te faut un compte Nuvio (gratuit), connecté dans l'appli.</p>
   </section>
-  <section class="bloc" id="b-code" hidden>
-    <p class="aide">Sur ton téléphone, scanne le QR code, ou ouvre <a id="ouvrir" target="_blank" rel="noopener">nuvio.tv/link</a> et tape ce code. Connecte-toi à ton compte Nuvio si on te le demande, puis approuve.</p>
-    <p class="code" id="code"></p>
-    <div class="qr" id="qr"></div>
-    <button type="button" id="annuler">Annuler</button>
+
+  <section class="bloc" id="b-code" aria-labelledby="t-code" hidden>
+    <h2 id="t-code" tabindex="-1">Approuve avec ce code</h2>
+    <p class="code" id="code" aria-label="Code de connexion"></p>
+    <div class="approuver">
+      <div class="qr" id="qr" aria-label="QR code de connexion"></div>
+      <div class="suite">
+        <p class="aide">Ouvre <b>nuvio.tv/link</b>, connecte-toi à ton compte Nuvio si on te le demande, vérifie le code puis approuve. Depuis un autre appareil, scanne le QR code.</p>
+        <a class="bouton principal" id="ouvrir" target="_blank" rel="noopener">Ouvrir nuvio.tv/link</a>
+      </div>
+    </div>
+    <p class="attente" role="status">En attente de ton accord…<small id="reste"></small></p>
+    <button type="button" class="discret" id="annuler">Annuler</button>
   </section>
-  <section class="bloc" id="b-compte" hidden>
-    <label for="profil">Profil Nuvio</label>
-    <select id="profil"></select>
-    <label class="coche"><input type="checkbox" id="e-addon" checked><span>L'addon<small>Tes autres addons restent ; le nôtre prend ton lien.</small></span></label>
-    <label class="coche"><input type="checkbox" id="e-coll" checked><span>Les collections<small>Celles que tu as faites toi-même restent ; les nôtres sont remplacées.</small></span></label>
-    <label class="coche"><input type="checkbox" id="e-acc" checked><span>L'ordre de l'accueil<small>Plateformes en haut, puis tes rangées et tes collections dans l'ordre choisi sur le site ; les rangées de tes autres addons suivent.</small></span></label>
-    <label class="coche"><input type="checkbox" id="e-aff" checked><span>Les affiches, sur la TV<small>Custom Poster Source. Sur téléphone et PC, colle encore le lien à la main.</small></span></label>
+
+  <section class="bloc" id="b-compte" aria-labelledby="t-compte" hidden>
+    <div class="compte-tete">
+      <h2 id="t-compte" tabindex="-1">Que veux-tu envoyer ?</h2>
+      <button type="button" class="discret" id="deconnecter">Déconnecter</button>
+    </div>
+    <p class="qui" id="qui"><b>Compte Nuvio connecté</b></p>
+    <div class="champ">
+      <label for="profil">Profil Nuvio</label>
+      <select id="profil"></select>
+    </div>
+    <fieldset>
+      <legend class="visually-hidden">Ce qui part dans ton compte</legend>
+      <label class="coche"><input type="checkbox" id="e-addon" checked><span>L'addon<small>Tes autres addons restent ; le nôtre prend ton lien.</small></span></label>
+      <label class="coche"><input type="checkbox" id="e-coll" checked><span>Les collections<small>Celles que tu as faites toi-même restent ; les nôtres sont remplacées.</small></span></label>
+      <label class="coche"><input type="checkbox" id="e-acc" checked><span>L'ordre de l'accueil<small>Plateformes en haut, puis tes rangées et tes collections dans l'ordre choisi sur le site ; les rangées de tes autres addons suivent.</small></span></label>
+      <label class="coche"><input type="checkbox" id="e-aff" checked><span>Les affiches<small>Custom Poster Source, sur chaque appareil (TV, PC, téléphone) qui a déjà ouvert Nuvio avec ce compte.</small></span></label>
+    </fieldset>
+    <details class="liens" id="liens">
+      <summary>Tes liens <small id="liens-etat">repris de ton billet</small></summary>
+      <div class="dedans">
+        <div class="champ">
+          <label for="lien">Ton lien d'addon</label>
+          <input id="lien" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="${origin}/…/manifest.json">
+          <p class="aide">Celui de ton billet, repris de ta dernière programmation en salle 2 sur cet appareil : l'addon et les collections suivront ses réglages (pays, genres, tuiles).</p>
+        </div>
+        <div class="champ">
+          <label for="affiches">Ton lien d'affiches</label>
+          <input id="affiches" type="url" inputmode="url" autocomplete="off" spellcheck="false">
+          <p class="aide">Celui de ton billet, avec les réglages de la régie de ce navigateur.</p>
+        </div>
+      </div>
+    </details>
     <button type="button" class="principal" id="envoyer">Envoyer dans Nuvio</button>
-    <button type="button" id="deconnecter">Déconnecter Nuvio</button>
   </section>
-  <p class="etat" id="etat" role="status"></p>
+
+  <div class="etat" id="etat" role="status"></div>
   <ul id="bilan" aria-live="polite"></ul>
-  <p class="aide"><a href="${origin}/guide">Retour au guide</a></p>
+  <p class="pied"><a href="${origin}/guide">Retour au guide</a> · <a href="${origin}/configure">Ta programmation (salle 2)</a></p>
 </main>
 ${scripts("outils.js")}
 <script>
@@ -203,6 +307,15 @@ var __name = function (f) { return f; };
   const regie = (k) => { const s = lu(k); return s === null ? null : LA.lireReglages(new URLSearchParams(s ? "s=1." + s : "")); };
   $("affiches").value = p.get("affiches") || (lu("affiches-v2") !== null || !memo.affiches
     ? LA.lienAffiches(regie("affiches-v2") || LA.lireReglages(new URLSearchParams("")), regie("affiches-v2-paysage")) : memo.affiches);
+  // Les liens restent repliés quand ils sont là ; sans lien d'addon, le panneau s'ouvre et le dit.
+  const etatLiens = () => {
+    const vide = !$("lien").value.trim();
+    $("liens-etat").textContent = vide ? "lien d'addon manquant : colle celui de ton billet" : p.get("lien") ? "repris de ton billet" : "repris de cet appareil";
+    $("liens-etat").className = vide ? "manque" : "";
+    if (vide) $("liens").open = true;
+  };
+  etatLiens();
+  $("lien").addEventListener("input", etatLiens);
   const baseDu = (lien) => {
     const u = new URL(lien.trim());
     if (u.origin !== location.origin) throw new Error("ce n'est pas un lien d'addon de ce site.");
@@ -240,7 +353,19 @@ var __name = function (f) { return f; };
   const rpc = (nom, corps) => appelCompte("/rest/v1/rpc/" + nom, corps || {});
   const hasard = () => { const a = new Uint8Array(24); crypto.getRandomValues(a); return Array.from(a, (x) => x.toString(16).padStart(2, "0")).join(""); };
 
-  const montrer = (quoi) => { $("b-connexion").hidden = quoi !== "connexion"; $("b-code").hidden = quoi !== "code"; $("b-compte").hidden = quoi !== "compte"; };
+  // Une étape à la fois ; le fil du haut suit, et le focus va au titre quand c'est un clic qui fait avancer.
+  let minuteur = null;
+  const montrer = (quoi, focus) => {
+    $("b-connexion").hidden = quoi !== "connexion"; $("b-code").hidden = quoi !== "code"; $("b-compte").hidden = quoi !== "compte";
+    const dedans = quoi === "compte";
+    $("p1").className = dedans ? "fait" : "en-cours"; $("p2").className = dedans ? "en-cours" : ""; $("p3").className = "";
+    if (quoi !== "code") { clearInterval(minuteur); clearTimeout(attente); }
+    if (focus) $("t-" + quoi).focus();
+  };
+  // L'adresse e-mail du compte, lue dans le jeton (il ne quitte pas ce navigateur).
+  const courriel = () => {
+    try { return JSON.parse(atob(memo.acces.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || ""; } catch (e) { return ""; }
+  };
   const profils = async () => {
     const liste = await rpc("sync_pull_profiles").catch(() => null);
     const sel = $("profil"); sel.textContent = "";
@@ -253,7 +378,11 @@ var __name = function (f) { return f; };
       sel.append(o);
     }
   };
-  const connecte = async () => { montrer("compte"); await profils(); etat("Compte Nuvio connecté."); };
+  const connecte = async (focus) => {
+    const mail = courriel(), qui = $("qui"); qui.textContent = "";
+    const b = document.createElement("b"); b.textContent = "Connecté"; qui.append(b, mail ? " · " + mail : " à ton compte Nuvio");
+    montrer("compte", focus); etat(""); await profils();
+  };
 
   // Connexion « comme une TV » : un code, approuvé par la personne sur nuvio.tv/link.
   $("connecter").addEventListener("click", async () => {
@@ -264,19 +393,21 @@ var __name = function (f) { return f; };
       const s = Array.isArray(r) ? r[0] : r;
       $("code").textContent = s.user_code; $("ouvrir").href = s.verification_uri_complete;
       chargerQr().then((qrcode) => { $("qr").innerHTML = qrSvg(qrcode, s.verification_uri_complete, "QR code de connexion à Nuvio", true); }, () => {});
-      montrer("code");
+      montrer("code", true);
       const fin = Date.parse(s.expires_at) || Date.now() + 600000, pas = Math.max(2, s.poll_interval_seconds || 3) * 1000;
+      const reste = () => { const t = Math.max(0, Math.round((fin - Date.now()) / 1000)); $("reste").textContent = "expire dans " + Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+      reste(); minuteur = setInterval(reste, 1000);
       const tour = async () => {
-        if (Date.now() > fin) { montrer("connexion"); etat("Le code a expiré : recommence.", true); return; }
+        if (Date.now() > fin) { montrer("connexion", true); etat("Le code a expiré : recommence.", true); return; }
         try {
           const q = await appel("/rest/v1/rpc/poll_tv_login_session", { p_code: s.device_code, p_device_nonce: nonce });
           const st = (Array.isArray(q) ? q[0] : q || {}).status;
           if (st === "approved") {
             const t = await appel("/functions/v1/tv-logins-exchange", { code: s.device_code, device_nonce: nonce });
             memo.acces = t.access_token; memo.renouv = t.refresh_token; garder(memo);
-            return connecte();
+            return connecte(true);
           }
-          if (st === "expired" || st === "used" || st === "cancelled") { montrer("connexion"); etat("Connexion refusée ou expirée : recommence.", true); return; }
+          if (st === "expired" || st === "used" || st === "cancelled") { montrer("connexion", true); etat("Connexion refusée ou expirée : recommence.", true); return; }
         } catch (e) { /* réseau : on réessaie au tour suivant */ }
         attente = setTimeout(tour, pas);
       };
@@ -284,7 +415,7 @@ var __name = function (f) { return f; };
     } catch (e) { etat("Connexion impossible : " + e.message, true); }
     $("connecter").disabled = false;
   });
-  $("annuler").addEventListener("click", () => { clearTimeout(attente); montrer("connexion"); etat(""); });
+  $("annuler").addEventListener("click", () => { montrer("connexion", true); etat(""); });
 
   const lireJson = (u) => fetch(u).then((r) => r.ok ? r.json() : r.json().then((d) => { throw new Error((d && d.error) || ("réponse " + r.status)); }, () => { throw new Error("réponse " + r.status); }));
   const bilan = (texte, ok) => { const li = document.createElement("li"); li.textContent = texte; if (!ok) li.className = "ko"; $("bilan").append(li); };
@@ -296,7 +427,7 @@ var __name = function (f) { return f; };
     const avant = await appelCompte("/rest/v1/addons?select=url,name,enabled,sort_order&profile_id=eq." + profil + "&order=sort_order.asc");
     const liste = fusionAddons(avant, lien, location.origin);
     await rpc("sync_push_addons", { p_addons: liste, p_profile_id: profil, p_origin_client_id: memo.client });
-    return "L'addon ✓ (" + (liste.length - 1 ? "avec tes " + (liste.length - 1) + " autres addons" : "seul") + ")";
+    return "L'addon, " + (liste.length - 1 ? "avec tes " + (liste.length - 1) + " autres addons" : "seul");
   };
   const envoiCollections = async (base, profil) => {
     const [nos, toutes] = await Promise.all([base + "/collections.json", location.origin + "/collections.json"].map(lireJson));
@@ -307,7 +438,7 @@ var __name = function (f) { return f; };
     const liste = fusion(avant, nos, (Array.isArray(toutes) ? toutes : []).map((c) => c.id).concat(${JSON.stringify(FACULTATIVES)}));
     await rpc("sync_push_collections", { p_profile_id: profil, p_collections_json: liste, p_origin_client_id: memo.client });
     const perso = liste.length - nos.length;
-    return "Les collections ✓ (" + nos.length + (perso ? ", et tes " + perso + " à toi gardées" : "") + ")";
+    return "Les collections : " + nos.length + (perso ? ", et tes " + perso + " à toi gardées" : "");
   };
   // L'ordre de l'accueil, commun aux appareils du profil : Nuvio le reprend à son ouverture.
   const envoiAccueil = async (base, profil) => {
@@ -317,7 +448,7 @@ var __name = function (f) { return f; };
     const avant = (Array.isArray(d) && d[0] && d[0].settings_json) || {};
     const reglages = { ...avant, items: fusionAcc(avant.items, a.ordre, a.addon) };
     await rpc("sync_push_home_catalog_settings", { p_profile_id: profil, p_settings_json: reglages, p_platform: "home_catalog_shared", p_origin_client_id: memo.client });
-    return "L'ordre de l'accueil ✓";
+    return "L'ordre de l'accueil";
   };
   const envoiAffiches = async (lien, profil) => {
     // Un modèle que Nuvio remplit ({id}…), pas l'adresse d'une seule affiche.
@@ -339,13 +470,14 @@ var __name = function (f) { return f; };
       faits.push(nom);
     }
     if (!faits.length) throw new Error("aucun appareil n'a encore envoyé ses réglages au compte : ouvre Nuvio (TV, PC ou téléphone) connecté à ce compte, puis réessaie (ou colle le lien à la main).");
-    return "Les affiches ✓ (" + faits.join(", ") + ")";
+    return "Les affiches : " + faits.join(", ");
   };
 
   $("envoyer").addEventListener("click", async () => {
-    const b = $("envoyer"); b.disabled = true; etat("Envoi…"); $("bilan").textContent = "";
+    const b = $("envoyer"); b.disabled = true; b.textContent = "Envoi en cours…"; etat(""); $("bilan").textContent = ""; $("p3").className = "en-cours";
     let base = "";
-    try { base = baseDu($("lien").value); } catch (e) { etat("Envoi impossible : " + e.message, true); b.disabled = false; return; }
+    const fini = () => { b.disabled = false; b.textContent = "Envoyer dans Nuvio"; };
+    try { base = baseDu($("lien").value); } catch (e) { etat("Envoi impossible : " + e.message, true); $("liens").open = true; $("p3").className = ""; fini(); return; }
     const opt = $("profil").selectedOptions[0];
     memo.lien = $("lien").value.trim(); memo.affiches = $("affiches").value.trim(); memo.profil = +$("profil").value;
     if (!memo.client) memo.client = "site-" + hasard();
@@ -363,13 +495,20 @@ var __name = function (f) { return f; };
     }
     if (!faits && !rates) etat("Coche au moins une case.", true);
     else if (rates) etat(faits ? "Envoyé en partie : voir ci-dessous." : "Envoi impossible : voir ci-dessous.", true);
-    else etat("Envoyé ✓ Nuvio le reprend tout seul (au pire, à sa prochaine ouverture).");
-    b.disabled = false;
+    else {
+      // Tout est parti : le fil du haut se termine et la suite est dite clairement.
+      $("p2").className = "fait"; $("p3").className = "fait";
+      const e = $("etat"); e.textContent = ""; e.className = "etat reussi";
+      const fin = document.createElement("small"); fin.textContent = "Ouvre Nuvio : il reprend tout seul (au pire, à sa prochaine ouverture).";
+      e.append("C'est dans ton compte Nuvio", fin);
+    }
+    if (rates) $("p3").className = "";
+    fini();
   });
 
   $("deconnecter").addEventListener("click", async () => {
     if (memo.acces) await appel("/auth/v1/logout", {}, memo.acces).catch(() => {});
-    memo = { lien: memo.lien, affiches: memo.affiches }; garder(memo); montrer("connexion"); etat("Nuvio déconnecté de ce navigateur.");
+    memo = { lien: memo.lien, affiches: memo.affiches }; garder(memo); $("bilan").textContent = ""; montrer("connexion", true); etat("Nuvio déconnecté de ce navigateur.");
   });
 
   if (memo.renouv) connecte().catch(() => { montrer("connexion"); });
