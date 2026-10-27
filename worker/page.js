@@ -282,7 +282,7 @@ ${copy ? "" : `        <p class="sub">Le lien partagé sature ? <a href="${origi
           <div class="coll-dlg-head"><h2 id="acc-titre">L'ordre de l'accueil</h2><button type="button" class="btn line" id="acc-fermer">Fermer</button></div>
           <div class="coll-dlg-body">
             <p class="sub">Tes rangées et tes collections, du haut de l'accueil vers le bas : monte ou descends chacune. Plateformes reste tout en haut. Dans Nuvio, l'ordre arrive avec « Tout envoyer dans Nuvio » (case « L'ordre de l'accueil »).</p>
-            <ol id="accueil-ordre" class="tiles"></ol>
+            <ol id="accueil-ordre" class="acc-list"></ol>
           </div>
         </dialog>
       </section>
@@ -606,6 +606,23 @@ aside.long .stage:not(.big) { position: sticky; top: var(--stage-top, 18px); }
 .coll-dlg-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--cream); border-bottom: 2px solid var(--ink); }
 .coll-dlg-head h2 { margin: 0; }
 .coll-dlg-body { padding: 14px 16px 18px; }
+/* L'ordre de l'accueil : des cartes sombres numérotées (comme celles des collections), sur le papier de la fenêtre. */
+#acc-dialog .sub { color: #5b4636; margin: 0 0 12px; }
+.acc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.acc-item { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px; padding: 8px 10px 8px 8px;
+  background: var(--velvet); color: var(--cream); border: 1px solid var(--seat); border-left: 4px solid var(--seat); border-radius: 12px; transition: background .25s; }
+.acc-item.coll-item { border-left-color: var(--bulb); }
+.acc-item.epingle { border-style: dashed; border-left-style: solid; border-left-color: var(--red); background: #241219; }
+.acc-item.bouge { background: #3a1d2a; }
+.acc-num { font: 400 1.5rem/1 var(--display); color: var(--bulb); text-align: center; }
+.acc-nom { min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.acc-nom b { font-weight: 800; overflow-wrap: anywhere; }
+.acc-tag { font: 800 .64rem/1 var(--body); letter-spacing: .14em; text-transform: uppercase; padding: 4px 7px; border-radius: 999px; border: 1px solid var(--seat); color: var(--dim); }
+.coll-item .acc-tag { background: var(--bulb); border-color: var(--bulb); color: var(--ink); }
+.epingle .acc-tag { background: var(--red); border-color: var(--red); color: #fff; }
+.acc-fleches { display: flex; gap: 6px; }
+.acc-fleches .arrow { border-color: #6a4153; }
+.acc-fleches .arrow:not(:disabled):hover { background: var(--cream); color: var(--ink); }
 .btn:disabled { opacity: .6; cursor: wait; }
 /* Lien fixe : un encart pointillé dans le billet, sous le lien de l'addon. */
 .compte-nuvio { display: grid; gap: 6px; }
@@ -2333,13 +2350,18 @@ function appliqueAccueil(liste) {
 function renderAccueil(moved) {
   const ol = $("accueil-ordre");
   ol.textContent = "";
+  let num = 0;
+  const ligne = (classe, nom, tag) => el("li", { class: "acc-item" + classe }, el("span", { class: "acc-num", text: String(++num) }),
+    el("span", { class: "acc-nom" }, el("b", { text: nom }), el("span", { class: "acc-tag", text: tag })));
   const epinglee = D.collections.find(c => c.id === "plateformes-streaming");
-  if (epinglee && state.c.includes(epinglee.id)) ol.append(el("li", null, el("span", null, el("b", { text: epinglee.name }), " ", el("small", { text: "toujours en haut" }))));
+  if (epinglee && state.c.includes(epinglee.id)) ol.append(ligne(" epingle", epinglee.name, "Toujours en haut"));
   const liste = accueilListe();
   liste.forEach((it, k) => {
     const nom = it.coll ? it.coll.name : (state.o[it.row] || rowInfo(it.row).name);
     const cle = it.coll ? "c:" + it.coll.id : "r:" + it.row;
-    const li = el("li", { "data-cle": cle }, el("span", null, el("b", { text: nom }), " ", el("small", { text: it.coll ? "collection" : "rangée" })));
+    const li = ligne((it.coll ? " coll-item" : "") + (moved && moved.cle === cle ? " bouge" : ""), nom, it.coll ? "Collection" : "Rangée");
+    li.dataset.cle = cle;
+    const fleches = el("span", { class: "acc-fleches" });
     [["↑", -1, "Monter"], ["↓", 1, "Descendre"]].forEach(([t, d, a]) => {
       const j = k + d;
       const bt = el("button", { type: "button", class: "arrow", text: t, "aria-label": a + " " + nom });
@@ -2348,15 +2370,17 @@ function renderAccueil(moved) {
         [liste[k], liste[j]] = [liste[j], liste[k]];
         appliqueAccueil(liste); renderAccueil({ cle, a }); renderRows(); update();
       });
-      li.append(bt);
+      fleches.append(bt);
     });
+    li.append(fleches);
     ol.append(li);
   });
-  // La flèche suit la ligne déplacée (l'autre flèche quand elle arrive au bout).
+  // La flèche suit la ligne déplacée (l'autre flèche quand elle arrive au bout) ; la ligne s'éclaire un instant.
   if (moved) {
     const arrows = [...ol.querySelectorAll('li[data-cle="' + CSS.escape(moved.cle) + '"] .arrow')];
     const again = arrows.find(b => b.getAttribute("aria-label").startsWith(moved.a) && !b.disabled) || arrows.find(b => !b.disabled);
     if (again) again.focus();
+    setTimeout(() => ol.querySelectorAll(".acc-item.bouge").forEach(x => x.classList.remove("bouge")), 400);
   }
 }
 // Tuiles d'une collection dans l'ordre choisi (positions dans le fichier) ; les autres suivent, ordre habituel.
