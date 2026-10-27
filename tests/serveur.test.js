@@ -163,7 +163,8 @@ test("rangee_triee_apres_coup_page_suivante", async () => {
   const noms = async (path) => (await (await get(path)).json()).metas.map((m) => m.name);
   assert.deepEqual(await noms("/catalog/movie/accueil-vod-semaine.json"), ["F1-1", "F1-2", "F1-3"]);
   assert.deepEqual(await noms("/catalog/movie/accueil-vod-semaine/skip=3.json"), ["F2-1", "F2-2", "F2-3"]);
-  assert.deepEqual(pages, [1, 2]);
+  // Deux recherches par page (sorties numériques, sorties en salle) : toujours la même page TMDB.
+  assert.deepEqual([...new Set(pages)], [1, 2]);
 });
 
 // ---------- budget d'appels (50 par requête chez Cloudflare) ----------

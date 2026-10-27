@@ -1286,3 +1286,26 @@ test("fiche_sans_logo_quebecois_marque_france", async () => {
   const m = (await (await get("/meta/movie/tmdb:82992.json")).json()).meta;
   assert.match(m.logo || "", /\/en\.png$/);
 });
+
+// « Dispo depuis peu » cherche aussi parmi les sorties en salle, comme « Bientôt dispo » : la recherche de TMDB ignore
+// une sortie numérique ajoutée le jour même (Verity, en VF le 27 octobre, absente de la rangée). La date de la fiche
+// décide ensuite, et l'avis VF du jour.
+test("dispo_depuis_peu_cherche_aussi_les_sorties_en_salle", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  oublierInfos(); store.clear();
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.startsWith("https://lumio.test/p/stream/movie/tt903.json")) return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: "4K • WEB-DL | 🇫🇷 ✓", url: "https://lumio.test/play/a" }] });
+    if (u.includes("/vf.json")) return sourcesDe({ tt903: { vf: false, sources: 19 } })(u);
+    if (u.includes("/discover/movie")) {
+      const salle = new URL(u).searchParams.get("with_release_type") === "3|2";
+      return new Response(JSON.stringify({ results: salle ? [{ id: 3, title: "Verity", original_language: "en", release_date: jour(-25), popularity: 7 }] : [], page: 1, total_pages: 1 }));
+    }
+    if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify(filmVod(3, "en", [["US", 3, jour(-25)], ["US", 4, jour(0)]])));
+    return new Response(JSON.stringify({ results: [] }));
+  };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json" };
+  const metas = (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), e, ctx)).json()).metas;
+  assert.deepEqual(metas.map((m) => m.name), ["Verity"]);
+});

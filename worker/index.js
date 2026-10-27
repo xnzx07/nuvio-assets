@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.43.5";
+const VERSION = "5.43.6";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1570,10 +1570,12 @@ async function fetchVfPage(env, ctx, def, kind, page, today, opts) {
   base["primary_release_date.gte"] = maxDate(base["primary_release_date.gte"], addDays(today, -365));
   const reqs = [tmdb(env, "/discover/movie", { ...base, with_release_type: "4",
     "release_date.gte": addDays(today, def.digital[0]), "release_date.lte": addDays(today, def.digital[1]) }, opts.lang)];
-  // Sorties en salle dont l'estimation peut tomber dans la fenêtre : de la plus longue à la plus courte fenêtre des
-  // distributeurs (la même table que dispoChezSoi, déjà lue pour les fiches de la page).
-  const [court, long] = future ? bornesVod(await estimationsVod()) : [SALLE_JOURS, SALLE_JOURS];
-  if (future) reqs.push(tmdb(env, "/discover/movie", { ...base, with_release_type: "3|2",
+  // Sorties en salle dont la sortie chez soi (annoncée ou estimée) peut tomber dans la fenêtre : de la plus longue à la
+  // plus courte fenêtre des distributeurs (la même table que dispoChezSoi, déjà lue pour les fiches de la page). Pour
+  // « Dispo depuis peu » aussi : la recherche de TMDB ignore une sortie numérique ajoutée le jour même (Verity, le 27
+  // octobre) ; la date de la fiche décide ensuite.
+  const [court, long] = bornesVod(await estimationsVod());
+  reqs.push(tmdb(env, "/discover/movie", { ...base, with_release_type: "3|2",
     "release_date.gte": addDays(today, def.digital[0] - long), "release_date.lte": addDays(today, def.digital[1] - court) }, opts.lang));
   // « Bientôt dispo » : aussi les films déjà sortis chez soi (depuis moins de 90 jours) mais pas encore en VF, d'après
   // leurs sources (The Weight) — la fiche dit « Pas encore en VF » : ils ont leur place ici, à la fin.
