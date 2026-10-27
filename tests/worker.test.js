@@ -1097,7 +1097,7 @@ test("dispo_depuis_peu_suit_l_avis_du_jour", async () => {
       const u = String(url);
       calls.push(u);
       if (u.startsWith("https://lumio.test/p/stream/movie/tt903.json")) return Response.json({ streams: lumio
-        ? [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓" }] : [{ name: "⚙️ Lumio", description: "40 sources, mais aucune ne passe vos filtres" }] });
+        ? [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓", url: "https://lumio.test/play/a" }] : [{ name: "⚙️ Lumio", description: "40 sources, mais aucune ne passe vos filtres" }] });
       if (u.includes("/vf.json")) return sourcesDe({ tt903: { vf: torrentio, sources: 30 } })(u);
       if (u.includes("/discover/movie")) return new Response(JSON.stringify({ results: [{ id: 3, title: "By Any Means", original_language: "en", release_date: jour(-40), popularity: 7 }], page: 1, total_pages: 1 }));
       if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify(filmVod(3, "en", [["US", 4, jour(-5)]])));

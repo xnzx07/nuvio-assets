@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.43.1";
+const VERSION = "5.43.2";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -832,10 +832,11 @@ async function lireVfLumio(env, cles) {
       if (!res.ok) return null;
       const streams = ((await res.json()) || {}).streams || [];
       const texte = (s) => `${s.name || ""} ${s.title || ""} ${s.description || ""}`;
-      const messages = streams.filter((s) => /^\s*⚙/.test(s.name || ""));
+      // Un message (« ⚙️ … aucune ne passe vos filtres », « 🔴 Aucune source trouvée ») n'a pas de lien de lecture.
+      const messages = streams.filter((s) => !s.url && !s.infoHash);
       const vraies = streams.filter((s) => !messages.includes(s) && !filmeEnSalle(s));
       if (vraies.length) return [cle, { vf: true, sources: vraies.length, qualite: qualiteDesSources(vraies.map(texte)) }];
-      // « 68 sources, mais aucune ne passe vos filtres » ou « aucun résultat » : il a cherché, rien en VF.
+      // « 68 sources, mais aucune ne passe vos filtres », « Aucune source trouvée » : il a cherché, rien en VF.
       const vide = messages.find((s) => /ne passe|aucun(e)? (r[ée]sultat|source)/i.test(texte(s)));
       if (vide) return [cle, { vf: false, sources: Math.max(1, Number((/(\d+)\s+sources?/i.exec(texte(vide)) || [])[1]) || 0) }];
       return streams.length && !messages.length ? [cle, { vf: false, sources: 0 }] : null;
@@ -853,7 +854,7 @@ async function lireVfLumio(env, cles) {
  * son plafond atteint }.
  */
 const AVIS_NON_MS = 6 * 3600000;
-const avisCache = (cle) => new Request(`https://avis.cache/${parisToday()}/${cle}`);
+const avisCache = (cle) => new Request(`https://avis.cache/2/${parisToday()}/${cle}`);
 async function avisDuJour(env, cles, origine = "affiches") {
   const avis = new Map(), manque = [];
   for (const cle of cles) {

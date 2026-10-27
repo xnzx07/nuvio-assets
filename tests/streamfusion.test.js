@@ -106,10 +106,12 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
     if (u.startsWith("https://lumio.test/p/stream/")) {
       appels.push(u);
       if (u.includes("tt831")) return Response.json({ streams: [
-        { name: "[AD⚡️] Lumio", description: "4K • WEB-DL • DV | 🇫🇷 🇬🇧 ✓ | 🗂️ Film.2026.MULTi.VF2.2160p.WEB.DV.mkv" },
-        { name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓ | 🗂️ Film.2026.FRENCH.1080p.WEB.mkv" }] });
+        { name: "[AD⚡️] Lumio", description: "4K • WEB-DL • DV | 🇫🇷 🇬🇧 ✓ | 🗂️ Film.2026.MULTi.VF2.2160p.WEB.DV.mkv", url: "https://lumio.test/play/a" },
+        { name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓ | 🗂️ Film.2026.FRENCH.1080p.WEB.mkv", url: "https://lumio.test/play/b" }] });
       if (u.includes("tt832")) return Response.json({ streams: [{ name: "⚙️ Lumio", description: "68 sources, mais aucune ne passe vos filtres\nAssouplissez « Seulement les langues vérifiées »." }] });
       if (u.includes("tt833")) return new Response("panne", { status: 502 });
+      // Rien du tout (film encore au cinéma : Resident Evil, L'Odyssée) : un message sans lien de lecture.
+      if (u.includes("tt835")) return Response.json({ streams: [{ name: "🔴 Lumio", description: "Aucune source trouvée pour ce titre", externalUrl: "https://lumio.test/configure" }] });
       return Response.json({ streams: [{ name: "⚙️ Lumio", description: "Votre clé AllDebrid a expiré." }] });
     }
     if (u.startsWith("https://sf.test/c/stream/")) {
@@ -122,6 +124,7 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
   const parSf = { vf: true, sources: 1, qualite: { u: 0, x: null, p: 0, f: 1, a: 0 } };
   assert.deepEqual(await (await sf("movie/tt831", "cle-relais", e)).json(), { vf: true, sources: 2, qualite: { u: 1, x: "DV", p: 0, f: 1, a: 0 } });
   assert.deepEqual(await (await sf("movie/tt832", "cle-relais", e)).json(), { vf: false, sources: 68 });
+  assert.deepEqual(await (await sf("movie/tt835", "cle-relais", e)).json(), { vf: false, sources: 1 });
   assert.ok(!appels.some((u) => u.startsWith("https://sf.test")), "Lumio a répondu : StreamFusion pas demandé");
   assert.deepEqual(await (await sf("movie/tt833", "cle-relais", e)).json(), parSf);
   assert.deepEqual(await (await sf("series/tt834:2:1", "cle-relais", e)).json(), parSf);
@@ -137,7 +140,7 @@ test("pas_de_vf_redemande_six_heures_plus_tard", async () => {
     const u = String(url);
     if (!u.startsWith("https://lumio.test/p/stream/")) return new Response("{}");
     appels.push(u);
-    return Response.json({ streams: vf ? [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓" }]
+    return Response.json({ streams: vf ? [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓", url: "https://lumio.test/play/c" }]
       : [{ name: "⚙️ Lumio", description: "12 sources, mais aucune ne passe vos filtres" }] });
   };
   const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json" };
