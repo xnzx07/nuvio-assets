@@ -7,7 +7,7 @@
  * web (CORS ouvert). Fonctions appelées, celles de l'appli NuvioTV (AuthManager, CollectionSyncService,
  * AddonSyncService, ProfileSettingsSyncService) : start_device_login_session, poll_tv_login_session,
  * tv-logins-exchange, sync_pull_profiles, sync_pull/push_collections, table addons et sync_push_addons,
- * sync_pull/push_profile_settings_blob. Porte non officielle : une mise à jour de Nuvio peut la changer, les liens
+ * sync_pull/push_profile_settings_blob, sync_pull/push_home_catalog_settings (HomeCatalogSettingsSyncService). Porte non officielle : une mise à jour de Nuvio peut la changer, les liens
  * à coller restent.
  */
 import { feuilles, scripts } from "./statique.js";
@@ -61,6 +61,28 @@ export function avecAffichesAppli(reglages, lien) {
 export function fusionCollections(distantes, nos, nosIds) {
   const ids = new Set([...nosIds, ...nos.map((c) => c.id)]);
   return [...nos, ...(Array.isArray(distantes) ? distantes : []).filter((c) => !(c && ids.has(c.id)))];
+}
+
+/**
+ * Les réglages de l'accueil du compte (sync_push_home_catalog_settings, « home_catalog_shared » : l'ordre et
+ * l'affichage de chaque ligne, communs à tous les appareils), dans l'ordre du site : nos collections et nos rangées
+ * (ordre de /accueil.json) en tête, puis les autres lignes du compte dans leur ordre. Ce que la personne a réglé dans
+ * Nuvio reste (ligne masquée, titre renommé), sauf pour les nôtres, toujours affichées.
+ */
+export function fusionAccueil(distants, ordre, addon) {
+  const cle = (it) => (it.is_collection ? "c:" + it.collection_id : `${it.addon_id}/${it.type}/${it.catalog_id}`);
+  const avant = (Array.isArray(distants) ? distants : []).filter((it) => it && typeof it === "object")
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  const parCle = new Map(avant.map((it) => [cle(it), it]));
+  const nos = ordre.map((o) => (o.collection
+    ? { addon_id: "", type: "", catalog_id: "", is_collection: true, collection_id: o.collection }
+    : { addon_id: addon, type: o.type, catalog_id: o.id, is_collection: false, collection_id: "" }));
+  const nosCles = new Set(nos.map(cle));
+  return [
+    ...nos.map((it) => ({ ...it, enabled: true, custom_title: (parCle.get(cle(it)) || {}).custom_title || "" })),
+    ...avant.filter((it) => !nosCles.has(cle(it))),
+  ].map((it, order) => ({ addon_id: it.addon_id || "", type: it.type || "", catalog_id: it.catalog_id || "", enabled: it.enabled !== false,
+    order, custom_title: it.custom_title || "", is_collection: !!it.is_collection, collection_id: it.collection_id || "" }));
 }
 
 export function compteNuvioPage({ origin }) {
@@ -137,6 +159,7 @@ a, button { touch-action: manipulation; }
     <select id="profil"></select>
     <label class="coche"><input type="checkbox" id="e-addon" checked><span>L'addon<small>Tes autres addons restent ; le nôtre prend ton lien.</small></span></label>
     <label class="coche"><input type="checkbox" id="e-coll" checked><span>Les collections<small>Celles que tu as faites toi-même restent ; les nôtres sont remplacées.</small></span></label>
+    <label class="coche"><input type="checkbox" id="e-acc" checked><span>L'ordre de l'accueil<small>Plateformes en haut, puis tes rangées et tes collections dans l'ordre choisi sur le site ; les rangées de tes autres addons suivent.</small></span></label>
     <label class="coche"><input type="checkbox" id="e-aff" checked><span>Les affiches, sur la TV<small>Custom Poster Source. Sur téléphone et PC, colle encore le lien à la main.</small></span></label>
     <button type="button" class="principal" id="envoyer">Envoyer dans Nuvio</button>
     <button type="button" id="deconnecter">Déconnecter Nuvio</button>
@@ -157,6 +180,7 @@ var __name = function (f) { return f; };
   const garder = (o) => { try { localStorage.setItem(CLE, JSON.stringify(o)); } catch (e) {} };
   let memo = lire(), serveur = null, attente = null;
   const fusion = ${fusionCollections.toString()};
+  const fusionAcc = ${fusionAccueil.toString()};
   const fusionAddons = ${fusionAddons.toString()};
   const avecAffiches = ${avecAffiches.toString()};
   const avecAffichesAppli = ${avecAffichesAppli.toString()};
@@ -285,6 +309,16 @@ var __name = function (f) { return f; };
     const perso = liste.length - nos.length;
     return "Les collections ✓ (" + nos.length + (perso ? ", et tes " + perso + " à toi gardées" : "") + ")";
   };
+  // L'ordre de l'accueil, commun aux appareils du profil : Nuvio le reprend à son ouverture.
+  const envoiAccueil = async (base, profil) => {
+    const a = await lireJson(base + "/accueil.json");
+    if (!a || !Array.isArray(a.ordre) || !a.addon) throw new Error("ton lien ne donne pas d'ordre d'accueil.");
+    const d = await rpc("sync_pull_home_catalog_settings", { p_profile_id: profil, p_platform: "home_catalog_shared" });
+    const avant = (Array.isArray(d) && d[0] && d[0].settings_json) || {};
+    const reglages = { ...avant, items: fusionAcc(avant.items, a.ordre, a.addon) };
+    await rpc("sync_push_home_catalog_settings", { p_profile_id: profil, p_settings_json: reglages, p_platform: "home_catalog_shared", p_origin_client_id: memo.client });
+    return "L'ordre de l'accueil ✓";
+  };
   const envoiAffiches = async (lien, profil) => {
     // Un modèle que Nuvio remplit ({id}…), pas l'adresse d'une seule affiche.
     if (!/[{]id[}]/.test(lien) || !LA.reglagesDuLien(lien)) throw new Error("ce n'est pas un lien d'affiches (celui de ton billet, avec {type}/{shape}/{id}).");
@@ -319,6 +353,7 @@ var __name = function (f) { return f; };
     const parties = [
       ["e-addon", "L'addon", () => envoiAddon(base, +((opt && opt.dataset.addons) || memo.profil))],
       ["e-coll", "Les collections", () => envoiCollections(base, memo.profil)],
+      ["e-acc", "L'ordre de l'accueil", () => envoiAccueil(base, memo.profil)],
       ["e-aff", "Les affiches", () => envoiAffiches(memo.affiches, memo.profil)],
     ];
     let rates = 0, faits = 0;

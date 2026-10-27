@@ -117,6 +117,7 @@ export function defaults(rows, discover) {
     t: {},            // tuiles masquées par collection : { idCollection: [positions] }
     to: {},           // ordre des tuiles par collection : { idCollection: [positions dans l'ordre voulu] }
     u: false,         // titres pas encore regardables dans les Tendances (masqués par défaut)
+    ac: [],           // place des collections sur l'accueil : [{ id, n: rangées avant elle }] (les autres après les rangées)
     k: "",            // clé Gemini personnelle (IA avec le quota de l'utilisateur)
     al: "",           // jeton d'alerte : lien de l'hébergeur d'une copie (rangée « Mise à jour »)
   };
@@ -187,6 +188,8 @@ function oldTiles(t, to) {
  *   tv 1 = positions des tuiles d'après le passage de Marvel, Warner et DC aux Studios (voir oldTiles)
  *   tv 2 = de plus, Sagas rangées en 8 thèmes (les positions de sagas d'avant sont oubliées)
  *   u titres pas encore regardables gardés dans les Tendances
+ *   ac place des collections sur l'accueil : [[position de la collection, rangées avant elle], …] dans l'ordre voulu ;
+ *      les autres viennent après toutes les rangées (Plateformes, épinglée, reste en tête)
  *   k clé Gemini personnelle (l'IA tourne avec le quota de l'utilisateur ; hors clé de cache)
  *   al jeton d'alerte de l'hébergeur d'une copie (voir hote.js ; hors clé de cache)
  * Toute valeur abîmée est ignorée : une adresse ne peut jamais casser l'addon.
@@ -232,6 +235,11 @@ export function decodeConfig(segment, rows, discover) {
   if (raw.tv !== 1 && raw.tv !== 2) oldTiles(t, to);
   // Avant tv 2, la collection Sagas avait 24 tuiles (une par saga) : ces positions ne veulent plus rien dire.
   if (raw.tv !== 2) { delete t.sagas; delete to.sagas; }
+  // Place des collections sur l'accueil : chacune une fois, après 0 à 99 rangées.
+  const ac = (Array.isArray(raw.ac) ? raw.ac : [])
+    .filter((v) => Array.isArray(v) && Number.isInteger(v[0]) && COLLECTIONS[v[0]] && Number.isInteger(v[1]) && v[1] >= 0 && v[1] < 100)
+    .map(([i, n]) => ({ id: COLLECTIONS[i].id, n }))
+    .filter((v, i, all) => all.findIndex((w) => w.id === v.id) === i);
   const region = REGIONS.find((r) => r.id === raw.g);
   const genreNames = GENRES.map(([n]) => n);
 
@@ -241,7 +249,7 @@ export function decodeConfig(segment, rows, discover) {
     p: fromList(raw.p, PROVIDERS.map((it) => it.id)) ?? base.p,
     d: fromMask(raw.d, discover.map((it) => it.id)) ?? base.d,
     c: fromMask(raw.c, COLLECTIONS.map((it) => it.id)) ?? base.c,
-    o, x, t, to,
+    o, x, t, to, ac,
     g: region ? region.id : base.g,
     e: fromList(raw.e, genreNames) ?? base.e,
     m: Math.min(9, Math.max(0, Number(raw.m) || 0)),
