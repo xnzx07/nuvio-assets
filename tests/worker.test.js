@@ -1091,7 +1091,7 @@ test("dispo_depuis_peu_suit_l_avis_de_la_photo", async () => {
 // film en VF que Torrentio ne voit pas (Verity) y entre.
 test("dispo_depuis_peu_suit_l_avis_du_jour", async () => {
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
-  const lancer = async (torrentio, lumio) => {
+  const lancer = async (torrentio, lumio, parSelf = false) => {
     oublierInfos(); store.clear();
     globalThis.fetch = async (url) => {
       const u = String(url);
@@ -1104,10 +1104,14 @@ test("dispo_depuis_peu_suit_l_avis_du_jour", async () => {
       return new Response(JSON.stringify({ results: [] }));
     };
     const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json" };
+    // Comme sur Cloudflare : les lots passent par un appel de l'addon à lui-même (SELF, /avis/lot).
+    if (parSelf) e.SELF = { fetch: (url, init) => worker.fetch(new Request(url, init), e, ctx) };
     return (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), e, ctx)).json()).metas.map((m) => m.name);
   };
   assert.deepEqual(await lancer(true, false), []);
   assert.deepEqual(await lancer(false, true), ["By Any Means"]);
+  assert.deepEqual(await lancer(true, false, true), []);
+  assert.deepEqual(await lancer(false, true, true), ["By Any Means"]);
 });
 
 test("rangees_selon_le_calendrier_americain", async () => {
