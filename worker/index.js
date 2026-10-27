@@ -64,11 +64,11 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.43.2";
+const VERSION = "5.43.3";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
-const CACHE_V = 14;
+const CACHE_V = 15;
 const PAGE = 20;                    // taille d'une page TMDB = taille d'une page de l'addon
 const AI_MAX = 20;                  // 1re page d'une recherche par IA (sagas entières comprises)
 const OBSCUR_VOTES = 100;           // recherche : en dessous, un titre trouvé mot à mot ne suffit pas, Gemini est consulté
