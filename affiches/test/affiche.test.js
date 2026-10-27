@@ -840,12 +840,13 @@ test("server_timing_donne_chaque_etape", async () => {
 // L'avis VF du jour de l'addon (/sf : Lumio, sinon StreamFusion ; serveur des affiches, AVIS_DU_JOUR=on) prime sur
 // Torrentio et sur la photo de 4 h, pour un titre récent : By Any Means (« FRENCH » chez Torrentio, VFQ seulement) est
 // gris, The Dog Stars (VF sortie dans la journée) en couleur. Sans VF : « revoir », redessinée quelques heures plus tard.
+// Torrentio sûr (TRUEFRENCH, VFF…) : pas demandé, chaque avis pouvant être une demande au compte AllDebrid.
 test("avis_du_jour_de_l_addon_prime", async () => {
   const lancer = async (torrentioVf, avis, e = { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test", AVIS_DU_JOUR: "on" }, nom = null) => {
-    r4();   // l'avis est gardé 30 minutes par vidéo : chaque cas repart de rien
+    r4();   // l'avis est gardé 3 heures par vidéo : chaque cas repart de rien
     const cles = [];
     const base = internet({ detail: avecSorties([4, jour(-20)]),
-      torrentio: () => json({ streams: [{ name: "Torrentio\n1080p", title: nom || (torrentioVf ? "Film.2026.TRUEFRENCH.1080p.WEB" : "Film.2026.1080p.WEB") }] }) });
+      torrentio: () => json({ streams: [{ name: "Torrentio\n1080p", title: nom || (torrentioVf ? "Film.2026.FRENCH.1080p.WEB" : "Film.2026.1080p.WEB") }] }) });
     const f = async (url, opts = {}) => {
       if (String(url) === "https://addon.test/sf/movie/tt15239678.json") { cles.push(new Headers(opts.headers || {}).get("X-Relais-Cle")); return json(avis); }
       return base(url, opts);
@@ -863,10 +864,13 @@ test("avis_du_jour_de_l_addon_prime", async () => {
   assert.partialDeepStrictEqual(await lancer(true, { vf: false, sources: 3 }, { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test" }), { vf: "true", etat: "complete", cles: [] });
   // Sans VF, pas de badge de qualité : celle de Torrentio (4K DV) est celle d'un fichier VFQ ou VO. La même affiche
   // qu'avec un Torrentio sans aucune qualité.
-  const torrentio4k = await lancer(true, { vf: false, sources: 68 }, undefined, "Film.2026.TRUEFRENCH.2160p.WEB.DV");
+  const torrentio4k = await lancer(true, { vf: false, sources: 68 }, undefined, "Film.2026.FRENCH.2160p.WEB.DV");
   assert.equal(torrentio4k.image, sansVf);
   // En VF, le badge 4K DV est bien dessiné.
-  assert.notEqual((await lancer(true, { vf: true, sources: 3 }, undefined, "Film.2026.TRUEFRENCH.2160p.WEB.DV")).image, (await lancer(true, { vf: true, sources: 3 })).image);
+  assert.notEqual((await lancer(true, { vf: true, sources: 3 }, undefined, "Film.2026.FRENCH.2160p.WEB.DV")).image, (await lancer(true, { vf: true, sources: 3 })).image);
+  // Torrentio sûr : l'addon n'est pas demandé, en VF avec la qualité de ses sources VF.
+  const sur = await lancer(true, { vf: false, sources: 68 }, undefined, "Film.2026.TRUEFRENCH.2160p.WEB.DV");
+  assert.deepEqual([sur.vf, sur.etat, sur.cles], ["true", "complete", []]);
 });
 
 // Aucune affiche sans texte (Brice de Nice) : le fond sans texte, vérifié lui aussi, recadré en portrait (w1280) avec

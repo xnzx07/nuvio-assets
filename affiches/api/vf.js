@@ -3,7 +3,7 @@
  * plusieurs titres en un seul appel, pour l'addon (Cloudflare ne lui laisse que 50 appels sortants par requête :
  * une page de rangée en fait déjà une quarantaine). Chaque titre est lu au relais /qualite/ du service, gardé un
  * jour au CDN : le même que pour les affiches, donc la même réponse partout.
- *   { "movie/tt…": { vf, sources } | null (pas lu : Torrentio en panne ou trop lent) }
+ *   { "movie/tt…": { vf, sources, langue?, vff?, vfq? } | null (pas lu : Torrentio en panne ou trop lent) }
  * Avec RELAIS_KEY, seul l'addon principal (qui envoie la clé, lib/relais.js) fait lire Torrentio : sinon, 40
  * identifiants au hasard par appel le feraient lire 40 fois. Sans la clé (les copies auto-hébergées, qui appellent
  * aussi ce service), la réponse ne contient que ce qui est déjà connu (mémoire, CDN de /qualite/) ; incomplète, elle
@@ -36,7 +36,9 @@ export function makeVf({ fetchImpl = fetch, env = process.env } = {}) {
       // tendances, dont l'avis VF sert aussi aux affiches.
       const q = await (sansCle ? qualiteConnue(type, imdb, s, fetchImpl, relais) : qualityOf(type, imdb, s, fetchImpl, relais, env.RELAIS_KEY)).catch(() => null);
       // langue (« vostfr », « vo »…) : ce qu'on peut regarder sans VF, que la fiche de l'addon dit (« en VOSTFR »).
-      return [id, q && typeof q.vf === "boolean" ? { vf: q.vf, sources: q.sources, ...(q.langue ? { langue: q.langue } : {}) } : null];
+      // vff, vfq : VF sûre (TRUEFRENCH, VFF…) et la qualité de ses sources : l'addon ne demande alors pas Lumio.
+      return [id, q && typeof q.vf === "boolean" ? { vf: q.vf, sources: q.sources, ...(q.langue ? { langue: q.langue } : {}),
+        ...(q.vff && q.vfq ? { vff: true, vfq: q.vfq } : {}) } : null];
     }));
     const trou = lus.some(([, x]) => x === null);
     // Un titre pas lu : gardé dix minutes seulement, pour réessayer bientôt ; sans la clé, pas gardé du tout.

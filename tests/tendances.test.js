@@ -181,7 +181,8 @@ test("photo_avec_streamfusion_et_torrentio_en_secours", async () => {
   assert.deepEqual(q, { 71: { u: 1, x: "DV", p: 0, f: 1, a: 0 } });
   assert.ok(!ids.slice(0, 20).includes(72));
   assert.equal(appels.length, 3);
-  assert.ok(calls.some((u) => u.includes("/vf.json") && u.includes("tt9773") && !u.includes("tt9771")));
+  // Torrentio d'abord pour tous (il n'est sûr d'aucun : pas de vff), puis StreamFusion.
+  assert.ok(calls.some((u) => u.includes("/vf.json") && u.includes("tt9773") && u.includes("tt9771")));
 });
 
 // La photo publie l'avis VF des titres examinés (tmdbId → 1 ou 0) : les affiches s'en servent à la place de Torrentio.

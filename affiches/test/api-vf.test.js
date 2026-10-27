@@ -39,3 +39,14 @@ test("vf_cache_et_limites", async () => {
   // Rien de valable : 404.
   assert.equal((await makeVf({ fetchImpl: relais })(req("v=bonjour"))).status, 404);
 });
+
+// VF sûre chez Torrentio (vff, vfq : TRUEFRENCH, VFF…) : transmise à l'addon, qui ne demande alors pas Lumio.
+test("vf_sure_transmise", async () => {
+  const relais = async (u) => new Response(JSON.stringify(u.includes("tt1.json")
+    ? { uhd: true, extra: "DV", vf: true, sources: 5, langue: "multi", vff: true, vfq: { u: 1, x: "DV", p: 0, f: 1, a: 0 } }
+    : { uhd: false, extra: null, vf: true, sources: 2, langue: "vf" }));
+  const res = await makeVf({ fetchImpl: relais })(req("v=movie/tt1,movie/tt2"));
+  assert.deepEqual(await res.json(), {
+    "movie/tt1": { vf: true, sources: 5, langue: "multi", vff: true, vfq: { u: 1, x: "DV", p: 0, f: 1, a: 0 } },
+    "movie/tt2": { vf: true, sources: 2, langue: "vf" } });
+});

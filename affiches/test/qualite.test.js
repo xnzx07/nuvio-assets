@@ -214,3 +214,20 @@ test("qualite_secours_quand_le_relais_ne_repond_pas", async () => {
     resetMemo();
   }
 });
+
+// VF sûre (vff) : un fichier TRUEFRENCH, VFF, VFI ou VF2 ; avec la qualité de ses seules sources VF (vfq, comme l'avis de
+// l'addon). L'addon ne demande alors rien à Lumio ni à StreamFusion (le compte AllDebrid de la personne). FRENCH seul
+// n'est pas sûr : By Any Means, en VFQ seulement, était nommé « FRENCH ».
+test("VF sûre : vff et la qualité des sources VF", () => {
+  const q = parseQuality([
+    { name: "Torrentio\n4k DV", title: "Film.2026.2160p.WEB.DV.mkv" },
+    { name: "Torrentio\n1080p", title: "Film.2026.MULTi.VFF.1080p.WEB.Atmos.mkv" },
+  ]);
+  assert.equal(q.vff, true);
+  assert.deepEqual(q.vfq, { u: 0, x: null, p: 0, f: 1, a: 1 });
+  assert.equal(q.uhd, true, "la qualité de toutes les sources ne change pas");
+  const douteux = parseQuality([{ name: "Torrentio\n1080p", title: "Film.2026.FRENCH.1080p.WEB.mkv" }]);
+  assert.equal(douteux.vf, true);
+  assert.equal(douteux.vff, undefined);
+  assert.equal(douteux.vfq, undefined);
+});

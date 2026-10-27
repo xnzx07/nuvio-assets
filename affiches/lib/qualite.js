@@ -56,17 +56,27 @@ function langueDe(tous) {
   return tous.some((t) => VOSTFR.test(t)) ? "vostfr" : "vo";
 }
 
+/** La qualité de flux en abrégé, comme l'avis VF de l'addon : { u: 4K, x: « DV » ou « HDR », p: HDR10+, f: 1080p, a: Atmos }. */
+function qualiteCourte(textes) {
+  const uhd = textes.filter((t) => UHD.test(t));
+  return { u: uhd.length ? 1 : 0, x: uhd.some((t) => DV.test(t)) ? "DV" : uhd.some((t) => HDR.test(t)) ? "HDR" : null,
+    p: uhd.some((t) => HDR10P.test(t)) ? 1 : 0, f: textes.some((t) => FHD.test(t)) ? 1 : 0, a: textes.some((t) => ATMOS.test(t)) ? 1 : 0 };
+}
+
 /**
  * { uhd, extra, fhd, hdr10p, atmos, vf, sources, langue } d'après une liste de flux Stremio ({ name, title }). DV, HDR
  * et HDR10+ comptent seulement en 4K ; fhd = un flux 1080p ; atmos = un flux Dolby Atmos, en toute résolution ;
  * langue : la meilleure (langueDe), « multi » ou « vf » exactement quand vf est vrai.
+ * Et vff, vfq quand la VF est sûre (un fichier TRUEFRENCH, VFF, VFI, VF2) : vfq = la qualité des seules sources VF.
+ * L'addon ne demande alors pas l'avis de Lumio ni de StreamFusion (le compte AllDebrid de la personne).
  */
 export function parseQuality(streams) {
   const tous = (streams || []).filter((s) => !filmeEnSalle(s)).map((s) => `${s.name || ""} ${s.title || ""}`);
   const uhd = tous.filter((t) => UHD.test(t));
   const extra = uhd.some((t) => DV.test(t)) ? "DV" : uhd.some((t) => HDR.test(t)) ? "HDR" : null;
+  const vff = tous.some((t) => VF_FRANCE.test(t));
   return { uhd: uhd.length > 0, extra, fhd: tous.some((t) => FHD.test(t)), hdr10p: uhd.some((t) => HDR10P.test(t)), atmos: tous.some((t) => ATMOS.test(t)),
-    vf: tous.some(enVf), sources: tous.length, langue: langueDe(tous) };
+    vf: tous.some(enVf), sources: tous.length, langue: langueDe(tous), ...(vff ? { vff: true, vfq: qualiteCourte(tous.filter(enVf)) } : {}) };
 }
 const LANGUES = ["multi", "vf", "vostfr", "vo"];
 
@@ -93,7 +103,8 @@ async function lireRelais(relais, video, fetchImpl, cle, sf = false) {
     // pour elle : chaque mise en ligne vide déjà le CDN, et le relais ne garde une réponse qu'un jour.
     return d && typeof d.uhd === "boolean"
       ? { uhd: d.uhd, extra: d.extra === "DV" || d.extra === "HDR" ? d.extra : null, fhd: d.fhd === true, hdr10p: d.hdr10p === true, atmos: d.atmos === true,
-        vf: typeof d.vf === "boolean" ? d.vf : null, sources: Number.isInteger(d.sources) ? d.sources : null, langue: LANGUES.includes(d.langue) ? d.langue : null }
+        vf: typeof d.vf === "boolean" ? d.vf : null, sources: Number.isInteger(d.sources) ? d.sources : null, langue: LANGUES.includes(d.langue) ? d.langue : null,
+        ...(d.vff === true && d.vfq && typeof d.vfq === "object" ? { vff: true, vfq: d.vfq } : {}) }
       : null;
   } catch { return null; }
 }
@@ -158,10 +169,10 @@ export const qualiteDeQ = (q) => (q && typeof q === "object"
  * L'avis VF du jour de l'addon pour une vidéo récente (« movie/tt… », « series/tt…:S:1 ») : /sf/…, avec RELAIS_KEY
  * (Lumio, qui lit la langue dans le fichier, sinon StreamFusion ; gardé par l'addon : « pas de VF » 3 heures). Le même
  * que celui des rangées et des fiches. { vf, sources, qualite? }, ou null (pas d'avis : plafond, panne). Gardé ici
- * 30 minutes : une affiche redessinée plus tard le redemande.
+ * 3 heures, autant qu'un « pas de VF » chez l'addon : le redemander plus tôt n'apporterait rien et coûterait un appel.
  */
 let avisMemo = new Map();
-const AVIS_MEMO_MS = 30 * 60000;
+const AVIS_MEMO_MS = 3 * 3600000;
 export function avisDuJour(addon, video, cle, fetchImpl = fetch) {
   const hit = avisMemo.get(video);
   if (hit && Date.now() < hit.until) return hit.promesse;

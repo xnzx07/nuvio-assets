@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.44.0";
+const VERSION = "5.45.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -747,9 +747,13 @@ async function sourcesVf(env, imdbs, lire = lireVf) {
  * L'avis du jour (avisDuJour : Lumio, sinon StreamFusion) par-dessus Torrentio et la photo, pour les rangées et les
  * fiches : le même que celui des affiches. Seulement avec Lumio (LUMIO_URL) : StreamFusion seul garde son plafond pour
  * la photo et les affiches. paires : [[imdb, clé]] ; lus : Map imdb → { vf, sources, langue } (complétée ici).
+ * Pas pour un titre dont Torrentio est sûr (vff : un fichier TRUEFRENCH, VFF…) : pas une demande de plus au compte
+ * AllDebrid de la personne.
  */
-async function avecAvisDuJour(env, lus, paires) {
-  if (!env.LUMIO_URL || !paires.length) return lus;
+export async function avecAvisDuJour(env, lus, paires) {
+  if (!env.LUMIO_URL) return lus;
+  paires = paires.filter(([imdb]) => !(lus.get(imdb) || {}).vff);
+  if (!paires.length) return lus;
   const avis = await avisEnLots(env, paires.map(([, cle]) => cle));
   for (const [imdb, cle] of paires) {
     const a = avis.get(cle);
@@ -848,36 +852,90 @@ async function lireVfLumio(env, cles) {
 }
 
 /**
- * L'avis VF du jour pour des titres récents (clés « movie/tt… », « series/tt…:S:1 ») : Lumio, sinon StreamFusion (dans
- * son plafond, compté pour « origine »). Le même pour les affiches, les rangées, les fiches et la photo des tendances.
- * Gardé par Cloudflare : une VF trouvée toute la journée ; « pas de VF » 3 heures, car la VF arrive souvent le jour
- * même de la sortie numérique (The Dog Stars, gris tout le 27 octobre avec l'avis pris à 4 h). SF_MAX titres au plus
- * lus par appel. { avis: Map clé → { vf, sources, qualite? }, plafond: true si StreamFusion était nécessaire mais
- * son plafond atteint }.
+ * L'avis VF pour des titres récents (clés « movie/tt… », « series/tt…:S:1 ») : Lumio, sinon StreamFusion, chacun dans
+ * son plafond du jour (compté pour « origine »). Le même pour les affiches, les rangées, les fiches et la photo des
+ * tendances. Les deux passent par le compte AllDebrid de la personne, celui qui sert à regarder : le 27 octobre 2026,
+ * Lumio sans plafond (2 000 à 3 000 demandes ce jour-là) a rempli la limite de 1 000 magnets du compte, et plus aucun
+ * nouveau fichier ne se lançait. D'où :
+ * - une mémoire commune à tous les centres de données (table D1 avis_vf), derrière celle de chacun (Cache API) ;
+ * - une VF trouvée gardée 7 jours ; « pas de VF » 3 heures pendant les 7 premiers jours où on la voit (la VF arrive
+ *   souvent le jour même de la sortie numérique : The Dog Stars, gris tout le 27 octobre avec l'avis pris à 4 h),
+ *   puis un jour ;
+ * - un plafond atteint retenu jusqu'au lendemain (reserver).
+ * SF_MAX titres au plus lus par appel. { avis: Map clé → { vf, sources, qualite? }, plafond: true si un titre reste
+ * sans avis faute de plafond }.
  */
-const AVIS_NON_MS = 3 * 3600000;
-const avisCache = (cle) => new Request(`https://avis.cache/2/${parisToday()}/${cle}`);
+const AVIS_OUI_MS = 7 * 86400000, AVIS_NON_MS = 3 * 3600000, AVIS_NON_VIEUX_MS = 86400000, AVIS_NON_RECENT_MS = 7 * 86400000;
+const avisCache = (cle) => new Request(`https://avis.cache/3/${cle}`);
+/** Un avis gardé ({ avis, t : lu à, depuis : vu sans VF depuis }) encore bon à l'instant now. */
+function avisFrais(d, now) {
+  if (!d || !d.avis || typeof d.avis.vf !== "boolean" || !(d.t > 0)) return false;
+  if (d.avis.vf) return now - d.t < AVIS_OUI_MS;
+  return now - d.t < (now - (d.depuis || d.t) < AVIS_NON_RECENT_MS ? AVIS_NON_MS : AVIS_NON_VIEUX_MS);
+}
+const garderAvisIci = (cle, d) => caches.default.put(avisCache(cle),
+  new Response(JSON.stringify(d), { headers: { "Cache-Control": `public, max-age=${AVIS_OUI_MS / 1000}` } })).catch(() => {});
+
+let avisPret = null;
+const preparerAvis = (env) => (avisPret = avisPret || env.LIENS.prepare("CREATE TABLE IF NOT EXISTS avis_vf (cle TEXT PRIMARY KEY, avis TEXT NOT NULL, t INTEGER NOT NULL, depuis INTEGER)").run()
+  .catch((e) => { avisPret = null; throw e; }));
+
+/** Les avis de la mémoire commune pour ces clés (lus par la clé, jamais toute la table) : Map clé → { avis, t, depuis }. */
+async function lireAvisGardes(env, cles) {
+  const lus = new Map();
+  if (!env.LIENS || !cles.length) return lus;
+  try {
+    await preparerAvis(env);
+    const { results } = await env.LIENS.prepare(`SELECT cle, avis, t, depuis FROM avis_vf WHERE cle IN (${cles.map((_, i) => `?${i + 1}`).join(", ")})`)
+      .bind(...cles).all();
+    for (const r of results || []) {
+      try { lus.set(r.cle, { avis: JSON.parse(r.avis), t: r.t, depuis: r.depuis || null }); } catch (e) { /* ligne illisible : redemandée */ }
+    }
+  } catch (e) { console.warn(`avis gardés : ${e && e.message}`); }
+  return lus;
+}
+
+/** Garde les avis neufs ([[clé, { avis, t, depuis }]]) ici et dans la mémoire commune. */
+async function garderAvis(env, neufs) {
+  for (const [cle, d] of neufs) await garderAvisIci(cle, d);
+  if (!env.LIENS || !neufs.length) return;
+  try {
+    await preparerAvis(env);
+    const sql = "INSERT INTO avis_vf (cle, avis, t, depuis) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(cle) DO UPDATE SET avis = ?2, t = ?3, depuis = ?4";
+    await env.LIENS.batch(neufs.map(([cle, d]) => env.LIENS.prepare(sql).bind(cle, JSON.stringify(d.avis), d.t, d.depuis)));
+  } catch (e) { console.warn(`garder les avis : ${e && e.message}`); }
+}
+
 async function avisDuJour(env, cles, origine = "affiches") {
-  const avis = new Map(), manque = [];
+  const now = Date.now(), avis = new Map(), vieux = new Map();
+  const manque = [];
   for (const cle of cles) {
     const hit = await caches.default.match(avisCache(cle)).catch(() => null);
     const d = hit ? await hit.json().catch(() => null) : null;
-    if (d && d.avis && (d.avis.vf || Date.now() - d.t < AVIS_NON_MS)) avis.set(cle, d.avis); else manque.push(cle);
+    if (avisFrais(d, now)) avis.set(cle, d.avis); else { manque.push(cle); if (d) vieux.set(cle, d); }
   }
-  const lus = manque.length ? await lireVfLumio(env, manque) : new Map();
-  // Lumio et StreamFusion ensemble : SF_MAX appels au plus (la limite de 50 appels sortants par requête).
-  const demandes = env.LUMIO_URL ? Math.min(manque.length, SF_MAX) : 0;
-  const reste = manque.filter((c) => !lus.has(c)).slice(0, Math.max(0, SF_MAX - demandes));
-  let plafond = false;
-  if (reste.length && env.STREAMFUSION_URL) {
-    if (await reserverStreamFusion(env, reste.length, origine)) (await lireVfStreamFusion(env, reste)).forEach((v, k) => lus.set(k, v));
-    else plafond = true;
-  } else if (reste.length) plafond = true;
-  for (const [cle, a] of lus) {
-    avis.set(cle, a);
-    await caches.default.put(avisCache(cle), new Response(JSON.stringify({ avis: a, t: Date.now() }), { headers: { "Cache-Control": "public, max-age=86400" } })).catch(() => {});
+  // La mémoire commune : un titre déjà demandé ailleurs (un autre centre de données) n'est pas redemandé.
+  for (const [cle, d] of await lireAvisGardes(env, manque)) {
+    vieux.set(cle, d);
+    if (avisFrais(d, now)) { avis.set(cle, d.avis); await garderAvisIci(cle, d); }
   }
-  return { avis, plafond: plafond && cles.some((c) => !avis.has(c)) };
+  const aLire = manque.filter((c) => !avis.has(c)).slice(0, SF_MAX);
+  // Lumio d'abord, dans son plafond ; StreamFusion pour le reste, dans le sien. SF_MAX appels au plus en tout (la
+  // limite de 50 appels sortants par requête).
+  const lus = new Map();
+  const nLumio = env.LUMIO_URL ? await reserver(env, "lumio", aLire.length, origine) : 0;
+  if (nLumio) (await lireVfLumio(env, aLire.slice(0, nLumio))).forEach((v, k) => lus.set(k, v));
+  const reste = aLire.filter((c) => !lus.has(c)).slice(0, Math.max(0, SF_MAX - nLumio));
+  const nSf = reste.length && env.STREAMFUSION_URL ? await reserver(env, "sf", reste.length, origine) : 0;
+  if (nSf) (await lireVfStreamFusion(env, reste.slice(0, nSf))).forEach((v, k) => lus.set(k, v));
+  // « Vu sans VF depuis » : gardé d'un avis à l'autre tant que la VF n'est pas là.
+  const neufs = [...lus].map(([cle, a]) => {
+    const v = vieux.get(cle);
+    return [cle, { avis: a, t: now, depuis: a.vf ? null : (v && v.avis && v.avis.vf === false && v.depuis) || now }];
+  });
+  for (const [cle, d] of neufs) avis.set(cle, d.avis);
+  await garderAvis(env, neufs);
+  return { avis, plafond: reste.length > nSf && cles.some((c) => !avis.has(c)) };
 }
 
 async function lireVfStreamFusion(env, cles) {
@@ -908,34 +966,58 @@ async function lireVfStreamFusion(env, cles) {
 }
 
 /**
- * Plafond de StreamFusion : 300 demandes par jour au plus (réglable : SF_PLAFOND), photo de 4 h comprise, comptées
- * dans la base D1 (table sf_budget). C'est le compte de la personne : jamais plus, quoi qu'il arrive (au-delà,
- * Torrentio jusqu'au lendemain). reserverStreamFusion(env, n, origine) : true si les n demandes tiennent dans le
- * plafond (et les compte), false sinon. Sans base : pas de StreamFusion.
- * Compté aussi par origine, pour savoir où part le plafond (300 dès 9 h 30 le 24 octobre) : lignes « jour:photo »,
- * « jour:affiches », et « jour:refus » (demandes au-delà du plafond).
+ * Plafonds du jour, comptés dans la base D1 (table sf_budget) : StreamFusion 300 demandes (SF_PLAFOND), Lumio 50
+ * (LUMIO_PLAFOND), photo de 4 h comprise. Ce sont des demandes au compte AllDebrid de la personne : jamais plus, quoi
+ * qu'il arrive (au-delà, Torrentio jusqu'au lendemain). reserver(env, source, n, origine) : combien des n demandes
+ * tiennent encore aujourd'hui (et les compte). Sans base : aucune.
+ * Plafond atteint : retenu jusqu'au lendemain (dans l'instance et chez Cloudflare), plus rien n'est demandé à la base.
+ * Avant, chaque affiche refusée y écrivait encore deux lignes (2 875 refus le 27 octobre). Le plafond fait partie de
+ * la clé : le monter (secret) sert tout de suite.
+ * Compté aussi par origine, pour savoir où part le plafond : lignes « jour:photo », « jour:affiches », « jour:rangees »
+ * et « jour:refus » (demandes au-delà du plafond) ; « lumio:jour… » pour Lumio.
  */
+const PLAFONDS = { sf: ["SF_PLAFOND", 300, ""], lumio: ["LUMIO_PLAFOND", 50, "lumio:"] };
+const plafondsAtteints = new Set();
+const plafondCache = (cle) => new Request(`https://avis.cache/plafond/${cle}`);
 let budgetPret = null;
-async function reserverStreamFusion(env, n = 1, origine = "affiches") {
-  if (!env.LIENS || !env.STREAMFUSION_URL) return false;
-  const plafond = Number(env.SF_PLAFOND) > 0 ? Number(env.SF_PLAFOND) : 300;
+async function reserver(env, source, n, origine = "affiches") {
+  if (!env.LIENS || !(n > 0)) return 0;
+  const [variable, defaut, prefixe] = PLAFONDS[source];
+  const plafond = Number(env[variable]) > 0 ? Number(env[variable]) : defaut;
+  const jour = prefixe + parisToday(), atteint = `${jour}/${plafond}`;
+  if (plafondsAtteints.has(atteint)) return 0;
+  if (await caches.default.match(plafondCache(atteint)).catch(() => null)) { plafondsAtteints.add(atteint); return 0; }
+  let accorde = 0;
   try {
     await (budgetPret = budgetPret || env.LIENS.prepare("CREATE TABLE IF NOT EXISTS sf_budget (j TEXT PRIMARY KEY, n INTEGER NOT NULL)").run()
       .catch((e) => { budgetPret = null; throw e; }));
-    const r = await env.LIENS.prepare("INSERT INTO sf_budget (j, n) VALUES (?1, ?2) ON CONFLICT(j) DO UPDATE SET n = n + ?2 WHERE n + ?2 <= ?3 RETURNING n")
-      .bind(parisToday(), n, plafond).first();
-    const ok = !!r && r.n <= plafond;
-    await env.LIENS.prepare("INSERT INTO sf_budget (j, n) VALUES (?1, ?2) ON CONFLICT(j) DO UPDATE SET n = n + ?2")
-      .bind(`${parisToday()}:${ok ? origine : "refus"}`, n).run().catch((e) => console.warn(`compte StreamFusion : ${e && e.message}`));
-    return ok;
-  } catch (e) { console.warn(`plafond StreamFusion : ${e && e.message}`); return false; }
+    const prendre = async (k) => !!(await env.LIENS.prepare("INSERT INTO sf_budget (j, n) VALUES (?1, ?2) ON CONFLICT(j) DO UPDATE SET n = n + ?2 WHERE n + ?2 <= ?3 RETURNING n")
+      .bind(jour, k, plafond).first());
+    const voulu = Math.min(n, plafond);
+    if (await prendre(voulu)) accorde = voulu;
+    else {
+      // Pas toutes : ce qui reste du jour.
+      const r = await env.LIENS.prepare("SELECT n FROM sf_budget WHERE j = ?1").bind(jour).first();
+      const libre = Math.min(voulu, plafond - ((r && r.n) || 0));
+      if (libre > 0 && await prendre(libre)) accorde = libre;
+    }
+  } catch (e) { console.warn(`plafond ${source} : ${e && e.message}`); return 0; }
+  const compter = (ligne, k) => env.LIENS.prepare("INSERT INTO sf_budget (j, n) VALUES (?1, ?2) ON CONFLICT(j) DO UPDATE SET n = n + ?2")
+    .bind(`${jour}:${ligne}`, k).run().catch((e) => console.warn(`compte ${source} : ${e && e.message}`));
+  if (accorde) await compter(origine, accorde);
+  if (accorde < n) {
+    await compter("refus", n - accorde);
+    plafondsAtteints.add(atteint);
+    await caches.default.put(plafondCache(atteint), new Response("1", { headers: { "Cache-Control": "public, max-age=86400" } })).catch(() => {});
+  }
+  return accorde;
 }
 
 /**
- * /sf/{movie|series}/{tt…|tt…:saison:1}.json : l'avis de StreamFusion pour un titre récent, demandé par le service
- * d'affiches (relais /qualite, avec la clé RELAIS_KEY : sans elle, refusé). { vf, sources, qualite? } ; { plafond:
- * true } (le plafond du jour est atteint) ; { erreur: true } (StreamFusion n'a pas répondu). Gardé un jour par
- * Cloudflare : un titre n'est demandé qu'une fois par jour, d'où qu'il vienne.
+ * /sf/{movie|series}/{tt…|tt…:saison:1}.json : l'avis VF du jour (Lumio, sinon StreamFusion) pour un titre récent,
+ * demandé par le service d'affiches (avec la clé RELAIS_KEY : sans elle, refusé). { vf, sources, qualite? } ;
+ * { plafond: true } (les plafonds du jour sont atteints) ; { erreur: true } (pas de réponse). Gardé comme le dit
+ * avisDuJour : un titre n'est redemandé, d'où qu'il vienne, qu'une fois son avis périmé.
  */
 async function routeStreamFusion(request, env, cle) {
   const entete = { ...HEADERS, "Cache-Control": "no-store" };
@@ -947,14 +1029,21 @@ async function routeStreamFusion(request, env, cle) {
   return new Response(JSON.stringify(a || (plafond ? { plafond: true } : { erreur: true })), { headers: entete });
 }
 
-/** La VF pour la photo du jour : l'avis du jour (Lumio, sinon StreamFusion), Torrentio (lireVf) pour ce qu'il n'a pas dit. */
-async function lireVfPhoto(env, cles) {
-  const pris = cles.slice(0, SF_MAX);
-  const sf = pris.length ? (await avisDuJour(env, pris, "photo")).avis : new Map();
-  const reste = cles.filter((c) => !sf.has(c));
-  const tr = reste.length ? await lireVf(env, reste) : new Map();
-  return new Map([...tr, ...sf]);
+/**
+ * La VF pour la photo du jour : Torrentio (lireVf), puis l'avis du jour (Lumio, sinon StreamFusion) pour ce dont il
+ * n'est pas sûr. Sûr (vff : un fichier TRUEFRENCH, VFF… chez lui) : sa réponse suffit, avec la qualité de ses sources
+ * VF (vfq) ; pas une demande de plus au compte AllDebrid.
+ */
+export async function lireVfPhoto(env, cles) {
+  const tr = cles.length ? await lireVf(env, cles) : new Map();
+  for (const [cle, lu] of tr) if (lu.vff && lu.vfq) tr.set(cle, { ...lu, qualite: lu.vfq });
+  const pris = cles.filter((c) => !(tr.get(c) || {}).vff).slice(0, SF_MAX);
+  const avis = pris.length ? (await avisDuJour(env, pris, "photo")).avis : new Map();
+  return new Map([...tr, ...avis]);
 }
+
+/** Pour les tests : oublie les plafonds atteints et la table des avis déjà préparée. */
+export const oublierAvis = () => { plafondsAtteints.clear(); avisPret = null; budgetPret = null; };
 
 async function lireVf(env, cles) {
   try {

@@ -1,6 +1,7 @@
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import worker, { oublierInfos, oublierPauseYoutube } from "../worker/index.js";
+import worker, { oublierInfos, oublierPauseYoutube, oublierAvis } from "../worker/index.js";
+import { fakeD1 } from "./support/d1.mjs";
 import { resetFails } from "../worker/hote.js";
 
 // Worker appelé comme par Cloudflare, avec un cache en mémoire et TMDB / Gemini simulés.
@@ -10,6 +11,7 @@ beforeEach(() => {
   calls = [];
   resetFails();
   oublierInfos();
+  oublierAvis();
   globalThis.caches = {
     default: {
       match: async (req) => (store.has(req.url) ? new Response(store.get(req.url)) : undefined),
@@ -1114,7 +1116,7 @@ test("dispo_depuis_peu_suit_l_avis_du_jour", async () => {
       if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify(filmVod(3, "en", [["US", 4, jour(-5)]])));
       return new Response(JSON.stringify({ results: [] }));
     };
-    const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json" };
+    const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LIENS: fakeD1() };
     // Comme sur Cloudflare : les lots passent par un appel de l'addon à lui-même (SELF, /avis/lot).
     if (parSelf) e.SELF = { fetch: (url, init) => worker.fetch(new Request(url, init), e, ctx) };
     return (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), e, ctx)).json()).metas.map((m) => m.name);
@@ -1316,7 +1318,7 @@ test("dispo_depuis_peu_cherche_aussi_les_sorties_en_salle", async () => {
     if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify(filmVod(3, "en", [["US", 3, jour(-25)], ["US", 4, jour(0)]])));
     return new Response(JSON.stringify({ results: [] }));
   };
-  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json" };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LIENS: fakeD1() };
   const metas = (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), e, ctx)).json()).metas;
   assert.deepEqual(metas.map((m) => m.name), ["Verity"]);
 });
@@ -1338,7 +1340,7 @@ test("dispo_depuis_peu_estimation_passee_et_vf_confirmee", async () => {
       if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify(filmVod(3, "en", [["US", 3, jour(-50)]])));
       return new Response(JSON.stringify({ results: [] }));
     };
-    const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json" };
+    const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LIENS: fakeD1() };
     return (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), e, ctx)).json()).metas.map((m) => m.name);
   };
   assert.deepEqual(await lancer(true), ["Verity"]);
