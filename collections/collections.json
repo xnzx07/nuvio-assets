@@ -2204,22 +2204,19 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "James Bond 007"
+            "catalogId": "saga-645"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Fast & Furious"
+            "catalogId": "saga-9485"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Mission : Impossible"
+            "catalogId": "saga-87359"
           },
           {
             "provider": "tmdb",
@@ -2261,8 +2258,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Die Hard"
+            "catalogId": "saga-1570"
           },
           {
             "provider": "tmdb",
@@ -2295,8 +2291,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Rocky"
+            "catalogId": "saga-1575"
           },
           {
             "provider": "tmdb",
@@ -2320,8 +2315,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Sherlock Holmes"
+            "catalogId": "saga-102322"
           },
           {
             "provider": "tmdb",
@@ -2336,8 +2330,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Bad Boys"
+            "catalogId": "saga-14890"
           },
           {
             "provider": "tmdb",
@@ -2415,8 +2408,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Le Transporteur"
+            "catalogId": "saga-9518"
           },
           {
             "provider": "tmdb",
@@ -2458,8 +2450,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Zorro"
+            "catalogId": "saga-1657"
           },
           {
             "provider": "tmdb",
@@ -2506,15 +2497,13 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "The Dark Knight"
+            "catalogId": "saga-263"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Iron Man"
+            "catalogId": "saga-131292"
           },
           {
             "provider": "tmdb",
@@ -2529,8 +2518,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Captain America"
+            "catalogId": "saga-131295"
           },
           {
             "provider": "tmdb",
@@ -2581,8 +2569,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Venom"
+            "catalogId": "saga-558216"
           },
           {
             "provider": "tmdb",
@@ -2642,8 +2629,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Superman"
+            "catalogId": "saga-8537"
           },
           {
             "provider": "tmdb",
@@ -2681,15 +2667,13 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Harry Potter"
+            "catalogId": "saga-1241"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Star Wars"
+            "catalogId": "saga-10"
           },
           {
             "provider": "tmdb",
@@ -2704,8 +2688,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Hunger Games"
+            "catalogId": "saga-131635"
           },
           {
             "provider": "tmdb",
@@ -2729,15 +2712,13 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Avatar"
+            "catalogId": "saga-87096"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Twilight"
+            "catalogId": "saga-33514"
           },
           {
             "provider": "tmdb",
@@ -2770,8 +2751,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Mad Max"
+            "catalogId": "saga-8945"
           },
           {
             "provider": "tmdb",
@@ -2804,8 +2784,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Les Animaux fantastiques"
+            "catalogId": "saga-435259"
           },
           {
             "provider": "tmdb",
@@ -2820,8 +2799,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Divergente"
+            "catalogId": "saga-283579"
           },
           {
             "provider": "tmdb",
@@ -2931,8 +2909,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Saw"
+            "catalogId": "saga-656"
           },
           {
             "provider": "tmdb",
@@ -2956,15 +2933,13 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "\u00c7a"
+            "catalogId": "saga-477962"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Resident Evil"
+            "catalogId": "saga-17255"
           },
           {
             "provider": "tmdb",
@@ -2988,22 +2963,19 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Destination Finale"
+            "catalogId": "saga-8864"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Underworld"
+            "catalogId": "saga-2326"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Insidious"
+            "catalogId": "saga-228446"
           },
           {
             "provider": "tmdb",
@@ -3018,15 +2990,13 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Les Dents de la Mer"
+            "catalogId": "saga-2366"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Paranormal Activity"
+            "catalogId": "saga-41437"
           },
           {
             "provider": "tmdb",
@@ -3050,8 +3020,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Chucky"
+            "catalogId": "saga-10455"
           },
           {
             "provider": "tmdb",
@@ -3111,8 +3080,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Massacre \u00e0 la tron\u00e7onneuse (remake)"
+            "catalogId": "saga-425175"
           }
         ],
         "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/main/sagas/horreur.jpg?v=1",
@@ -3150,8 +3118,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "L'\u00c2ge de glace"
+            "catalogId": "saga-8354"
           },
           {
             "provider": "tmdb",
@@ -3211,8 +3178,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Cars"
+            "catalogId": "saga-87118"
           },
           {
             "provider": "tmdb",
@@ -3227,8 +3193,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Le Roi lion"
+            "catalogId": "saga-94032"
           },
           {
             "provider": "tmdb",
@@ -3261,8 +3226,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Sonic"
+            "catalogId": "saga-720879"
           },
           {
             "provider": "tmdb",
@@ -3277,8 +3241,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Le Chat Pott\u00e9"
+            "catalogId": "saga-94602"
           },
           {
             "provider": "tmdb",
@@ -3320,8 +3283,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Les Schtroumpfs"
+            "catalogId": "saga-134897"
           }
         ],
         "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/main/sagas/animation.jpg?v=1",
@@ -3350,8 +3312,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Very Bad Trip"
+            "catalogId": "saga-86119"
           },
           {
             "provider": "tmdb",
@@ -3366,8 +3327,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Scary Movie"
+            "catalogId": "saga-4246"
           },
           {
             "provider": "tmdb",
@@ -3418,8 +3378,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "American Pie Pr\u00e9sente"
+            "catalogId": "saga-298820"
           },
           {
             "provider": "tmdb",
@@ -3457,15 +3416,13 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Ast\u00e9rix & Ob\u00e9lix"
+            "catalogId": "saga-2396"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Arthur et les Minimoys"
+            "catalogId": "saga-85817"
           },
           {
             "provider": "tmdb",
@@ -3543,8 +3500,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Les Trois Mousquetaires (2023)"
+            "catalogId": "saga-913258"
           },
           {
             "provider": "tmdb",
@@ -3559,8 +3515,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Camping"
+            "catalogId": "saga-52097"
           },
           {
             "provider": "tmdb",
@@ -3584,8 +3539,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Brice de Nice"
+            "catalogId": "saga-442352"
           },
           {
             "provider": "tmdb",
@@ -3609,8 +3563,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Les Nouvelles Aventures d'Aladin"
+            "catalogId": "saga-579012"
           },
           {
             "provider": "tmdb",
@@ -3666,8 +3619,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Naruto"
+            "catalogId": "saga-23616"
           },
           {
             "provider": "tmdb",
@@ -3682,8 +3634,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "One Piece"
+            "catalogId": "saga-23456"
           },
           {
             "provider": "tmdb",
@@ -3698,8 +3649,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "D\u00e9tective Conan"
+            "catalogId": "saga-39199"
           },
           {
             "provider": "tmdb",
@@ -3714,8 +3664,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Pok\u00e9mon, le film"
+            "catalogId": "saga-34055"
           },
           {
             "provider": "tmdb",
@@ -3739,15 +3688,13 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Evangelion (films)"
+            "catalogId": "saga-96850"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Dragon Ball"
+            "catalogId": "saga-386410"
           },
           {
             "provider": "tmdb",
@@ -6212,8 +6159,7 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Star Wars"
+            "catalogId": "saga-10"
           },
           {
             "provider": "tmdb",
@@ -6243,15 +6189,13 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Harry Potter"
+            "catalogId": "saga-1241"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "saga",
-            "genre": "Les Animaux fantastiques"
+            "catalogId": "saga-435259"
           }
         ],
         "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/univers/univers-wizarding.jpg",

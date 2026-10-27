@@ -107,8 +107,11 @@ class Collection(unittest.TestCase):
                     self.assertEqual(src, {"provider": "tmdb", "tmdbSourceType": "COLLECTION", "title": s["title"],
                                            "tmdbId": s["id"], "mediaType": "MOVIE", "sortBy": "original", "filters": {}})
                 else:
+                    # Un catalogue par saga : Nuvio TV reconnaît une rangée à son catalogue (titre, défilement,
+                    # « Charger plus ») ; avec un seul catalogue « saga », les rangées s'appelaient toutes « Saga »
+                    # et défilaient ensemble.
                     self.assertEqual(src, {"provider": "addon", "addonId": "com.xnzx07.catalogue-fr", "type": "movie",
-                                           "catalogId": "saga", "genre": s["title"]})
+                                           "catalogId": f"saga-{s['id']}"})
         self.assertEqual(action["coverImageUrl"], f"{RAW}/sagas/action.jpg?v=1")
         self.assertEqual(action["focusGifUrl"], f"{RAW}/gifs/sagas/action.gif?v=1")
         self.assertEqual(action["titleLogoUrl"], f"{RAW}/titles/sagas/action.png?v=1")
@@ -116,8 +119,8 @@ class Collection(unittest.TestCase):
         self.assertEqual(action["heroVideoUrl"], f"{RAW}/sagas/action-fond.mp4?v=1")
         self.assertTrue(action["hideTitle"] and action["focusGifEnabled"])
         self.assertEqual(action["tileShape"], "LANDSCAPE")
-        names = [s.get("genre") or s["title"] for f in c["folders"] for s in f["sources"]]
-        self.assertEqual(len(names), len(set(names)))          # le nom désigne la saga : jamais deux fois le même
+        names = [s.get("catalogId") or s["title"] for f in c["folders"] for s in f["sources"]]
+        self.assertEqual(len(names), len(set(names)))          # jamais deux fois la même saga
 
     def test_premiere_rangee_en_direct(self):
         # Nuvio TV se place sur la première rangée une fois chargée ; une rangée de l'addon arrive après celles de
@@ -125,7 +128,7 @@ class Collection(unittest.TestCase):
         saga = lambda n, ordre: {"id": n, "title": f"S{n}", "in_order": ordre}
         theme = {"slug": "x", "title": "X", "sagas": [saga(1, False), saga(2, False), saga(3, True), saga(4, True)]}
         sources = bs.sagas_collection([theme])["folders"][0]["sources"]
-        self.assertEqual([s.get("tmdbId") or s["genre"] for s in sources], [3, "S1", "S2", 4])
+        self.assertEqual([s.get("tmdbId") or s["catalogId"] for s in sources], [3, "saga-1", "saga-2", 4])
         # Déjà en direct : rien ne bouge ; aucune en direct : rien ne bouge non plus.
         dans_l_ordre = [saga(1, True), saga(2, False)]
         self.assertEqual(bs.first_row_direct(dans_l_ordre), dans_l_ordre)

@@ -26,7 +26,6 @@ BRANCH = "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnel
 _sagas = ROOT / "data" / "sagas.json"
 SAGAS_BY_NAME = {s["title"]: s for t in (json.loads(_sagas.read_text(encoding="utf-8")) if _sagas.exists() else [])
                  for s in t["sagas"]}
-SAGA_IDS = {k: v["id"] for k, v in SAGAS_BY_NAME.items()}
 AWARDS = json.loads(p.read_text(encoding="utf-8")) if (p := ROOT / "data" / "recompenses.json").exists() else {}
 TILE, WALL = 8, 120   # affiches d'une tuile (défilé), du mur (fond)
 
@@ -53,11 +52,11 @@ def addon(catalog: str, kind: str, genre: str | None = None) -> dict:
 
 def saga(name: str) -> dict:
     """Une saga de data/sagas.json dans l'ordre de sortie : TMDB en direct si elle y est dans l'ordre (gratuit),
-    sinon la rangée « saga » de l'addon (même règle que la collection Sagas)."""
-    s = SAGAS_BY_NAME.get(name, {})
+    sinon la rangée de la saga dans l'addon, son catalogue à elle (même règle que la collection Sagas)."""
+    s = SAGAS_BY_NAME[name]
     if s.get("in_order"):
         return coll(name, s["id"])
-    return addon("saga", "movie", name)
+    return addon(f"saga-{s['id']}", "movie")
 
 
 def films_series(**f) -> list[dict]:
@@ -210,8 +209,8 @@ def titles(src: dict, pages: int = 1) -> list[dict]:
     kind = src.get("tmdbSourceType")
     if src.get("provider") == "addon":
         cat = src["catalogId"]
-        if cat == "saga":
-            return _titles(tmdb(f"/collection/{SAGA_IDS[src['genre']]}").get("parts") or [])
+        if cat.startswith("saga-"):
+            return _titles(tmdb(f"/collection/{cat.removeprefix('saga-')}").get("parts") or [])
         if cat in ADDON_AWARDS:
             return _titles(AWARDS.get(ADDON_AWARDS[cat], []))
         media, params = ADDON_DISCOVER[cat]

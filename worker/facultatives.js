@@ -9,18 +9,24 @@ import SAGAS from "../data/sagas.json";
 
 /**
  * Sagas : TMDB rend certaines sagas dans le désordre (Rocky Balboa avant Rocky, Bad Boys for Life avant Bad Boys) et
- * Nuvio ne sait trier une saga que du plus récent au plus ancien : l'addon sert chaque saga dans l'ordre de sortie
- * (catalogue « saga », la saga en « genre », son nom dans data/sagas.json).
+ * Nuvio ne sait trier une saga que du plus récent au plus ancien : l'addon sert ces sagas dans l'ordre de sortie.
+ * Un catalogue par saga (« saga-<id TMDB> », au nom de la saga) : Nuvio TV reconnaît une rangée à son catalogue
+ * (titre, défilement, « Charger plus ») ; avec un seul catalogue, les rangées d'un thème s'appelaient toutes « Saga »
+ * et défilaient ensemble. L'ancien catalogue « saga » (la saga en « genre ») reste pour les collections pas réimportées.
  */
 export const SAGA_IDS = new Map(SAGAS.flatMap((t) => t.sagas.map((s) => [s.title, s.id])));
+const DESORDRE = SAGAS.flatMap((t) => t.sagas).filter((s) => s.in_order === false);
+export const SAGA_CATALOGS = new Map(DESORDRE.map((s) => [`saga-${s.id}`, s.id]));
 
-/** Catalogue « saga » du manifest, si Sagas ou Grands univers est cochée (filtre : le nom de la saga). */
+/** Catalogues des sagas du manifest, si Sagas ou Grands univers est cochée. */
 export function sagaCatalog(cfg, pageSize) {
   if (!cfg.c.includes("sagas") && !cfg.c.includes("univers")) return [];   // Grands univers : leurs sagas aussi
   const names = [...SAGA_IDS.keys()];
   return [{ type: "movie", id: "saga", name: "Saga", showInHome: false, pageSize, genres: names,
     extra: [{ name: "genre", isRequired: true, options: names }, { name: "skip" }],
-    extraRequired: ["genre"], extraSupported: ["genre", "skip"] }];
+    extraRequired: ["genre"], extraSupported: ["genre", "skip"] },
+  ...DESORDRE.map((s) => ({ type: "movie", id: `saga-${s.id}`, name: s.title, showInHome: false, pageSize,
+    extra: [{ name: "skip" }], extraSupported: ["skip"] }))];
 }
 
 /** Films d'une saga dans l'ordre de sortie ; sans date (annoncés) à la fin. */

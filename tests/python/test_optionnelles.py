@@ -43,20 +43,24 @@ class Definitions(unittest.TestCase):
 
     def test_univers_dans_l_ordre(self):
         """Sagas des grands univers : même règle que la collection Sagas (TMDB en direct si elle y est dans l'ordre,
-        sinon la rangée « saga » de l'addon)."""
-        sagas = {s["title"]: s for t in json.loads((ROOT / "data" / "sagas.json").read_text(encoding="utf-8")) for s in t["sagas"]}
+        sinon la rangée de la saga dans l'addon : catalogue « saga-<id TMDB> »)."""
+        sagas = [s for t in json.loads((ROOT / "data" / "sagas.json").read_text(encoding="utf-8")) for s in t["sagas"]]
+        par_nom, par_cat = {s["title"]: s for s in sagas}, {f"saga-{s['id']}": s for s in sagas}
         univers = next(c for c in bo.COLLECTIONS if c["id"] == "univers")
         for s in (s for f in univers["folders"] for s in f["sources"]):
-            if s.get("catalogId") == "saga":
-                self.assertFalse(sagas[s["genre"]]["in_order"], s["genre"])
+            if s.get("provider") == "addon":
+                self.assertFalse(par_cat[s["catalogId"]]["in_order"], s["catalogId"])
+                self.assertNotIn("genre", s)
             elif s.get("tmdbSourceType") == "COLLECTION":
-                self.assertTrue(sagas[s["title"]]["in_order"], s["title"])
-        self.assertIn("Star Wars", [s.get("genre") for f in univers["folders"] for s in f["sources"]])   # dans le désordre
+                self.assertTrue(par_nom[s["title"]]["in_order"], s["title"])
+        star_wars = f"saga-{par_nom['Star Wars']['id']}"                                         # dans le désordre
+        self.assertIn(star_wars, [s.get("catalogId") for f in univers["folders"] for s in f["sources"]])
 
     def test_rangees_addon_de_l_addon(self):
         """Récompenses, moins de 1 h 30, mini-séries : rangées de l'addon (Nuvio ne sait pas les faire seul)."""
         addon = [s for c in bo.COLLECTIONS for f in c["folders"] for s in f["sources"] if s.get("provider") == "addon"]
-        self.assertEqual({s["catalogId"] for s in addon}, {"fac-oscars", "fac-palmes", "fac-cesars", "fac-moins-90", "fac-mini-series", "saga"})
+        self.assertEqual({s["catalogId"] for s in addon if not s["catalogId"].startswith("saga-")},
+                         {"fac-oscars", "fac-palmes", "fac-cesars", "fac-moins-90", "fac-mini-series"})
         self.assertTrue(all(s["addonId"] == bo.ADDON_ID for s in addon))
 
 

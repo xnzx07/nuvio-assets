@@ -143,6 +143,19 @@ test("saga_dans_l_ordre_de_sortie", async () => {
   assert.deepEqual(metas.map((m) => m.name), ["Rocky", "Rocky II", "Rocky Balboa", "Rocky VII"]);   // sans date : à la fin
 });
 
+// Un catalogue par saga servie par l'addon : Nuvio TV reconnaît une rangée à son catalogue (titre, défilement,
+// « Charger plus »). Avec le seul catalogue « saga », les rangées d'un thème s'appelaient toutes « Saga » et défilaient
+// ensemble.
+test("un_catalogue_par_saga", async () => {
+  const cats = (await (await get(SOURCE, `/${seg({})}/manifest.json`)).json()).catalogs;
+  const rocky = cats.find((c) => c.id === "saga-1575");
+  assert.deepEqual(rocky && { type: rocky.type, name: rocky.name, showInHome: rocky.showInHome }, { type: "movie", name: "Rocky", showInHome: false });
+  assert.ok(!cats.some((c) => c.id === "saga-119"));   // Le Seigneur des anneaux : dans l'ordre chez TMDB, lu en direct
+  const { metas } = await (await get(SOURCE, "/catalog/movie/saga-1575.json")).json();
+  assert.deepEqual(metas.map((m) => m.name), ["Rocky", "Rocky II", "Rocky Balboa", "Rocky VII"]);
+  assert.deepEqual((await (await get(SOURCE, "/catalog/movie/saga-424242.json")).json()).metas, []);
+});
+
 test("catalogue_des_sagas_dans_le_manifest", async () => {
   const cat = async (cfg) => (await (await get(SOURCE, `/${seg(cfg)}/manifest.json`)).json()).catalogs.find((c) => c.id === "saga");
   const saga = await cat({});

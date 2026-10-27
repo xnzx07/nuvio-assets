@@ -6147,8 +6147,7 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "saga",
-      "genre": "Star Wars"
+      "catalogId": "saga-10"
      },
      {
       "provider": "tmdb",
@@ -6237,15 +6236,13 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "saga",
-      "genre": "Harry Potter"
+      "catalogId": "saga-1241"
      },
      {
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "saga",
-      "genre": "Les Animaux fantastiques"
+      "catalogId": "saga-435259"
      }
     ],
     "posters": [

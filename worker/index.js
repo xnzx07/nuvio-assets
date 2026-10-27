@@ -51,7 +51,7 @@ import { routeEtat } from "./etat.js";
 import { statique } from "./statique.js";
 import { smartSearch, prepareWords, isExact, norm, capQuery, genreQuery, filmography } from "./search.js";
 import { imdbRating } from "./ratings.js";
-import { ROWS as FAC_ROWS, facultativeCatalogs, laureats, SAGA_IDS, sagaCatalog, inReleaseOrder } from "./facultatives.js";
+import { ROWS as FAC_ROWS, facultativeCatalogs, laureats, SAGA_IDS, SAGA_CATALOGS, sagaCatalog, inReleaseOrder } from "./facultatives.js";
 import { isCopy, addonId, hostRoute, hasAlerts, pendingUpdate, updateInfo, updateCard, same, UPDATE_CATALOG } from "./hote.js";
 import { SEANCE_ID, carteSeance, rechercheSeance, routeSeance } from "./seance.js";
 import { routeDiagnostic } from "./diagnostic.js";
@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.42.0";
+const VERSION = "5.42.1";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1739,9 +1739,10 @@ async function catalogPage(env, ctx, type, id, extra, today, cfg, bilan, prefixe
     const page = pageOf(skip, pageSizeOf(home));
     return fetchPage(env, ctx, home, type, page, today, { ...opts, moitie: home.mix ? moitieParSelf(env, prefixe, type, home.id) : null });
   }
-  // Une saga dans l'ordre de sortie (collection Sagas) ; la saga est dans « genre ».
-  if (id === "saga" && type === "movie") {
-    const tmdbId = SAGA_IDS.get(extra.genre || "");
+  // Une saga dans l'ordre de sortie (collections Sagas, Grands univers) : « saga-<id TMDB> », ou l'ancien « saga »
+  // avec la saga dans « genre ».
+  if ((id === "saga" || SAGA_CATALOGS.has(id)) && type === "movie") {
+    const tmdbId = id === "saga" ? SAGA_IDS.get(extra.genre || "") : SAGA_CATALOGS.get(id);
     if (!tmdbId) return [];
     const d = await tmdb(env, `/collection/${tmdbId}`, {}, opts.lang);
     const parts = inReleaseOrder(d.parts || []).filter((it) => !opts.filtered || passeLesFiltres(it, type, cfg)).slice(skip, skip + PAGE);
