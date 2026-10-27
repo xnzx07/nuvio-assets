@@ -125,6 +125,8 @@ h1 { margin: 0; font: 400 2.2rem/1 "Bebas Neue", Impact, sans-serif; letter-spac
 
 /* Les blocs d'étape */
 .bloc { display: grid; gap: 12px; padding: 20px; border-radius: 14px; border: 1px solid var(--seat); background: var(--velvet-2); }
+/* Ce qui s'ouvre défile jusqu'à l'écran, avec un peu d'air au-dessus. */
+.bloc, .etat, details.liens { scroll-margin: 16px; }
 .bloc[hidden], [hidden] { display: none !important; }
 h2 { margin: 0; font: 400 1.6rem/1.05 "Bebas Neue", Impact, sans-serif; letter-spacing: .04em; color: var(--cream); }
 .aide { margin: 0; font-size: .92rem; color: var(--dim); text-wrap: pretty; }
@@ -164,14 +166,16 @@ a, button { touch-action: manipulation; }
 .qui { margin: 0; font-size: .9rem; color: var(--dim); overflow-wrap: anywhere; }
 .qui b { color: var(--green); }
 .champ { display: grid; gap: 6px; }
-fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: 8px; }
+fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
 legend { padding: 0; margin-bottom: 8px; font-weight: 800; }
-.coche { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--seat); background: #1a0e15; font-weight: 700; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
-.coche:hover { border-color: rgba(255,207,107,.4); }
-.coche:has(input:checked) { border-color: rgba(255,207,107,.55); background: rgba(255,207,107,.06); }
-.coche input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--bulb); }
-.coche span { display: grid; gap: 2px; }
-.coche small { font-weight: 400; font-size: .85rem; color: var(--dim); }
+/* Les interrupteurs : les mêmes que la salle 2 (Mode famille, collections). */
+.switch { display: flex; align-items: center; gap: 12px; padding: 4px 0; cursor: pointer; }
+.switch input { appearance: none; width: 46px; height: 26px; margin: 0; border-radius: 99px; background: var(--seat); position: relative; cursor: pointer; flex: none; transition: background .15s ease; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--cream); transition: transform .15s ease; }
+.switch input:checked { background: var(--red); }
+.switch input:checked::after { transform: translateX(20px); }
+.switch b { font-weight: 800; }
+.switch small { display: block; font-size: .85rem; font-weight: 400; color: var(--dim); }
 details.liens { border-radius: 12px; border: 1px solid var(--seat); }
 details.liens summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none; font-weight: 700; }
 details.liens summary::-webkit-details-marker { display: none; }
@@ -196,7 +200,7 @@ details.liens .dedans { display: grid; gap: 12px; padding: 0 14px 14px; }
 #bilan li.ko { color: #ffd2c8; border-color: rgba(229,65,58,.5); }
 #bilan li.ko::before { content: "!"; background: var(--red); color: #fff; }
 .pied { margin: 8px 0 0; text-align: center; font-size: .9rem; color: var(--dim); }
-@media (prefers-reduced-motion: reduce) { .attente::before { animation: none; } button, .bouton, .coche { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .attente::before { animation: none; } button, .bouton, .switch input, .switch input::after { transition: none; } }
 </style>
 </head>
 <body>
@@ -245,10 +249,10 @@ details.liens .dedans { display: grid; gap: 12px; padding: 0 14px 14px; }
     </div>
     <fieldset>
       <legend class="visually-hidden">Ce qui part dans ton compte</legend>
-      <label class="coche"><input type="checkbox" id="e-addon" checked><span>L'addon<small>Tes autres addons restent ; le nôtre prend ton lien.</small></span></label>
-      <label class="coche"><input type="checkbox" id="e-coll" checked><span>Les collections<small>Celles que tu as faites toi-même restent ; les nôtres sont remplacées.</small></span></label>
-      <label class="coche"><input type="checkbox" id="e-acc" checked><span>L'ordre de l'accueil<small>Plateformes en haut, puis tes rangées et tes collections dans l'ordre choisi sur le site ; les rangées de tes autres addons suivent.</small></span></label>
-      <label class="coche"><input type="checkbox" id="e-aff" checked><span>Les affiches<small>Custom Poster Source, sur chaque appareil (TV, PC, téléphone) qui a déjà ouvert Nuvio avec ce compte.</small></span></label>
+      <label class="switch"><input type="checkbox" id="e-addon" checked><span><b>L'addon</b><small>Tes autres addons restent ; le nôtre prend ton lien.</small></span></label>
+      <label class="switch"><input type="checkbox" id="e-coll" checked><span><b>Les collections</b><small>Celles que tu as faites toi-même restent ; les nôtres sont remplacées.</small></span></label>
+      <label class="switch"><input type="checkbox" id="e-acc" checked><span><b>L'ordre de l'accueil</b><small>Plateformes en haut, puis tes rangées et tes collections dans l'ordre choisi sur le site ; les rangées de tes autres addons suivent.</small></span></label>
+      <label class="switch"><input type="checkbox" id="e-aff" checked><span><b>Les affiches</b><small>Custom Poster Source, sur chaque appareil (TV, PC, téléphone) qui a déjà ouvert Nuvio avec ce compte.</small></span></label>
     </fieldset>
     <details class="liens" id="liens">
       <summary>Tes liens <small id="liens-etat">repris de ton billet</small></summary>
@@ -314,10 +318,14 @@ var __name = function (f) { return f; };
     $("liens-etat").className = vide ? "manque" : "";
     if (vide) $("liens").open = true;
   };
+  // Ce qui s'ouvre (étape suivante, liens, résultat) défile jusqu'à l'écran ; sans animation si on l'a demandé.
+  const voir = (el, ou) => el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: ou || "nearest" });
   etatLiens();
+  $("liens").addEventListener("toggle", () => { if ($("liens").open && !$("b-compte").hidden) voir($("liens")); });
   $("lien").addEventListener("input", etatLiens);
   const baseDu = (lien) => {
-    const u = new URL(lien.trim());
+    if (!lien.trim()) throw new Error("colle le lien d'addon de ton billet dans « Tes liens ».");
+    let u; try { u = new URL(lien.trim()); } catch (e) { throw new Error("ce lien d'addon n'est pas une adresse (il commence par " + location.origin + ")."); }
     if (u.origin !== location.origin) throw new Error("ce n'est pas un lien d'addon de ce site.");
     return u.origin + u.pathname.replace(/[/](manifest[.]json|configure)?$/, "");
   };
@@ -360,7 +368,7 @@ var __name = function (f) { return f; };
     const dedans = quoi === "compte";
     $("p1").className = dedans ? "fait" : "en-cours"; $("p2").className = dedans ? "en-cours" : ""; $("p3").className = "";
     if (quoi !== "code") { clearInterval(minuteur); clearTimeout(attente); }
-    if (focus) $("t-" + quoi).focus();
+    if (focus) { $("t-" + quoi).focus({ preventScroll: true }); voir($("b-" + quoi), "start"); }
   };
   // L'adresse e-mail du compte, lue dans le jeton (il ne quitte pas ce navigateur).
   const courriel = () => {
@@ -477,7 +485,7 @@ var __name = function (f) { return f; };
     const b = $("envoyer"); b.disabled = true; b.textContent = "Envoi en cours…"; etat(""); $("bilan").textContent = ""; $("p3").className = "en-cours";
     let base = "";
     const fini = () => { b.disabled = false; b.textContent = "Envoyer dans Nuvio"; };
-    try { base = baseDu($("lien").value); } catch (e) { etat("Envoi impossible : " + e.message, true); $("liens").open = true; $("p3").className = ""; fini(); return; }
+    try { base = baseDu($("lien").value); } catch (e) { etat("Envoi impossible : " + e.message, true); $("liens").open = true; $("lien").focus({ preventScroll: true }); $("p3").className = ""; fini(); return; }
     const opt = $("profil").selectedOptions[0];
     memo.lien = $("lien").value.trim(); memo.affiches = $("affiches").value.trim(); memo.profil = +$("profil").value;
     if (!memo.client) memo.client = "site-" + hasard();
@@ -504,6 +512,7 @@ var __name = function (f) { return f; };
     }
     if (rates) $("p3").className = "";
     fini();
+    voir($("etat").textContent ? $("etat") : $("bilan"), "start");
   });
 
   $("deconnecter").addEventListener("click", async () => {
