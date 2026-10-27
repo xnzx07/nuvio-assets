@@ -6074,7 +6074,8 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "fac-oscars"
+            "catalogId": "fac-oscars",
+            "genre": "Laur\u00e9ats"
           }
         ],
         "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/recompenses/prix-oscars.jpg",
@@ -6094,7 +6095,8 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "fac-palmes"
+            "catalogId": "fac-palmes",
+            "genre": "Laur\u00e9ats"
           }
         ],
         "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/recompenses/prix-palmes.jpg",
@@ -6114,7 +6116,8 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "fac-cesars"
+            "catalogId": "fac-cesars",
+            "genre": "Laur\u00e9ats"
           }
         ],
         "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/recompenses/prix-cesars.jpg",
@@ -7150,7 +7153,8 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
-            "catalogId": "fac-moins-90"
+            "catalogId": "fac-moins-90",
+            "genre": "Populaires"
           }
         ],
         "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/temps/temps-court.jpg",
@@ -7170,7 +7174,8 @@
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "series",
-            "catalogId": "fac-mini-series"
+            "catalogId": "fac-mini-series",
+            "genre": "Bien not\u00e9es"
           }
         ],
         "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/temps/temps-mini-series.jpg",

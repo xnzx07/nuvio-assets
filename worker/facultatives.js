@@ -36,19 +36,22 @@ export const inReleaseOrder = (parts) => [...parts].sort((a, b) =>
   (a.release_date ? 0 : 1) - (b.release_date ? 0 : 1) || String(a.release_date || "").localeCompare(String(b.release_date || "")));
 
 export const ROWS = [
-  { id: "fac-oscars", type: "movie", name: "Oscars du meilleur film", collection: "recompenses", list: "oscars" },
-  { id: "fac-palmes", type: "movie", name: "Palmes d'or", collection: "recompenses", list: "palmes" },
-  { id: "fac-cesars", type: "movie", name: "Césars du meilleur film", collection: "recompenses", list: "cesars" },
-  { id: "fac-moins-90", type: "movie", name: "Moins de 90 minutes", collection: "temps",
+  { id: "fac-oscars", type: "movie", name: "Oscars du meilleur film", collection: "recompenses", list: "oscars", filtre: "Lauréats" },
+  { id: "fac-palmes", type: "movie", name: "Palmes d'or", collection: "recompenses", list: "palmes", filtre: "Lauréats" },
+  { id: "fac-cesars", type: "movie", name: "Césars du meilleur film", collection: "recompenses", list: "cesars", filtre: "Lauréats" },
+  { id: "fac-moins-90", type: "movie", name: "Moins de 90 minutes", collection: "temps", filtre: "Populaires",
     discover: { "with_runtime.lte": 90, "with_runtime.gte": 60, sort_by: "popularity.desc", "vote_count.gte": 300 } },
-  { id: "fac-mini-series", type: "series", name: "Mini-séries", collection: "temps",
+  { id: "fac-mini-series", type: "series", name: "Mini-séries", collection: "temps", filtre: "Bien notées",
     discover: { with_type: "2", sort_by: "popularity.desc", "vote_average.gte": 7.3, "vote_count.gte": 200 } },
 ];
 
 /** Catalogues du manifest pour les collections facultatives cochées. */
 export function facultativeCatalogs(cfg, pageSize) {
+  // Un filtre exigé (r.filtre, donné par les collections) : l'appli Nuvio sur ordinateur ignore showInHome et met sur
+  // l'accueil tout catalogue qui n'en exige pas.
   return ROWS.filter((r) => cfg.c.includes(r.collection)).map((r) => ({
-    type: r.type, id: r.id, name: r.name, showInHome: false, pageSize, extra: [{ name: "skip" }], extraSupported: ["skip"],
+    type: r.type, id: r.id, name: r.name, showInHome: false, pageSize, genres: [r.filtre],
+    extra: [{ name: "genre", isRequired: true, options: [r.filtre] }, { name: "skip" }], extraRequired: ["genre"], extraSupported: ["genre", "skip"],
   }));
 }
 

@@ -5594,7 +5594,8 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "fac-oscars"
+      "catalogId": "fac-oscars",
+      "genre": "Lauréats"
      }
     ],
     "posters": [
@@ -5717,7 +5718,8 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "fac-palmes"
+      "catalogId": "fac-palmes",
+      "genre": "Lauréats"
      }
     ],
     "posters": [
@@ -5826,7 +5828,8 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "fac-cesars"
+      "catalogId": "fac-cesars",
+      "genre": "Lauréats"
      }
     ],
     "posters": [
@@ -9372,7 +9375,8 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "fac-moins-90"
+      "catalogId": "fac-moins-90",
+      "genre": "Populaires"
      }
     ],
     "posters": [
@@ -9457,7 +9461,8 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "series",
-      "catalogId": "fac-mini-series"
+      "catalogId": "fac-mini-series",
+      "genre": "Bien notées"
      }
     ],
     "posters": [

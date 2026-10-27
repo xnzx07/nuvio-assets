@@ -111,9 +111,9 @@ COLLECTIONS = [
         tile(f"acteur-{k}", n, [person("Ses films", i), person("Les mieux notés", i, sort="vote_average.desc")])
         for k, n, i in ACTORS]},
     {"id": "recompenses", "title": "Récompenses", "style": "saga", "folders": [
-        tile("prix-oscars", "Oscars du meilleur film", [addon("fac-oscars", "movie")]),
-        tile("prix-palmes", "Palmes d'or", [addon("fac-palmes", "movie")]),
-        tile("prix-cesars", "Césars du meilleur film", [addon("fac-cesars", "movie")])]},
+        tile("prix-oscars", "Oscars du meilleur film", [addon("fac-oscars", "movie", "Lauréats")]),
+        tile("prix-palmes", "Palmes d'or", [addon("fac-palmes", "movie", "Lauréats")]),
+        tile("prix-cesars", "Césars du meilleur film", [addon("fac-cesars", "movie", "Lauréats")])]},
     {"id": "univers", "title": "Grands univers", "style": "saga", "folders": [
         tile("univers-marvel", "Marvel", [disc("Films", withKeywords="180547"), disc("Séries", "TV", withKeywords="180547")]),
         tile("univers-dc", "DC", [disc("Films", withKeywords="229266"), disc("Séries", "TV", withCompanies="429|128064")]),
@@ -149,8 +149,8 @@ COLLECTIONS = [
         tile("adapt-vrai", "Histoires vraies", films_series(withKeywords="9672")),
         tile("adapt-biopics", "Biopics", films_series(withKeywords="5565"))]},
     {"id": "temps", "title": "Selon le temps", "style": "saga", "folders": [
-        tile("temps-court", "Moins de 90 minutes", [addon("fac-moins-90", "movie")]),
-        tile("temps-mini-series", "Mini-séries", [addon("fac-mini-series", "series")])]},
+        tile("temps-court", "Moins de 90 minutes", [addon("fac-moins-90", "movie", "Populaires")]),
+        tile("temps-mini-series", "Mini-séries", [addon("fac-mini-series", "series", "Bien notées")])]},
     {"id": "animes-genres", "title": "Animés par genre", "style": "saga", "folders": [
         tile("anime-shonen", "Shōnen", [disc("Séries", "TV", withKeywords="207826"), disc("Films", withKeywords="207826")]),
         tile("anime-isekai", "Isekai", [disc("Séries", "TV", withKeywords="237451", withGenres="16")]),

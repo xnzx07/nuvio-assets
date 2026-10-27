@@ -62,6 +62,13 @@ class Definitions(unittest.TestCase):
         self.assertEqual({s["catalogId"] for s in addon if not s["catalogId"].startswith("saga-")},
                          {"fac-oscars", "fac-palmes", "fac-cesars", "fac-moins-90", "fac-mini-series"})
         self.assertTrue(all(s["addonId"] == bo.ADDON_ID for s in addon))
+        # Le filtre que chaque catalogue exige (worker/facultatives.js) : sans lui, l'appli sur ordinateur les met sur
+        # son accueil.
+        filtres = {"fac-oscars": "Lauréats", "fac-palmes": "Lauréats", "fac-cesars": "Lauréats", "fac-moins-90": "Populaires",
+                   "fac-mini-series": "Bien notées"}
+        for s in addon:
+            if s["catalogId"] in filtres:
+                self.assertEqual(s.get("genre"), filtres[s["catalogId"]], s["catalogId"])
 
 
 class Requetes(unittest.TestCase):

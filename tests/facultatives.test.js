@@ -73,6 +73,28 @@ test("rangees_de_l_addon_seulement_si_cochees", async () => {
   assert.ok(!avec.includes("fac-moins-90"));                       // « Selon le temps » n'est pas cochée
 });
 
+// L'appli Nuvio sur ordinateur ignore showInHome : un catalogue sans filtre exigé arrive sur son accueil. Chaque rangée
+// des collections (sagas, facultatives) exige donc un genre, et chaque source de collections.json le donne (sans lui,
+// la rangée resterait vide).
+test("rangees_des_collections_a_filtre_exige", async () => {
+  const { readFileSync } = await import("node:fs");
+  const tout = COLLECTIONS.reduce((m, c, i) => m | (1 << i), 0);
+  const cats = (await (await get(SOURCE, `/${seg({ c: tout })}/manifest.json`)).json()).catalogs;
+  const oscars = cats.find((c) => c.id === "fac-oscars");
+  assert.deepEqual(oscars.extra, [{ name: "genre", isRequired: true, options: ["Lauréats"] }, { name: "skip" }]);
+  assert.deepEqual(oscars.extraRequired, ["genre"]);
+  const sources = JSON.parse(readFileSync(new URL("../collections/collections.json", import.meta.url), "utf8"))
+    .flatMap((c) => c.folders.flatMap((f) => f.sources || [])).filter((s) => s.provider === "addon" && /^(fac-|saga-)/.test(s.catalogId));
+  assert.ok(sources.length > 50);
+  for (const s of sources) {
+    const cat = cats.find((c) => c.id === s.catalogId && c.type === s.type);
+    assert.ok(cat, s.catalogId);
+    assert.ok(cat.extraRequired && cat.extraRequired.includes("genre"), `${s.catalogId} sans filtre exigé`);
+    assert.ok(cat.extra[0].options.includes(s.genre), `${s.catalogId} : genre « ${s.genre} » absent`);
+  }
+  assert.equal((await (await get(SOURCE, "/catalog/movie/fac-oscars/genre=Laur%C3%A9ats.json")).json()).metas.length, 20);
+});
+
 test("page_de_laureats", async () => {
   const res = await get(SOURCE, "/catalog/movie/fac-oscars.json");
   const { metas } = await res.json();
