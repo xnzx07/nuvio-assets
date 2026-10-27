@@ -150,8 +150,12 @@ test("un_catalogue_par_saga", async () => {
   const cats = (await (await get(SOURCE, `/${seg({})}/manifest.json`)).json()).catalogs;
   const rocky = cats.find((c) => c.id === "saga-1575");
   assert.deepEqual(rocky && { type: rocky.type, name: rocky.name, showInHome: rocky.showInHome }, { type: "movie", name: "Rocky", showInHome: false });
+  // Un filtre exigé : l'appli Nuvio sur ordinateur ignore showInHome et met sur l'accueil tout catalogue sans filtre
+  // exigé (les 53 sagas y étaient). Les collections le donnent (genre « Saga »).
+  assert.deepEqual(rocky.extra, [{ name: "genre", isRequired: true, options: ["Saga"] }, { name: "skip" }]);
+  assert.deepEqual(rocky.extraRequired, ["genre"]);
   assert.ok(!cats.some((c) => c.id === "saga-119"));   // Le Seigneur des anneaux : dans l'ordre chez TMDB, lu en direct
-  const { metas } = await (await get(SOURCE, "/catalog/movie/saga-1575.json")).json();
+  const { metas } = await (await get(SOURCE, "/catalog/movie/saga-1575/genre=Saga.json")).json();
   assert.deepEqual(metas.map((m) => m.name), ["Rocky", "Rocky II", "Rocky Balboa", "Rocky VII"]);
   assert.deepEqual((await (await get(SOURCE, "/catalog/movie/saga-424242.json")).json()).metas, []);
 });

@@ -1271,3 +1271,18 @@ test("tendances_filtrees_gardent_le_classement", async () => {
   assert.deepEqual(metas.map((m) => m.id), ["tmdb:4", "tmdb:1"]);
   assert.ok(!calls.some((u) => u.includes("/discover/")), "pas de recherche à la place du classement");
 });
+
+// Logo québécois marqué « France » par erreur chez TMDB (Fast & Furious 6 : « Rapides et dangereux 6 ») : la fiche
+// prend le logo anglais à la place.
+test("fiche_sans_logo_quebecois_marque_france", async () => {
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (/\/movie\/82992\?/.test(u)) return new Response(JSON.stringify({ id: 82992, title: "Fast & Furious 6", release_date: "2013-05-17", original_language: "en",
+      images: { logos: [{ iso_639_1: "fr", iso_3166_1: "FR", file_path: "/4wNoTeDnpnwxKNydVoq2B8MCMLI.png", vote_average: 5 },
+        { iso_639_1: "en", iso_3166_1: "US", file_path: "/en.png", vote_average: 3 }] } }));
+    return new Response("{}");
+  };
+  const m = (await (await get("/meta/movie/tmdb:82992.json")).json()).meta;
+  assert.match(m.logo || "", /\/en\.png$/);
+});

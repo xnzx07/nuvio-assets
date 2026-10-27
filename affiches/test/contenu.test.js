@@ -33,7 +33,7 @@ test("defaut_comme_avant", () => {
 });
 
 test("sans image sans texte ou sans logo : affiche normale, bas intact", () => {
-  for (const f of [{ ...facts, textlessPoster: null }, { ...facts, logo: null }]) {
+  for (const f of [{ ...facts, textlessPoster: null, textlessBackdrop: null }, { ...facts, logo: null }]) {
     const c = contenu(f, plein);
     assert.equal(c.full, false);
     assert.equal(c.image, "/fr.jpg");
@@ -52,7 +52,7 @@ test("paysage : images de fond", () => {
 });
 
 test("sans image du tout : null", () => {
-  assert.equal(contenu({ ...facts, poster: null, textlessPoster: null }), null);
+  assert.equal(contenu({ ...facts, poster: null, textlessPoster: null, textlessBackdrop: null }), null);
   assert.equal(contenu({ ...facts, backdrop: null, textlessBackdrop: null }, extra, "landscape"), null);
 });
 
@@ -362,8 +362,8 @@ test("titre_ecrit_sans_logo", () => {
   const japonais = contenu({ ...sansLogo, titre: "南田南弁護士は天才肌" });
   assert.deepEqual([japonais.full, japonais.titreTexte], [false, undefined]);
   assert.equal(contenu({ ...sansLogo, titre: null }).full, false);
-  // Sans image sans texte : l'affiche officielle, qui porte déjà son titre.
-  assert.equal(contenu({ ...sansLogo, textlessPoster: null }).titreTexte, undefined);
+  // Sans image sans texte (ni affiche ni fond) : l'affiche officielle, qui porte déjà son titre.
+  assert.equal(contenu({ ...sansLogo, textlessPoster: null, textlessBackdrop: null }).titreTexte, undefined);
   // Titre éteint (« Pas de titre ») : rien d'écrit.
   assert.equal(contenu(sansLogo, extra, "poster", lireReglages(new URLSearchParams("s=1.L0"))).titreTexte, undefined);
   // Avec un logo : pas de titre écrit (ETag inchangé).
@@ -498,4 +498,22 @@ test("notes_imdb_et_tmdb_ou_aucune", () => {
   assert.deepEqual(aucune.line.notes, [{ s: "rt", v: "94 %", n: 9.4 }]);
   // En moyenne : IMDb 8,4, TMDB 8,1, RT 9,4 → 8,6.
   assert.equal(posterContent(v2, { ...plein, notes }, "poster", reglages("R13m13n1"), AUJ).line.note, "8,6");
+});
+
+// Aucune affiche sans texte chez TMDB (Brice de Nice, Les Nouvelles Aventures d'Aladin, films français surtout) : le fond
+// sans texte recadré en portrait, avec notre logo et la ligne du bas, plutôt que l'affiche officielle sans rien (dite
+// « pas dessinée en entier »). Sans fond sans texte non plus : l'affiche officielle, comme avant.
+test("sans_affiche_sans_texte_le_fond_recadre", () => {
+  const c = contenu({ ...facts, textlessPoster: null }, plein);
+  assert.equal(c.full, true);
+  assert.equal(c.image, "/bdnu.jpg");
+  assert.equal(c.fondLarge, true);
+  assert.equal(c.logo, "/fr.png");
+  assert.deepEqual(c.line, { genre: "SF", note: "8,4", annee: "2024" });
+  const rien = contenu({ ...facts, textlessPoster: null, textlessBackdrop: null }, plein);
+  assert.equal(rien.full, false);
+  assert.equal(rien.image, "/fr.jpg");
+  // Le paysage n'est pas concerné ; l'affiche officielle choisie (réglage Image) non plus.
+  assert.equal(contenu({ ...facts, textlessPoster: null }, plein, "landscape").fondLarge, undefined);
+  assert.equal(contenu({ ...facts, textlessPoster: null }, plein, "poster", reglages("Uo")).image, "/fr.jpg");
 });

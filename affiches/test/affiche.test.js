@@ -868,3 +868,18 @@ test("avis_du_jour_de_l_addon_prime", async () => {
   // En VF, le badge 4K DV est bien dessiné.
   assert.notEqual((await lancer(true, { vf: true, sources: 3 }, undefined, "Film.2026.TRUEFRENCH.2160p.WEB.DV")).image, (await lancer(true, { vf: true, sources: 3 })).image);
 });
+
+// Aucune affiche sans texte (Brice de Nice) : le fond sans texte, vérifié lui aussi, recadré en portrait (w1280) avec
+// notre logo, au lieu de l'affiche officielle sans logo ni ligne du bas.
+test("sans_affiche_sans_texte_le_fond_recadre", async () => {
+  const brice = { ...film, images: { posters: [{ iso_639_1: "fr", file_path: "/fr-texte.jpg" }],
+    backdrops: [{ iso_639_1: null, file_path: "/texte-fond.jpg", width: 1920, height: 1080 }, { iso_639_1: null, file_path: "/fond-nu.jpg", width: 1920, height: 1080 }],
+    logos: film.images.logos } };
+  const f = internet({ detail: json(brice) });
+  const res = await makeHandler({ fetchImpl: f, env: { ...env, RESERVE: "off" } })(req("type=movie&shape=poster&id=tt15239678"));
+  assert.equal(res.status, 200);
+  assert.ok(f.calls.some((u) => u.includes("/w1280/fond-nu.jpg")), f.calls.filter((u) => u.includes("image.tmdb")).join("\n"));
+  assert.ok(f.calls.some((u) => u.includes("/logo.png")));
+  assert.ok(!f.calls.some((u) => u.includes("/w500/fr.jpg")), "pas l'affiche officielle");
+  assert.ok(!f.calls.some((u) => u.includes("/w1280/texte-fond.jpg")), "le fond avec du texte écarté");
+});

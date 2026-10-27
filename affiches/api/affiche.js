@@ -284,6 +284,12 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
         const { chemin, incertain } = await chrono.mesure("sans-texte", choisirSansTexte(liste, fetchImpl));
         facts = { ...facts, [cle]: chemin };
         imageIncertaine = incertain;
+        // Aucune affiche sans texte propre : le fond sans texte recadré en portrait (lib/contenu.js), vérifié de même.
+        if (!fond && !chemin && reglages.image.source !== "officielle") {
+          const secours = await chrono.mesure("sans-texte", choisirSansTexte(facts.textlessBackdrops, fetchImpl));
+          facts = { ...facts, textlessBackdrop: secours.chemin };
+          imageIncertaine = imageIncertaine || secours.incertain;
+        }
       }
       // Les images ne dépendent que du titre : on les demande tout de suite (sauf pour une revérification
       // par ETag, qui finit presque toujours en 304 sans rien dessiner).

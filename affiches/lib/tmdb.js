@@ -108,9 +108,12 @@ function abonnementVf(d) {
 
 // En français, l'image de France (iso_3166_1 « FR »), sinon une sans pays : jamais celle du Canada (Toy Story 4 y
 // devient « Histoire de jouets 4 ») ni d'un autre pays ; il reste alors l'anglais ou la langue d'origine.
+// Logos québécois que TMDB marque « France » par erreur (relevés à la main, le même relevé dans worker/index.js) :
+// « Rapides et dangereux 6 » (Fast & Furious 6), « Rapides et dangereux présentent : Hobbs et Shaw ».
+export const LOGOS_QUEBEC = new Set(["/4wNoTeDnpnwxKNydVoq2B8MCMLI.png", "/cRh4wmVSb9GF02ifaZXGL17bgZA.png"]);
 const first = (list, langs) => {
   for (const lang of langs) {
-    const dans = (list || []).filter((x) => x.iso_639_1 === lang);
+    const dans = (list || []).filter((x) => x.iso_639_1 === lang && !LOGOS_QUEBEC.has(x.file_path));
     const it = lang === "fr" ? dans.find((x) => x.iso_3166_1 === "FR") || dans.find((x) => !x.iso_3166_1) : dans[0];
     if (it) return it.file_path;
   }

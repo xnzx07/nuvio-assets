@@ -6147,7 +6147,8 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "saga-10"
+      "catalogId": "saga-10",
+      "genre": "Saga"
      },
      {
       "provider": "tmdb",
@@ -6236,13 +6237,15 @@
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "saga-1241"
+      "catalogId": "saga-1241",
+      "genre": "Saga"
      },
      {
       "provider": "addon",
       "addonId": "com.xnzx07.catalogue-fr",
       "type": "movie",
-      "catalogId": "saga-435259"
+      "catalogId": "saga-435259",
+      "genre": "Saga"
      }
     ],
     "posters": [

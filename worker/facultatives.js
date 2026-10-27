@@ -25,8 +25,10 @@ export function sagaCatalog(cfg, pageSize) {
   return [{ type: "movie", id: "saga", name: "Saga", showInHome: false, pageSize, genres: names,
     extra: [{ name: "genre", isRequired: true, options: names }, { name: "skip" }],
     extraRequired: ["genre"], extraSupported: ["genre", "skip"] },
-  ...DESORDRE.map((s) => ({ type: "movie", id: `saga-${s.id}`, name: s.title, showInHome: false, pageSize,
-    extra: [{ name: "skip" }], extraSupported: ["skip"] }))];
+  // Un filtre exigé (genre « Saga », donné par les collections) : l'appli Nuvio sur ordinateur ignore showInHome et met
+  // sur l'accueil tout catalogue qui n'en exige pas.
+  ...DESORDRE.map((s) => ({ type: "movie", id: `saga-${s.id}`, name: s.title, showInHome: false, pageSize, genres: ["Saga"],
+    extra: [{ name: "genre", isRequired: true, options: ["Saga"] }, { name: "skip" }], extraRequired: ["genre"], extraSupported: ["genre", "skip"] }))];
 }
 
 /** Films d'une saga dans l'ordre de sortie ; sans date (annoncés) à la fin. */

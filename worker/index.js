@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.43.3";
+const VERSION = "5.43.4";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1888,9 +1888,11 @@ async function tmdbIdOf(env, kind, id) {
  * Image dans la langue voulue, sinon anglais, sinon sans texte. En français : celle de France (ou sans pays) d'abord ;
  * celle du Canada (Toy Story 4 : « Histoire de jouets 4 ») seulement s'il n'y a rien d'autre.
  */
+// Logos québécois que TMDB marque « France » par erreur (le même relevé dans affiches/lib/tmdb.js) : en dernier.
+const LOGOS_QUEBEC = new Set(["/4wNoTeDnpnwxKNydVoq2B8MCMLI.png", "/cRh4wmVSb9GF02ifaZXGL17bgZA.png"]);
 function bestImage(list, lang) {
   const order = [lang, "en", null, undefined];
-  const rang = (x) => (x.iso_639_1 === "fr" && x.iso_3166_1 && x.iso_3166_1 !== "FR" ? 8 : (order.indexOf(x.iso_639_1) + 1 || 9));
+  const rang = (x) => (LOGOS_QUEBEC.has(x.file_path) || (x.iso_639_1 === "fr" && x.iso_3166_1 && x.iso_3166_1 !== "FR") ? 8 : (order.indexOf(x.iso_639_1) + 1 || 9));
   return [...(list || [])].sort((a, b) =>
     rang(a) - rang(b) || (b.iso_3166_1 === "FR") - (a.iso_3166_1 === "FR") || (b.vote_average || 0) - (a.vote_average || 0))[0];
 }

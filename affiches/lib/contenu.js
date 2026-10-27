@@ -127,7 +127,9 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
     image = normale || null;
     full = !!image;
   } else {
-    const sansTexte = paysage || source === "fond" ? facts.textlessBackdrop : facts.textlessPoster;
+    // Aucune affiche sans texte (Brice de Nice, beaucoup de films français) : le fond sans texte recadré en portrait.
+    const parLeFond = source === "fond" || (!paysage && !facts.textlessPoster && !!facts.textlessBackdrop);
+    const sansTexte = paysage || parLeFond ? facts.textlessBackdrop : facts.textlessPoster;
     logo = r.titre.on ? logoDe(facts, r.titre.langue) : null;
     // Aucun logo chez TMDB, dans aucune langue (EB) : le titre est écrit en texte à sa place, jamais une image sans nom.
     // Seulement s'il est écrivable (lib/polices.js) : un titre japonais, ou avec un émoji, garde l'image d'origine
@@ -287,7 +289,7 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
   if (bandeau) content.bandeau = bandeau;
   if (libelle && libelle2) content.statut2 = libelle2;
   if (plateforme && r.plateforme.place === "coin") content.coin = plateforme;
-  if (source === "fond" && full) content.fondLarge = true;
+  if (!paysage && full && image === facts.textlessBackdrop && source !== "officielle") content.fondLarge = true;
   return content;
 }
 

@@ -50,7 +50,7 @@ class Definitions(unittest.TestCase):
         for s in (s for f in univers["folders"] for s in f["sources"]):
             if s.get("provider") == "addon":
                 self.assertFalse(par_cat[s["catalogId"]]["in_order"], s["catalogId"])
-                self.assertNotIn("genre", s)
+                self.assertEqual(s["genre"], "Saga")   # filtre exigé : jamais sur l'accueil de l'appli ordinateur
             elif s.get("tmdbSourceType") == "COLLECTION":
                 self.assertTrue(par_nom[s["title"]]["in_order"], s["title"])
         star_wars = f"saga-{par_nom['Star Wars']['id']}"                                         # dans le désordre

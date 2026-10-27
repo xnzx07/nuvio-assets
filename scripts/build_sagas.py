@@ -123,7 +123,8 @@ def saga_source(s: dict) -> dict:
         return {"provider": "tmdb", "tmdbSourceType": "COLLECTION", "title": s["title"], "tmdbId": s["id"],
                 "mediaType": "MOVIE", "sortBy": "original", "filters": {}}
     # Un catalogue par saga : Nuvio TV reconnaît une rangée à son catalogue (titre, défilement, « Charger plus »).
-    return {"provider": "addon", "addonId": ADDON_ID, "type": "movie", "catalogId": f"saga-{s['id']}"}
+    # Genre « Saga » : le filtre que le catalogue exige (sans lui, l'appli sur ordinateur le met sur l'accueil).
+    return {"provider": "addon", "addonId": ADDON_ID, "type": "movie", "catalogId": f"saga-{s['id']}", "genre": "Saga"}
 
 
 def first_row_direct(sagas: list[dict]) -> list[dict]:

@@ -56,7 +56,7 @@ def saga(name: str) -> dict:
     s = SAGAS_BY_NAME[name]
     if s.get("in_order"):
         return coll(name, s["id"])
-    return addon(f"saga-{s['id']}", "movie")
+    return addon(f"saga-{s['id']}", "movie", "Saga")
 
 
 def films_series(**f) -> list[dict]:

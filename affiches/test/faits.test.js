@@ -459,3 +459,13 @@ test("logo_francais_de_france", async () => {
   assert.equal(seulCanada.logo, "/en.png");
   assert.equal(seulCanada.logos.fr, null);
 });
+
+// Logos québécois marqués « France » par erreur chez TMDB (Fast & Furious 6 : « Rapides et dangereux 6 », son seul
+// logo français) : jamais pris, l'anglais à leur place.
+test("logo_quebecois_marque_france_ecarte", async () => {
+  const logos = [{ iso_639_1: "en", iso_3166_1: "US", file_path: "/en.png" }, { iso_639_1: "fr", iso_3166_1: "FR", file_path: "/4wNoTeDnpnwxKNydVoq2B8MCMLI.png" }];
+  const f = fauxFetch([["/movie/693134", json({ ...movie, images: { ...movie.images, logos } })]]);
+  const facts = await titleFacts(env, { type: "movie", id: "tmdb:693134", imdb: "" }, f);
+  assert.equal(facts.logo, "/en.png");
+  assert.equal(facts.logos.fr, null);
+});

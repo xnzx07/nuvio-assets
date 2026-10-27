@@ -111,7 +111,7 @@ class Collection(unittest.TestCase):
                     # « Charger plus ») ; avec un seul catalogue « saga », les rangées s'appelaient toutes « Saga »
                     # et défilaient ensemble.
                     self.assertEqual(src, {"provider": "addon", "addonId": "com.xnzx07.catalogue-fr", "type": "movie",
-                                           "catalogId": f"saga-{s['id']}"})
+                                           "catalogId": f"saga-{s['id']}", "genre": "Saga"})
         self.assertEqual(action["coverImageUrl"], f"{RAW}/sagas/action.jpg?v=1")
         self.assertEqual(action["focusGifUrl"], f"{RAW}/gifs/sagas/action.gif?v=1")
         self.assertEqual(action["titleLogoUrl"], f"{RAW}/titles/sagas/action.png?v=1")
