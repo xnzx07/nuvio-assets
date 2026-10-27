@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, delimiter } from "node:path";
 
@@ -80,4 +80,18 @@ test("pas_de_chown_complet_du_volume", () => {
 // Workers Builds redéploie à chaque « Sync fork » : les variables du tableau de bord doivent rester.
 test("variables_gardees_au_deploiement", () => {
   assert.match(readFileSync("wrangler.toml", "utf8"), /^keep_vars = true$/m);
+});
+
+// Chaque fichier hors de worker/ importé par le Worker (data/sagas.json…) est copié dans l'image, et son
+// changement refait l'image : sinon wrangler dev échoue au démarrage du conteneur (« Could not resolve »).
+test("imports_hors_worker_copies_dans_l_image", () => {
+  const dockerfile = readFileSync("Dockerfile", "utf8"), workflow = readFileSync(".github/workflows/docker.yml", "utf8");
+  const copied = dockerfile.match(/^COPY .*$/gm).flatMap((l) => l.split(/\s+/).slice(1, -1));
+  const imports = readdirSync("worker", { recursive: true }).filter((f) => f.endsWith(".js"))
+    .flatMap((f) => [...readFileSync(join("worker", f), "utf8").matchAll(/^import .* from "\.\.\/([^"]+)";$/gm)].map((m) => m[1]));
+  assert.ok(imports.includes("data/sagas.json"));
+  for (const file of imports) {
+    assert.ok(copied.includes(file), `${file} absent du Dockerfile`);
+    assert.ok(workflow.includes(`- "${file}"`), `${file} absent des chemins de docker.yml`);
+  }
 });
