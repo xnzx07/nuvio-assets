@@ -297,7 +297,10 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       const notes = mal ? { ...(notesLues || {}), mal } : notesLues;
       const place = tendance ? photoLue.rang : null, photoIllisible = tendance && photoLue.illisible;
       // L'avis du jour prime sur celui de la photo de 4 h (The Dog Stars : sans VF à 4 h, en VF dans la journée).
-      const quality = avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, qualiteDeQ(avisJour.qualite)) : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
+      // Sans VF, pas de qualité : celle de Torrentio est celle d'un fichier en VFQ ou en VO (By Any Means, « 4K DV »).
+      const SANS_QUALITE = { uhd: false, extra: null, fhd: false, hdr10p: false, atmos: false };
+      const quality = avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, avisJour.vf ? qualiteDeQ(avisJour.qualite) : SANS_QUALITE)
+        : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
       // Récent sans VF d'après l'avis du jour : « revoir », le serveur la redessine quelques heures plus tard.
       const aRevoir = !!avisJour && avisJour.vf === false;
       const saga = sagaVoulue ? rangSaga(filmsSaga, facts.tmdbId, aujourdhui) : null;

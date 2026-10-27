@@ -18,6 +18,7 @@ import { resetMemo as r7 } from "../lib/saga.js";
 import { resetMemo as r8 } from "../lib/saison.js";
 import { resetMemo as r9, ESTIMATIONS_URL } from "../lib/estimations.js";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import satori from "satori";
 
 beforeEach(() => { r1(); r2(); r3(); r4(); r5(); r6(); r7(); r8(); r9(); });
@@ -840,23 +841,30 @@ test("server_timing_donne_chaque_etape", async () => {
 // Torrentio et sur la photo de 4 h, pour un titre récent : By Any Means (« FRENCH » chez Torrentio, VFQ seulement) est
 // gris, The Dog Stars (VF sortie dans la journée) en couleur. Sans VF : « revoir », redessinée quelques heures plus tard.
 test("avis_du_jour_de_l_addon_prime", async () => {
-  const lancer = async (torrentioVf, avis, e = { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test", AVIS_DU_JOUR: "on" }) => {
+  const lancer = async (torrentioVf, avis, e = { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test", AVIS_DU_JOUR: "on" }, nom = null) => {
     r4();   // l'avis est gardé 30 minutes par vidéo : chaque cas repart de rien
     const cles = [];
     const base = internet({ detail: avecSorties([4, jour(-20)]),
-      torrentio: () => json({ streams: [{ name: "Torrentio\n1080p", title: torrentioVf ? "Film.2026.TRUEFRENCH.1080p.WEB" : "Film.2026.1080p.WEB" }] }) });
+      torrentio: () => json({ streams: [{ name: "Torrentio\n1080p", title: nom || (torrentioVf ? "Film.2026.TRUEFRENCH.1080p.WEB" : "Film.2026.1080p.WEB") }] }) });
     const f = async (url, opts = {}) => {
       if (String(url) === "https://addon.test/sf/movie/tt15239678.json") { cles.push(new Headers(opts.headers || {}).get("X-Relais-Cle")); return json(avis); }
       return base(url, opts);
     };
     const res = await makeHandler({ fetchImpl: f, env: e })(req("type=movie&shape=poster&id=tt15239678"));
     assert.equal(res.status, 200);
-    return { vf: /vf=(\w+)/.exec(res.headers.get("X-Affiche-Sortie"))[1], etat: res.headers.get("X-Affiche-Etat"), cles };
+    return { vf: /vf=(\w+)/.exec(res.headers.get("X-Affiche-Sortie"))[1], etat: res.headers.get("X-Affiche-Etat"), cles, image: createHash("sha1").update(Buffer.from(await res.arrayBuffer())).digest("hex") };
   };
-  assert.deepEqual(await lancer(true, { vf: false, sources: 68 }), { vf: "false", etat: "revoir", cles: ["cle"] });
-  assert.deepEqual(await lancer(false, { vf: true, sources: 9, qualite: { u: 1, x: "DV", p: 0, f: 1, a: 0 } }), { vf: "true", etat: "complete", cles: ["cle"] });
+  const { image: sansVf, ...vu } = await lancer(true, { vf: false, sources: 68 });
+  assert.deepEqual(vu, { vf: "false", etat: "revoir", cles: ["cle"] });
+  assert.partialDeepStrictEqual(await lancer(false, { vf: true, sources: 9, qualite: { u: 1, x: "DV", p: 0, f: 1, a: 0 } }), { vf: "true", etat: "complete", cles: ["cle"] });
   // L'addon sans avis (plafond, panne) : Torrentio.
-  assert.deepEqual(await lancer(true, { plafond: true }), { vf: "true", etat: "complete", cles: ["cle"] });
+  assert.partialDeepStrictEqual(await lancer(true, { plafond: true }), { vf: "true", etat: "complete", cles: ["cle"] });
   // Ailleurs que sur le serveur (Vercel, machine GitHub) : jamais demandé.
-  assert.deepEqual(await lancer(true, { vf: false, sources: 3 }, { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test" }), { vf: "true", etat: "complete", cles: [] });
+  assert.partialDeepStrictEqual(await lancer(true, { vf: false, sources: 3 }, { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test" }), { vf: "true", etat: "complete", cles: [] });
+  // Sans VF, pas de badge de qualité : celle de Torrentio (4K DV) est celle d'un fichier VFQ ou VO. La même affiche
+  // qu'avec un Torrentio sans aucune qualité.
+  const torrentio4k = await lancer(true, { vf: false, sources: 68 }, undefined, "Film.2026.TRUEFRENCH.2160p.WEB.DV");
+  assert.equal(torrentio4k.image, sansVf);
+  // En VF, le badge 4K DV est bien dessiné.
+  assert.notEqual((await lancer(true, { vf: true, sources: 3 }, undefined, "Film.2026.TRUEFRENCH.2160p.WEB.DV")).image, (await lancer(true, { vf: true, sources: 3 })).image);
 });
