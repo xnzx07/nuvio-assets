@@ -641,3 +641,14 @@ test("ligne2_en_inter", async () => {
   const c = { ...base, line: null, line2: "Un film de Nuri Bilge Ceylan Ş", styles: { ...STYLES, police: "condensee" } };
   assert.notDeepEqual(await draw({ ...c, ligne2Inter: true }, f), await draw(c, f));
 });
+
+// Carte « annoncée » (fondUni : aucune image chez TMDB) : dessinée sans rien télécharger pour le fond.
+test("annonce_dessinee_sans_image", async () => {
+  const urls = [];
+  const buf = await draw({ ...base, image: null, fondUni: true, logo: null, titreTexte: "Gladiator III", line: null, quality: null, rank: null },
+    async (u, o) => { urls.push(String(u)); return f(u, o); });
+  const m = await sharp(buf).metadata();
+  assert.deepEqual([m.width, m.height], SIZES.poster);
+  assert.ok(!urls.some((u) => u.includes("image.tmdb.org/t/p/") && u.endsWith("null")), urls.join("\n"));
+  assert.equal(urls.filter((u) => u.includes("image.tmdb.org")).length, 0);
+});

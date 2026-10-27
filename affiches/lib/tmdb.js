@@ -202,6 +202,8 @@ export async function titleFacts(env, { type, id, imdb }, fetchImpl = fetch, opt
     releaseDate: type === "series" ? "" : d.release_date || "",
     // Saga du film (réglage Saga, lib/saga.js) : l'identifiant de sa collection TMDB.
     collection: type !== "series" && d.belongs_to_collection ? d.belongs_to_collection.id || null : null,
+    // Le fond de sa saga : celui d'une carte « annoncée » (film sans aucune image, lib/contenu.js).
+    fondSaga: type !== "series" && d.belongs_to_collection ? d.belongs_to_collection.backdrop_path || null : null,
     originalLanguage: d.original_language || "",
     plateformeFrance: plateformeFrance(d),
     abonnementVf: type !== "series" && abonnementVf(d),

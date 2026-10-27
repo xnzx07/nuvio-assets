@@ -140,7 +140,17 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
     image = full ? sansTexte : normale || null;
     if (!full) logo = null;
   }
-  if (!image) return null;
+  // Film annoncé que TMDB connaît sans aucune image (Gladiator III, Top Gun 3) : une carte « annoncée », le titre écrit
+  // (s'il est écrivable) sur le fond de sa saga, sinon sur un fond uni, plutôt qu'une carte vide dans Nuvio.
+  let fondUni = false, fondSaga = false;
+  if (!image && !facts.poster && !facts.backdrop && r.titre.on && facts.titre) {
+    const police = policePour(facts.titre, r.texte.police || "inter");
+    if (police) {
+      full = true; logo = null; titreTexte = facts.titre.normalize("NFC"); titreInter = police !== (r.texte.police || "inter");
+      if (facts.fondSaga) { image = facts.fondSaga; fondSaga = true; } else fondUni = true;
+    }
+  }
+  if (!image && !fondUni) return null;
   // Pas sorti = pas encore chez soi en VF, comme les rangées de l'addon (au cinéma compris).
   // Les sources lues avec la qualité (VF ou pas) décident pour un titre récent ; sinon, les dates.
   const { sorti, statut, quand, cinema, saison: saisonProchaine } = etatSortie(facts, today, quality ? { vf: quality.vf, sources: quality.sources } : null);
@@ -289,7 +299,9 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
   if (bandeau) content.bandeau = bandeau;
   if (libelle && libelle2) content.statut2 = libelle2;
   if (plateforme && r.plateforme.place === "coin") content.coin = plateforme;
-  if (!paysage && full && image === facts.textlessBackdrop && source !== "officielle") content.fondLarge = true;
+  if (!paysage && full && image && image === facts.textlessBackdrop && source !== "officielle") content.fondLarge = true;
+  if (fondUni) content.fondUni = true;
+  if (fondSaga && !paysage) content.fondLarge = true;
   return content;
 }
 

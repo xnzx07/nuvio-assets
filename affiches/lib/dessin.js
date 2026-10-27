@@ -499,7 +499,7 @@ const cheminsPlateforme = (content) => [content.line && content.line.plateforme,
 const urlPlateforme = (chemin) => IMG + "w92" + chemin;
 
 /** Les images que draw() téléchargera : on peut les demander en avance. */
-export const imageUrls = (content) => [urlFond(content), urlLogo(content), ...cheminsPlateforme(content).map(urlPlateforme)].filter(Boolean);
+export const imageUrls = (content) => [content.fondUni ? null : urlFond(content), urlLogo(content), ...cheminsPlateforme(content).map(urlPlateforme)].filter(Boolean);
 
 /** Logos de plateforme en data: URL (satori ne télécharge rien) ; un logo introuvable est simplement omis. */
 async function imagesPlateforme(content, fetchImpl) {
@@ -647,6 +647,14 @@ function mesures(content) {
 }
 const coinsBas = (st) => !!st.coins && [st.coins.statut, st.coins.qualite].some((c) => c && c[0] === "b");
 
+/** Fond d'une carte « annoncée » (aucune image chez TMDB) : un dégradé sombre, plus clair au centre, sous le titre écrit. */
+function fondAnnonce(w, h) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><defs>`
+    + `<radialGradient id="g" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#3a3f4f"/><stop offset="0.55" stop-color="#1c1f29"/><stop offset="1" stop-color="#0b0c10"/></radialGradient>`
+    + `</defs><rect width="${w}" height="${h}" fill="url(#g)"/></svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
 /** JPEG d'une affiche (400×600 en portrait, 800×450 en paysage). Lève une erreur si l'image de base manque. */
 export async function draw(content, fetchImpl = fetch) {
   content = { ...content, styles: { ...STYLES_DEFAUT, ...(content.styles || {}) } };
@@ -658,7 +666,7 @@ export async function draw(content, fetchImpl = fetch) {
   const accentFixe = st.accent !== "affiche" || !!st.accentC, accentHex = st.accentC || ACCENTS[st.accent] || OR;
   const enParallele = accentFixe && !coinsBas(st);
   const [fond, logo, images, texteFixe] = await Promise.all([
-    telecharger(urlFond(content), fetchImpl),
+    content.fondUni ? fondAnnonce(w, hgt) : telecharger(urlFond(content), fetchImpl),
     // Pas de repli sans logo : sur l'image sans texte, il porte le titre. Une erreur ici fait répondre
     // une erreur au service, et Nuvio montre l'affiche d'origine.
     calqueLogo(content, taille, m, fetchImpl),

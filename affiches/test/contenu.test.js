@@ -517,3 +517,23 @@ test("sans_affiche_sans_texte_le_fond_recadre", () => {
   assert.equal(contenu({ ...facts, textlessPoster: null }, plein, "landscape").fondLarge, undefined);
   assert.equal(contenu({ ...facts, textlessPoster: null }, plein, "poster", reglages("Uo")).image, "/fr.jpg");
 });
+
+// Film annoncé que TMDB connaît sans aucune image (Gladiator III, Top Gun 3, Sherlock Holmes 3 : ni affiche, ni fond,
+// ni logo) : une carte « annoncée » (fond uni, titre écrit, badges), au lieu d'une carte vide dans Nuvio. Sans titre
+// écrivable, ou titre éteint : rien, comme avant.
+test("annonce_sans_aucune_image", () => {
+  const annonce = { ...facts, poster: null, textlessPoster: null, backdrop: null, textlessBackdrop: null, logo: null,
+    logos: { fr: null, en: null, vo: null, autre: null }, titre: "Gladiator III", releases: [], releaseDate: "", year: null, vote: { average: 0, count: 0 } };
+  const c = contenu(annonce);
+  assert.equal(c.fondUni, true);
+  assert.equal(c.image, null);
+  assert.equal(c.full, true);
+  assert.equal(c.titreTexte, "Gladiator III");
+  assert.equal(contenu(annonce, extra, "landscape").fondUni, true);
+  assert.equal(contenu({ ...annonce, titre: "南田南弁護士は天才肌" }), null);
+  assert.equal(contenu(annonce, extra, "poster", reglages("L0")), null);
+  // Le fond de sa saga s'il en a une (Gladiator III : celui de la saga Gladiator), recadré en portrait.
+  const saga = contenu({ ...annonce, fondSaga: "/saga.jpg" });
+  assert.deepEqual([saga.image, saga.fondLarge, saga.fondUni, saga.titreTexte], ["/saga.jpg", true, undefined, "Gladiator III"]);
+  assert.equal(contenu({ ...annonce, fondSaga: "/saga.jpg" }, extra, "landscape").image, "/saga.jpg");
+});
