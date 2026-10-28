@@ -225,6 +225,11 @@ test("v2_duree_film_et_series", () => {
   assert.equal(contenu(serie, plein, "poster", reglages("D1")).line.duree, "3 saisons");
   assert.equal(contenu({ ...serie, seasonsCount: 1 }, plein, "poster", reglages("D1")).line.duree, "1 saison");
   assert.equal(contenu(v2, plein).line.duree, undefined);
+  // La durée des films seulement (Nuvio la montre déjà en haut de la fiche), ou les saisons des séries seulement.
+  assert.equal(contenu(v2, plein, "poster", reglages("D13pf")).line.duree, "2 h 46");
+  assert.equal(contenu(serie, plein, "poster", reglages("D13pf")).line.duree, undefined);
+  assert.equal(contenu(v2, plein, "poster", reglages("D13ps")).line.duree, undefined);
+  assert.equal(contenu(serie, plein, "poster", reglages("D13ps")).line.duree, "3 saisons");
 });
 
 test("v2_notes_multiples_et_couleur", () => {

@@ -31,7 +31,7 @@ const CHOIX = {
   "fondu.hauteur": ["court", "normal", "long"],
   "titre.langue": ["fr", "en", "vo"], "titre.monte": [0, 0.05, 0.3], "titre.large": [0.6, 1, 1.4],
   "note.rt": [false, true], "note.mc": [false, true], "note.lb": [false, true], "note.couleur": ["non", "oui", "halo"],
-  "duree.on": [false, true], "ligne.ordre": ["gna", "nga", "agn"], "ligne.barre": ["aucune", "verre", "fine"],
+  "duree.on": [false, true], "duree.pour": ["tout", "films", "series"], "ligne.ordre": ["gna", "nga", "agn"], "ligne.barre": ["aucune", "verre", "fine"],
   "plateforme.on": [false, true], "plateforme.place": ["ligne", "coin"],
   "haut.inverse": [false, true], "haut.style": ["auto", "plein", "verre", "contour"], "haut.forme": ["arrondi", "carre", "pilule"],
   "haut.opacite": ["s", "m", "l"], "haut.couleur": ["blanc", "or", "noir"],

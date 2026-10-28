@@ -187,7 +187,8 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
       if (r.note.couleur !== "non") line.noteN = autres[0].n;
     } else if (autres.length && r.note.style !== "grand") line.notes = autres;
     if (r.annee.on && facts.year) line.annee = facts.year;
-    const duree = r.duree.on ? dureeDe(facts) : null;
+    const pourCeType = r.duree.pour !== (facts.type === "series" ? "films" : "series");
+    const duree = r.duree.on && pourCeType ? dureeDe(facts) : null;
     if (duree) line.duree = duree;
     if (r.age.on && facts.age) line.age = facts.age;
     if (plateforme && r.plateforme.place === "ligne") line.plateforme = plateforme;

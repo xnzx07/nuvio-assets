@@ -25,7 +25,8 @@ export function creerLienAffiches() {
     note: { on: true, source: "imdb", principale: true, deux: false, style: "etoile", rt: false, mc: false, lb: false, mal: false, moyenne: false, couleur: "non" },
     genre: { on: true, forme: "court" },
     annee: { on: true },
-    duree: { on: false },
+    // Durée d'un film, saisons d'une série : les deux, ou l'un seulement (Nuvio montre déjà la durée d'un film).
+    duree: { on: false, pour: "tout" },
     age: { on: false },
     plateforme: { on: false, place: "ligne" },
     ligne: { ordre: "gna", barre: "aucune" },
@@ -174,6 +175,8 @@ export function creerLienAffiches() {
     // IMDb et TMDB ensemble (la principale, puis l'autre) ; ou ni l'une ni l'autre (seulement les autres sites).
     ["3n", "note", "deux", { 1: true }, (r) => noteOn(r) && r.note.principale],
     ["3o", "note", "principale", { 0: false }, noteOn],
+    // Durée des films seulement, ou saisons des séries seulement.
+    ["3p", "duree", "pour", { f: "films", s: "series" }, (r) => r.titre.on && r.duree.on],
   ];
 
   /** Les styles tout prêts de la régie (« mémoires »). */
