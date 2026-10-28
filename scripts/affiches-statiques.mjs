@@ -19,7 +19,7 @@ import { makeTendances } from "../affiches/api/tendances.js";
 import { makeNotes } from "../affiches/api/notes.js";
 import { makeVf } from "../affiches/api/vf.js";
 import { makeQualite } from "../affiches/api/qualite.js";
-import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, lireEtat, cheminValable } from "../affiches/lib/statiques.js";
+import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, lireEtat, cheminValable, chargerListe } from "../affiches/lib/statiques.js";
 import { lireTorrentio } from "../affiches/lib/qualite.js";
 import { titleFacts } from "../affiches/lib/tmdb.js";
 
@@ -35,7 +35,7 @@ if (mode === "code") { await cf.mettreAJourCode(); console.log("code du Worker r
 if (!essai) await cf.preparer();
 if (mode === "sources") {
   // Les titres des affiches en ligne et demandées, une fois chacun (tous styles et formes confondus).
-  const lignes = [...await cf.sql("SELECT chemin FROM fichiers"), ...await cf.sql("SELECT chemin FROM demandes")];
+  const lignes = [...await chargerListe(cf), ...await cf.sql("SELECT chemin FROM demandes")];
   const titres = [...new Map(lignes.map((l) => cheminValable(l.chemin)).filter(Boolean).map((a) => [`${a.type}:${a.id}`, { type: a.type, id: a.id }])).values()];
   console.log(`sources : ${titres.length} titres`);
   const t0 = Date.now(), lus = [];

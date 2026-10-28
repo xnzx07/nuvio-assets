@@ -2,8 +2,9 @@
  * Les affiches en fichiers statiques du Worker « affiches » (Cloudflare) : dessin et publication, partagés par le
  * serveur des affiches (serveur.js, qui dessine à la demande) et la machine GitHub (scripts/affiches-statiques.mjs, en
  * secours et chaque nuit). Adresse : /<style>/{type}/{shape}/{id}.jpg (styles : lib/styles.js).
- * Base nuvio-affiches (D1) : demandes (la file des affiches absentes, remplie par statique/worker.js), fichiers (ce qui
- * est en ligne : chemin, empreinte, taille), verrou (une publication à la fois), etat (le serveur est-il là ?).
+ * Base nuvio-affiches (D1) : demandes (la file des affiches absentes, remplie par statique/worker.js), verrou (une
+ * publication à la fois), etat (le serveur est-il là ?). Ce qui est en ligne : la liste publiée avec les affiches
+ * (LISTE), plus la table fichiers (gardée pour la relire une dernière fois, plus écrite).
  * Publication par l'API de Cloudflare (envoi direct des fichiers statiques) : Cloudflare répond les empreintes qu'il n'a
  * pas, on n'envoie que celles-là, puis on remet le Worker en ligne avec la liste complète.
  */
@@ -38,9 +39,30 @@ export const ENTETES = "/*\n  Access-Control-Allow-Origin: *\n  Cache-Control: p
 
 // Empreinte d'un fichier statique : 32 caractères hexadécimaux, au choix de l'envoyeur (comme wrangler : contenu en
 // base64 suivi de l'extension).
-export const empreinte = (jpg) => createHash("sha256").update(jpg.toString("base64") + "jpg").digest("hex").slice(0, 32);
+export const empreinte = (buf, ext = "jpg") => createHash("sha256").update(buf.toString("base64") + ext).digest("hex").slice(0, 32);
 // Valeurs écrites en clair dans les écritures groupées : chemins vérifiés par ADRESSE, empreintes en hexadécimal.
 const texte = (v) => `'${String(v).replace(/'/g, "''")}'`;
+
+/**
+ * La liste de ce qui est en ligne, publiée avec les affiches (un de leurs fichiers), pas dans la base : chaque affiche
+ * publiée y écrivait 4 lignes (ajout, et retrait de la plus ancienne, index compris). Le stock plein (FICHIERS_MAX) se
+ * renouvelle chaque jour, et le 27 octobre 2026 ces ~76 000 lignes ont dépassé, avec le reste, les 100 000 écritures
+ * gratuites par jour du compte (l'addon compris : plus d'avis VF ce soir-là). Le serveur la garde aussi sur son disque.
+ * Refaite au plus toutes les 30 minutes (environ 2 Mo pour 19 000 affiches) : c'est le secours de la machine GitHub.
+ * { t, f: [[chemin, empreinte, taille, cree]] }.
+ */
+export const LISTE = "/_liste.json";
+const LISTE_MS = 30 * 60000;
+export const contenuListe = (fichiers, t = new Date().toISOString()) =>
+  Buffer.from(JSON.stringify({ t, f: fichiers.map((x) => [x.chemin, x.hash, x.taille, x.cree]) }));
+/** { t, fichiers: [{ chemin, hash, taille, cree }] }, ou null si illisible. */
+export function lireListe(buf) {
+  try {
+    const d = JSON.parse(buf.toString("utf8"));
+    if (!d || !Array.isArray(d.f)) return null;
+    return { t: String(d.t || ""), fichiers: d.f.filter((x) => Array.isArray(x) && cheminValable(x[0])).map(([chemin, hash, taille, cree]) => ({ chemin, hash, taille, cree })) };
+  } catch { return null; }
+}
 
 /** Le code du Worker, avec la liste des styles. */
 export const codeDuWorker = () => readFileSync(new URL("../statique/worker.js", import.meta.url), "utf8").replace("__STYLES__", JSON.stringify(Object.keys(STYLES)));
@@ -107,6 +129,14 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
       form.append("worker.js", new Blob([codeDuWorker()], { type: "application/javascript+module" }), "worker.js");
       await cf(`/workers/scripts/${worker}`, { method: "PUT", body: form });
     },
+    /** La liste publiée avec les affiches (LISTE) : { t, fichiers }, ou null (pas encore publiée, illisible). */
+    async lireListePubliee() {
+      try {
+        const sousDomaine = (await cf("/workers/subdomain")).subdomain;
+        const r = await fetchImpl(`https://${worker}.${sousDomaine}.workers.dev${LISTE}`);
+        return r.ok ? lireListe(Buffer.from(await r.arrayBuffer())) : null;
+      } catch { return null; }
+    },
     async publier(fichiers, nouveaux, liaisons = []) {
       const manifest = {};
       for (const f of fichiers) manifest[f.chemin] = { hash: f.hash, size: f.taille };
@@ -124,7 +154,7 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
             if (!r.ok) throw new Error(`fichier ${cheminDe.get(hash)} introuvable en ligne (${r.status})`);
             jpg = Buffer.from(await r.arrayBuffer());
           }
-          form.append(hash, new File([jpg.toString("base64")], hash, { type: "image/jpeg" }));
+          form.append(hash, new File([jpg.toString("base64")], hash, { type: cheminDe.get(hash) === LISTE ? "application/json" : "image/jpeg" }));
         }
         // Trois essais : Cloudflare refuse parfois un envoi (vu le 2026-10-25, le suivant passe).
         for (let essai = 1; ; essai++) {
@@ -214,10 +244,12 @@ export async function dessinerTout(liste, dessiner, parChemin, { enMemeTemps = 4
 }
 
 /**
- * Publie ce qui a changé dans parChemin et met la base à jour (fichiers, file). Sous le verrou « publication » : une
- * seule à la fois (serveur et machine GitHub). { publie, envoyes, retirees } ; publie false si le verrou était pris.
+ * Publie ce qui a changé dans parChemin, avec la liste (LISTE), et met la file à jour. Sous le verrou « publication » :
+ * une seule à la fois (serveur et machine GitHub). Les affiches retirées (au-delà de FICHIERS_MAX) sortent aussi de
+ * parChemin. liste : { entree, t } de la dernière liste publiée, tenu par l'appelant (null : refaite à chaque fois).
+ * { publie, envoyes, retirees } ; publie false si le verrou était pris.
  */
-export async function publierEtEnregistrer(cf, parChemin, nouveaux, { faits = [], reessais = [], liaisons = [], maintenant = new Date().toISOString() } = {}) {
+export async function publierEtEnregistrer(cf, parChemin, nouveaux, { faits = [], reessais = [], liaisons = [], maintenant = new Date().toISOString(), liste = null } = {}) {
   let tous = [...parChemin.values()].sort((a, b) => (a.cree < b.cree ? 1 : -1));
   const retirees = tous.slice(FICHIERS_MAX);
   tous = tous.slice(0, FICHIERS_MAX);
@@ -226,14 +258,17 @@ export async function publierEtEnregistrer(cf, parChemin, nouveaux, { faits = []
   if (changees.length || retirees.length || liaisons.length) {
     if (!(await cf.verrouiller("publication", 10 * 60000))) return { publie: false, envoyes: 0, retirees: 0 };
     try {
-      envoyes = await cf.publier(tous, nouveaux, liaisons);
-      publie = true;
-      for (let j = 0; j < changees.length; j += 200) {
-        const lot = changees.slice(j, j + 200).map((f) => `(${texte(f.chemin)}, ${texte(f.hash)}, ${Number(f.taille)}, ${texte(maintenant)}, ${texte(f.cree)})`);
-        await cf.sql(`INSERT INTO fichiers (chemin, hash, taille, dessine, cree) VALUES ${lot.join(", ")} ON CONFLICT (chemin) DO UPDATE SET hash = excluded.hash, taille = excluded.taille, dessine = excluded.dessine`);
+      let entree = liste && liste.entree && Date.now() - liste.t < LISTE_MS ? liste.entree : null;
+      if (!entree) {
+        const buf = contenuListe(tous, maintenant), hash = empreinte(buf, "json");
+        nouveaux.set(hash, buf);
+        entree = { chemin: LISTE, hash, taille: buf.length };
       }
-      for (let j = 0; j < retirees.length; j += 200) await cf.sql(`DELETE FROM fichiers WHERE chemin IN (${retirees.slice(j, j + 200).map((f) => texte(f.chemin)).join(", ")})`);
+      envoyes = await cf.publier([...tous, entree], nouveaux, liaisons);
+      publie = true;
+      if (liste && liste.entree !== entree) { liste.entree = entree; liste.t = Date.now(); }
       for (const f of changees) f.change = false;
+      for (const f of retirees) parChemin.delete(f.chemin);
     } finally {
       await cf.liberer("publication").catch(() => {});
     }
@@ -250,12 +285,23 @@ export async function publierEtEnregistrer(cf, parChemin, nouveaux, { faits = []
 }
 
 /**
- * Ce qui est en ligne (Map chemin → { chemin, hash, taille, cree }) et la file à dessiner maintenant. connu : ce qui est
- * en ligne, déjà lu (le serveur le garde en mémoire) : la liste des fichiers n'est pas relue. D1 gratuit, c'est
- * 5 millions de lignes lues par jour pour tout le compte (l'addon compris) : relire 19 000 fichiers toutes les
- * 3 minutes les dépasserait à lui seul.
+ * Ce qui est en ligne ([{ chemin, hash, taille, cree }]) : la plus récente des listes du disque (disque(), ou null) et
+ * publiée ; sans aucune, l'ancienne table fichiers (plus écrite depuis le 28 octobre 2026), une seule lecture.
  */
-export async function lireEtat(cf, { tout = false, max = 3000, connu = null } = {}) {
+export async function chargerListe(cf, disque = null) {
+  let d = null;
+  try { d = disque ? disque() : null; } catch { d = null; }
+  const p = cf.lireListePubliee ? await cf.lireListePubliee() : null;
+  const meilleure = [d, p].filter(Boolean).sort((a, b) => (a.t < b.t ? 1 : -1))[0];
+  return meilleure ? meilleure.fichiers : cf.sql("SELECT chemin, hash, taille, cree FROM fichiers");
+}
+
+/**
+ * Ce qui est en ligne (Map chemin → { chemin, hash, taille, cree }) et la file à dessiner maintenant. connu : ce qui est
+ * en ligne, déjà lu (le serveur le garde en mémoire) : la liste des fichiers n'est pas relue. Sinon : la plus récente
+ * de celle du disque (disque() : le serveur) et de celle publiée (LISTE) ; à défaut, l'ancienne table fichiers.
+ */
+export async function lireEtat(cf, { tout = false, max = 3000, connu = null, disque = null } = {}) {
   const maintenant = new Date().toISOString();
   // Deux lectures par l'index sur apres (un OR le contournerait) : seules les lignes à prendre sont lues, pas celles
   // remises à plus tard (titres inconnus, redemandés dans un jour).
@@ -267,7 +313,7 @@ export async function lireEtat(cf, { tout = false, max = 3000, connu = null } = 
   // Une adresse qui ne se dessinera jamais (réglages perso pas sous leur forme canonique) sort de la file tout de suite.
   const invalides = file.filter((d) => !cheminValable(d.chemin)).map((d) => d.chemin);
   for (let j = 0; j < invalides.length; j += 200) await cf.sql(`DELETE FROM demandes WHERE chemin IN (${invalides.slice(j, j + 200).map(texte).join(", ")})`);
-  const enLigne = connu ? [...connu.values()] : await cf.sql("SELECT chemin, hash, taille, cree FROM fichiers");
+  const enLigne = connu ? [...connu.values()] : await chargerListe(cf, disque);
   const parChemin = connu || new Map(enLigne.map((f) => [f.chemin, f]));
   const aFaire = new Map(file.filter((d) => cheminValable(d.chemin)).map((d) => [d.chemin, d.essais]));
   if (tout) for (const f of enLigne) if (!aFaire.has(f.chemin)) aFaire.set(f.chemin, null);

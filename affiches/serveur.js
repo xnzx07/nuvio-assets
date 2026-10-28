@@ -16,7 +16,9 @@
  */
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { homedir } from "node:os";
+import { readFileSync, writeFileSync, renameSync } from "node:fs";
 import { timingSafeEqual, createHash } from "node:crypto";
 import { makeHandler } from "./api/affiche.js";
 import { makeTendances } from "./api/tendances.js";
@@ -24,7 +26,7 @@ import { makeNotes } from "./api/notes.js";
 import { makeVf } from "./api/vf.js";
 import { makeQualite } from "./api/qualite.js";
 import { makeAnilist } from "./api/anilist.js";
-import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, lireEtat, empreinte } from "./lib/statiques.js";
+import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, lireEtat, empreinte, contenuListe, lireListe } from "./lib/statiques.js";
 import { definirSecours } from "./lib/qualite.js";
 import { lireReglages, ecrireReglages } from "./lib/lien-affiches.js";
 import { secondesAvantBascule } from "./lib/tendances.js";
@@ -159,6 +161,14 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
 
   /** Publie ce qui attend, et prend la file (tout : redessine aussi tout ce qui est en ligne). */
   let occupe = false, connu = null, prete = false;
+  // La liste de ce qui est en ligne, sur le disque (LISTE_DISQUE) après chaque publication : relue au démarrage, sans
+  // la base (lib/statiques.js, LISTE). liste : la dernière publiée avec les affiches.
+  const disque = env.LISTE_DISQUE || join(homedir(), "liste-affiches.json"), liste = { entree: null, t: 0 };
+  const lireDisque = () => lireListe(readFileSync(disque));
+  const ecrireDisque = (parChemin) => {
+    try { writeFileSync(disque + ".tmp", contenuListe([...parChemin.values()], new Date(horloge()).toISOString())); renameSync(disque + ".tmp", disque); }
+    catch (e) { console.warn(`liste sur le disque : ${e.message}`); }
+  };
   // Tables et index : au démarrage, et redemandés au passage suivant tant que la base les refuse (bloquée pour la journée).
   const preparer = () => (prete ? Promise.resolve() : cf.preparer().then(() => { prete = true; }));
   async function passage({ tout = false } = {}) {
@@ -166,8 +176,8 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
     occupe = true;
     try {
       await preparer();
-      // La liste des fichiers en ligne : lue une fois, puis tenue à jour ici (relue chaque nuit, avec tout).
-      const { parChemin, aFaire } = await lireEtat(cf, { tout, connu: tout ? null : connu });
+      // La liste des fichiers en ligne : lue une fois (disque, sinon celle publiée), puis tenue à jour ici.
+      const { parChemin, aFaire } = await lireEtat(cf, { tout, connu, disque: lireDisque });
       connu = parChemin;
       for (const c of enAttente.keys()) aFaire.delete(c);
       const fait = await dessinerTout([...aFaire], (c) => dessinerStatique(afficheDesPassages, BASE, c), parChemin, { enMemeTemps: Number(env.EN_MEME_TEMPS) || 4 });
@@ -183,8 +193,9 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
       // Première publication : l'adresse du serveur et la clé pour le Worker (gardées ensuite d'une publication à l'autre).
       const liaisons = etat.liaisonsPosees || !env.SERVEUR_URL ? [] : [
         { type: "plain_text", name: "SERVEUR", text: env.SERVEUR_URL }, { type: "secret_text", name: "RELAIS_KEY", text: env.RELAIS_KEY }];
-      const pub = await publierEtEnregistrer(cf, parChemin, fait.nouveaux, { ...fait, liaisons });
+      const pub = await publierEtEnregistrer(cf, parChemin, fait.nouveaux, { ...fait, liaisons, liste });
       if (pub.publie) {
+        ecrireDisque(parChemin);
         etat.liaisonsPosees = true;
         etat.publiees += pub.envoyes;
         etat.dernierePublication = new Date(horloge()).toISOString();
@@ -212,7 +223,8 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
           .catch((e) => console.error(`liaison du Worker : ${e.message}`));
       }
       preparer().then(() => cf.signaler("serveur")).catch((e) => console.error(`base : ${e.message}`));
-      minuteries.push(setInterval(() => cf.signaler("serveur").catch(() => {}), 60000));
+      // Toutes les 5 minutes (la machine GitHub attend 15 minutes sans signe) : chaque signe est une écriture en base.
+      minuteries.push(setInterval(() => cf.signaler("serveur").catch(() => {}), 5 * 60000));
       // Toutes les 3 minutes ce qui attend, et la file un tour sur cinq. Une fois par jour après 4 h 17 UTC (la photo des
       // tendances est prise à 4 h) : tout, pour les N° et statuts du jour ; retenté au tour suivant si occupé.
       // Démarré dans la journée (mise à jour, redémarrage) : la nuit est déjà faite (par lui, ou par la machine GitHub).

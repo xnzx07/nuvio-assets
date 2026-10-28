@@ -143,8 +143,8 @@ test("serveur_exige_la_cle_pour_les_affiches_statiques", async () => {
   assert.equal(etat.enAttente, 0);
 });
 
-// Publication sous verrou : verrou pris ailleurs → rien ; sinon tout ce qui est en ligne part, la file est vidée de ce
-// qui est publié.
+// Publication sous verrou : verrou pris ailleurs → rien ; sinon tout ce qui est en ligne part (avec la liste), la file
+// est vidée de ce qui est publié. Plus rien n'est écrit dans la table fichiers.
 test("publication_sous_verrou", async () => {
   const { publierEtEnregistrer } = await import("../lib/statiques.js");
   const journal = [];
@@ -159,7 +159,7 @@ test("publication_sous_verrou", async () => {
   assert.deepEqual(journal, []);
   const p = await publierEtEnregistrer(cf(true), parChemin(), new Map(), { faits: ["/maison/movie/poster/tt1.jpg"] });
   assert.equal(p.publie, true);
-  assert.deepEqual(journal, ["publié 2", "INSERT INTO", "libéré", "DELETE FROM"]);
+  assert.deepEqual(journal, ["publié 3", "libéré", "DELETE FROM"]);
 });
 
 // Redemandée à chaque passage sur la carte : une seule écriture par instance en 10 minutes, et jamais de lecture de
@@ -288,4 +288,49 @@ test("reessai_mis_en_file_meme_absent", async () => {
   assert.equal(mises[0][1].length, 100);
   assert.equal(mises[1][1].length, 20);
   assert.equal(mises[0][1][0], "/maison/movie/poster/tt0.jpg");
+});
+
+// La liste de ce qui est en ligne part avec les affiches (un de leurs fichiers, au plus toutes les 30 minutes), plus dans
+// la base : le stock plein se renouvelle chaque jour, et ses ~76 000 lignes écrites ont dépassé, le 27 octobre 2026, la
+// limite gratuite du compte (l'addon compris). Les affiches retirées sortent aussi de la mémoire.
+test("liste_publiee_avec_les_affiches", async () => {
+  const { publierEtEnregistrer, lireListe, LISTE, FICHIERS_MAX } = await import("../lib/statiques.js");
+  const publies = [], requetes = [];
+  const cf = { verrouiller: async () => true, liberer: async () => {}, sql: async (s) => { requetes.push(s); return []; },
+    publier: async (fichiers, nouveaux) => { publies.push({ fichiers, nouveaux: new Map(nouveaux) }); return 1; } };
+  const affiche = (i, change = false) => [`/maison/movie/poster/tt${i}.jpg`, { chemin: `/maison/movie/poster/tt${i}.jpg`, hash: String(i).padStart(32, "0"), taille: 3, cree: `2026-10-${String(10 + (i % 18)).padStart(2, "0")}`, change }];
+  const parChemin = new Map([affiche(1, true), affiche(2)]);
+  const liste = { entree: null, t: 0 };
+  await publierEtEnregistrer(cf, parChemin, new Map(), { liste });
+  const entree = publies[0].fichiers.find((f) => f.chemin === LISTE);
+  assert.ok(entree, "la liste est publiée");
+  const lue = lireListe(publies[0].nouveaux.get(entree.hash));
+  assert.deepEqual(lue.fichiers.map((f) => f.chemin).sort(), ["/maison/movie/poster/tt1.jpg", "/maison/movie/poster/tt2.jpg"]);
+  assert.ok(!requetes.some((s) => /fichiers/.test(s)), "rien dans la table fichiers");
+  // Moins de 30 minutes après : la même liste, pas renvoyée.
+  parChemin.get("/maison/movie/poster/tt2.jpg").change = true;
+  await publierEtEnregistrer(cf, parChemin, new Map(), { liste });
+  assert.equal(publies[1].fichiers.find((f) => f.chemin === LISTE).hash, entree.hash);
+  assert.equal(publies[1].nouveaux.size, 0);
+  // Stock plein : les plus anciennes partent, de la mémoire aussi.
+  const plein = new Map(Array.from({ length: FICHIERS_MAX + 2 }, (_, i) => affiche(i + 10, i === 0)));
+  const r = await publierEtEnregistrer(cf, plein, new Map());
+  assert.equal(r.retirees, 2);
+  assert.equal(plein.size, FICHIERS_MAX);
+  assert.equal(publies[2].fichiers.length, FICHIERS_MAX + 1);
+});
+
+// Au démarrage : la plus récente des listes (disque du serveur, publiée) ; sans aucune, l'ancienne table, une fois.
+test("liste_relue_sans_la_base", async () => {
+  const { chargerListe, contenuListe, lireListe } = await import("../lib/statiques.js");
+  const f = (i) => ({ chemin: `/maison/movie/poster/tt${i}.jpg`, hash: "a".repeat(32), taille: 3, cree: "2026-10-27" });
+  const lus = [];
+  const cf = (publiee) => ({ lireListePubliee: async () => publiee, sql: async (s) => { lus.push(s); return [f(9)]; } });
+  const disque = lireListe(contenuListe([f(1)], "2026-10-28T01:00:00Z"));
+  const publiee = lireListe(contenuListe([f(2)], "2026-10-28T00:30:00Z"));
+  assert.deepEqual((await chargerListe(cf(publiee), () => disque)).map((x) => x.chemin), ["/maison/movie/poster/tt1.jpg"]);
+  assert.deepEqual((await chargerListe(cf(publiee), () => { throw new Error("pas de fichier"); })).map((x) => x.chemin), ["/maison/movie/poster/tt2.jpg"]);
+  assert.equal(lus.length, 0);
+  assert.deepEqual((await chargerListe(cf(null))).map((x) => x.chemin), ["/maison/movie/poster/tt9.jpg"]);
+  assert.equal(lus.length, 1);
 });
