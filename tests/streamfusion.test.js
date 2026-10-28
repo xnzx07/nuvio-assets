@@ -202,7 +202,8 @@ test("lumio_plafonne_et_plafond_retenu", async () => {
     }
     return new Response("{}");
   };
-  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LUMIO_PLAFOND: "2", SF_PLAFOND: "1" };
+  // 5 au total : 3 réservés à la photo, 2 pour les affiches.
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LUMIO_PLAFOND: "5", SF_PLAFOND: "1" };
   for (const id of ["tt871", "tt872", "tt873"]) assert.equal((await (await sf(`movie/${id}`, "cle-relais", e)).json()).vf, true);
   assert.equal(appels.filter((u) => u.startsWith("https://lumio.test")).length, 2, "Lumio : 2 au plus");
   assert.ok(appels.includes("https://sf.test/c/stream/movie/tt873.json"), "le troisième chez StreamFusion");
@@ -217,7 +218,7 @@ test("lumio_plafonne_et_plafond_retenu", async () => {
   assert.equal(e.LIENS.budget.get(jour), 1);
   // Plusieurs titres d'un coup, plafond presque atteint : ce qui reste, pas rien.
   oublierAvis();
-  const f = { ...e, LUMIO_PLAFOND: "4", SF_PLAFOND: "1" };
+  const f = { ...e, LUMIO_PLAFOND: "6", SF_PLAFOND: "1" };
   appels.length = 0;
   assert.equal((await (await sf("movie/tt877", "cle-relais", f)).json()).vf, true);
   assert.equal(f.LIENS.budget.get(`lumio:${jour}`), 3);
@@ -250,4 +251,27 @@ test("torrentio_sur_pas_de_demande_au_debrideur", async () => {
   assert.deepEqual(appels, ["https://lumio.test/p/stream/movie/tt884.json"]);
   assert.equal(rangee.get("tt881").vf, true);
   assert.equal(rangee.get("tt884").vf, false);
+});
+
+// Une part de chaque plafond réservée à la photo des tendances (60 % de Lumio) : le 28 octobre, les rangées de minuit
+// avaient pris les 50 demandes Lumio et les 100 StreamFusion avant la photo de 4 h UTC, jugée par Torrentio seul.
+test("part_du_plafond_reservee_a_la_photo", async () => {
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/vf.json")) return Response.json({});
+    if (u.startsWith("https://lumio.test/p/stream/")) {
+      appels.push(u);
+      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓", url: "https://lumio.test/play/x" }] });
+    }
+    return new Response("{}");
+  };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LUMIO_PLAFOND: "5", STREAMFUSION_URL: "", AFFICHES_URL: "https://affiches.test" };
+  for (const id of ["tt891", "tt892", "tt893"]) await sf(`movie/${id}`, "cle-relais", e);
+  assert.equal(appels.length, 2, "les affiches : 2 sur 5");
+  const lus = await lireVfPhoto(e, ["movie/tt894", "movie/tt895", "movie/tt896", "movie/tt897"]);
+  assert.equal(appels.length, 5, "la photo : les 3 réservés");
+  assert.equal([...lus.values()].filter((x) => x.vf).length, 3);
+  const jour = [...e.LIENS.budget.keys()].find((k) => /^lumio:\d{4}-\d{2}-\d{2}$/.test(k));
+  assert.equal(e.LIENS.budget.get(jour), 5);
+  assert.equal(e.LIENS.budget.get(`${jour}:photo`), 3);
 });
