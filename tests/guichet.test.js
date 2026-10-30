@@ -42,11 +42,12 @@ test("programmations_toutes_pretes_valides", () => {
   assert.ok(famille.f && famille.e.includes("Horreur"));
   assert.ok(PROG.prete(D, "binge").d.every((id) => DEFS.discover.find((d) => d.id === id).type === "series"));
   assert.ok(PROG.prete(D, "anime").p.includes("283"));
+  assert.ok(PROG.prete(D, "anime").p.includes("415"));
 });
 
 test("programmation_en_3_questions", () => {
   const ids = PROVIDERS.map((p) => p.id);
-  for (const quoi of ["films", "series", "deux"]) for (const famille of [false, true]) for (const plateformes of [[], ["8"], ["8", "337", "283"], ids]) {
+  for (const quoi of ["films", "series", "deux"]) for (const famille of [false, true]) for (const plateformes of [[], ["8"], ["8", "337", "283"], ["8", "415"], ids]) {
     const st = PROG.depuisReponses(D, { quoi, famille, plateformes });
     const nom = JSON.stringify({ quoi, famille, plateformes });
     verifie(st, nom);
@@ -56,7 +57,7 @@ test("programmation_en_3_questions", () => {
     assert.ok(st.x.filter((x) => x.n.startsWith("Le meilleur de")).length <= 3, nom);
     if (quoi === "films") assert.ok(!st.r.includes("accueil-tendances-series") && st.r.includes("accueil-top10"), nom);
     if (quoi === "series") assert.ok(!st.r.includes("accueil-top10") && st.r.includes("accueil-tendances-series"), nom);
-    if (plateformes.includes("283")) assert.ok(st.r.includes("accueil-anime"), nom);
+    if (plateformes.includes("283") || plateformes.includes("415")) assert.ok(st.r.includes("accueil-anime"), nom);
   }
 });
 

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { decodeConfig, contentKey, PROVIDERS, defaults } from "../worker/config.js";
 
 const rows = [{ id: "a", home: true }];
@@ -93,9 +94,24 @@ test("plateformes_francaises_en_option", () => {
   const ids = PROVIDERS.map((p) => p.id);
   assert.deepEqual(ids.slice(0, 8), ["8", "119", "337", "531", "1899", "350", "381", "283"]);
   assert.deepEqual(PROVIDERS.slice(8).map((p) => [p.id, p.name, p.folder]),
-    [["1754", "TF1+", "tf1-plus"], ["2535", "france.tv", "france-tv"], ["147", "M6+", "m6-plus"]]);
-  assert.ok(!["1754", "2535", "147"].some((id) => defaults(rows, discover).p.includes(id)));
+    [["1754", "TF1+", "tf1-plus"], ["2535", "france.tv", "france-tv"], ["147", "M6+", "m6-plus"], ["415", "ADN", "adn"]]);
+  assert.ok(!["1754", "2535", "147", "415"].some((id) => defaults(rows, discover).p.includes(id)));
   assert.ok(decodeConfig(seg({ p: [0, 8] }), rows, discover).p.includes("1754"));
+  assert.ok(decodeConfig(seg({ p: [11] }), rows, discover).p.includes("415"));
+});
+
+test("chaque_plateforme_a_sa_tuile_et_ses_images", () => {
+  const racine = new URL("../", import.meta.url);
+  const lire = (f) => JSON.parse(readFileSync(new URL(f, racine), "utf8"));
+  const dossiers = lire("collections/collections.json").find((c) => c.id === "plateformes-streaming").folders;
+  const images = lire("assets.json").platform_tiles;
+  for (const p of PROVIDERS) {
+    const tuile = dossiers.find((f) => f.id === p.folder);
+    assert.ok(tuile, p.name);
+    assert.equal(tuile.title, p.name);
+    for (const s of tuile.sources) assert.equal(s.filters.withWatchProviders, p.id, p.name);
+    assert.ok(images.some((t) => t[0] === p.folder && t[1] === p.id), p.name);
+  }
 });
 
 test("ordre_des_plateformes_hors_cle_de_cache", () => {

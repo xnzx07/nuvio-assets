@@ -25,6 +25,8 @@ export const PROVIDERS = [
   { id: "1754", name: "TF1+", folder: "tf1-plus" },
   { id: "2535", name: "france.tv", folder: "france-tv" },
   { id: "147", name: "M6+", folder: "m6-plus" },
+  // Animation Digital Network : décochée par défaut, comme Crunchyroll.
+  { id: "415", name: "ADN", folder: "adn" },
 ];
 
 /** Collections du fichier collections.json (dans l'ordre du fichier). */

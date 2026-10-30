@@ -963,6 +963,93 @@
         "heroBackdropUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-vivantes/plateformes/m6-plus-fond.jpg",
         "heroVideoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-vivantes/plateformes/m6-plus-fond.mp4",
         "titleLogoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-vivantes/plateformes/m6-plus-titre.png"
+      },
+      {
+        "id": "adn",
+        "title": "ADN",
+        "tileShape": "LANDSCAPE",
+        "hideTitle": true,
+        "focusGifEnabled": true,
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Films populaires",
+            "mediaType": "MOVIE",
+            "sortBy": "popularity.desc",
+            "filters": {
+              "watchRegion": "FR",
+              "withWatchProviders": "415",
+              "withoutKeywords": "9716|362573"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "S\u00e9ries populaires",
+            "mediaType": "TV",
+            "sortBy": "popularity.desc",
+            "filters": {
+              "watchRegion": "FR",
+              "withWatchProviders": "415"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Nouveaux films",
+            "mediaType": "MOVIE",
+            "sortBy": "primary_release_date.desc",
+            "filters": {
+              "voteCountGte": 10,
+              "watchRegion": "FR",
+              "withWatchProviders": "415",
+              "withoutKeywords": "9716|362573"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Nouvelles s\u00e9ries",
+            "mediaType": "TV",
+            "sortBy": "first_air_date.desc",
+            "filters": {
+              "voteCountGte": 10,
+              "watchRegion": "FR",
+              "withWatchProviders": "415"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Films les mieux not\u00e9s",
+            "mediaType": "MOVIE",
+            "sortBy": "vote_average.desc",
+            "filters": {
+              "voteCountGte": 500,
+              "watchRegion": "FR",
+              "withWatchProviders": "415",
+              "withoutKeywords": "9716|362573"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "S\u00e9ries les mieux not\u00e9es",
+            "mediaType": "TV",
+            "sortBy": "vote_average.desc",
+            "filters": {
+              "voteCountGte": 200,
+              "watchRegion": "FR",
+              "withWatchProviders": "415"
+            }
+          }
+        ],
+        "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-vivantes/plateformes/adn.jpg",
+        "focusGifUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-vivantes/plateformes/adn.gif",
+        "heroBackdropUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-vivantes/plateformes/adn-fond.jpg",
+        "heroVideoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-vivantes/plateformes/adn-fond.mp4",
+        "titleLogoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-vivantes/plateformes/adn-titre.png"
       }
     ]
   },

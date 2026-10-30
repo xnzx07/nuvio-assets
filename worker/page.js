@@ -30,7 +30,7 @@ const ROW_HINTS = {
 /** Couleur d'accent de chaque plateforme (pastille et tuile de l'aperçu). */
 const PROVIDER_COLORS = {
   8: "#e50914", 119: "#1a98ff", 337: "#1b3f9c", 531: "#0064ff",
-  1899: "#7b2cff", 350: "#d9d9de", 381: "#111111", 283: "#f47521",
+  1899: "#7b2cff", 350: "#d9d9de", 381: "#111111", 283: "#f47521", 415: "#0a8cff",
 };
 
 import { STAGE_HEAD, stageTop, secretsHTML, BEAM_HTML, SEATS_HTML, CREDITS_HTML } from "./stage.js";

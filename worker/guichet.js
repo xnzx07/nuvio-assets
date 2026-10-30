@@ -94,7 +94,7 @@ export function creerProgrammations() {
         sur("Films d'animation japonais", 0, { genres: ANIMATION, l: "ja" }),
         sur("Sur Crunchyroll", 2, { plateformes: ["283"] }),
         "accueil-saison", "accueil-tendances-series", "accueil-top10",
-      ], p: [...D.defaults.p, "283"] }),
+      ], p: [...D.defaults.p, "283", "415"] }),
     },
   };
 
@@ -116,9 +116,9 @@ export function creerProgrammations() {
     const fin = quoi === "series" ? [sur("Séries les mieux notées", 1, { s: 1, v: 8 })] : ["accueil-vod-semaine", "accueil-vod-bientot", "accueil-attendus"];
     const rangees = [...tete];
     if (famille) rangees.splice(1, 0, sur("Dessins animés", t, { genres: ANIMATION }), ...(quoi === "series" ? [] : ["accueil-famille"]));
-    // Le meilleur de chaque abonnement (3 au plus : l'accueil reste lisible), et l'anime pour qui a Crunchyroll.
+    // Le meilleur de chaque abonnement (3 au plus : l'accueil reste lisible), et l'anime pour qui a Crunchyroll ou ADN.
     for (const x of choisies.slice(0, 3)) rangees.push(sur("Le meilleur de " + x.name, t, { plateformes: [x.id], s: 1 }));
-    if (choisies.some((x) => x.id === "283")) rangees.push("accueil-anime");
+    if (choisies.some((x) => x.id === "283" || x.id === "415")) rangees.push("accueil-anime");
     rangees.push(...fin);
     return programme(D, {
       rangees, p: choisies.length ? choisies.map((x) => x.id) : null,

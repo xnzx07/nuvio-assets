@@ -9,6 +9,14 @@ import { feuilles } from "./statique.js";
 
 export const NOUVEAUTES = [
   {
+    date: "2026-10-30",
+    titre: "ADN dans tes plateformes",
+    points: [
+      "Coche-la dans « Mes plateformes » : sa tuile arrive dans la collection Plateformes (titres du moment chaque lundi), et ses nouveautés dans « Nouveautés sur tes plateformes ».",
+      "Puis réimporte les collections (« Tout envoyer dans Nuvio »).",
+    ],
+  },
+  {
     date: "2026-10-27",
     titre: "Des collections qui s'ouvrent comme l'accueil",
     points: [
