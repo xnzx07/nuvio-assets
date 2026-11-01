@@ -16,6 +16,7 @@ import { qualityOf, avisDuJour, qualiteDeQ } from "../lib/qualite.js";
 import { posterContent, contentKey } from "../lib/contenu.js";
 import { etatSortie, sourcesUtiles, dispoChezSoi, estimationDe, besoinEstimation, LIBELLES_FIN } from "../lib/statut.js";
 import { lireEstimations } from "../lib/estimations.js";
+import { lireSansVf } from "../lib/sans-vf.js";
 import { lireReglages, lireReglagesPaysage, ecrireReglages } from "../lib/lien-affiches.js";
 import { notesPlus } from "../lib/notes-plus.js";
 import { noteMal } from "../lib/mal.js";
@@ -242,6 +243,13 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       }
       // Le jour à Paris, le même pour tout le calcul (statut, sources utiles).
       const aujourdhui = jourParis();
+      // Vieux film (ni récent, ni à venir) en langue étrangère : peut-être dans la liste des films sans VF. Liste pas lue à
+      // temps : l'affiche habituelle, et le cache court pour la marquer ensuite.
+      if (type === "movie" && facts.imdbId && facts.originalLanguage && !["fr", "en"].includes(facts.originalLanguage) && !sourcesUtiles(facts, aujourdhui)) {
+        const { films, manque } = await chrono.mesure("sans-vf", lireSansVf(fetchImpl, ATTENTE_ESTIMATIONS_MS));
+        facts = { ...facts, sansVf: films.has(facts.imdbId) };
+        estimationManque = estimationManque || manque;
+      }
       // Les sources (lues avec la qualité) disent si le titre est en VF : lues aussi sans le badge, pour un titre récent.
       const lireSources = qualite || langue || (env.QUALITE !== "off" && sourcesUtiles(facts, aujourdhui));
       // L'avis VF du jour de l'addon (le même que ses rangées et ses fiches), pour un titre récent : seulement sur le

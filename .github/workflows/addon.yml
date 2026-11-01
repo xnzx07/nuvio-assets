@@ -70,6 +70,14 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: python scripts/build_fenetres_vod.py
+      - name: Vieux films sans VF (« SANS VF » sur les affiches)
+        id: sansvf
+        # En échec, ce qui a été lu est gardé et la liste de la veille reste valable (bilan en rouge).
+        continue-on-error: true
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          RELAIS_KEY: ${{ secrets.RELAIS_KEY }}
+        run: python scripts/build_sans_vf.py
       - name: Enregistrer
         run: |
           git config user.name "github-actions[bot]"
@@ -84,15 +92,17 @@ jobs:
           done
           exit 1
       - name: Bilan
-        if: steps.addon.outputs.code == '3' || steps.words.outcome == 'failure' || steps.vod.outcome == 'failure'
+        if: steps.addon.outputs.code == '3' || steps.words.outcome == 'failure' || steps.vod.outcome == 'failure' || steps.sansvf.outcome == 'failure'
         env:
           CODE: ${{ steps.addon.outputs.code }}
           MOTS: ${{ steps.words.outcome }}
           VOD: ${{ steps.vod.outcome }}
+          SANSVF: ${{ steps.sansvf.outcome }}
         run: |
           [ "$CODE" != 3 ] || echo "::error::Des listes ont échoué : elles gardent leurs pages de la veille (voir addon/state.json)."
           [ "$MOTS" != failure ] || echo "::error::Vocabulaire de la recherche non refait : l'ancien reste."
           [ "$VOD" != failure ] || echo "::error::Fenêtres des distributeurs non refaites : data/estimations-vod.json de la veille reste."
+          [ "$SANSVF" != failure ] || echo "::error::Films sans VF : panne, le reste attendra demain."
           exit 1
       - name: Signaler l'échec
         if: failure()

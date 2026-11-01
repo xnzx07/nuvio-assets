@@ -30,7 +30,7 @@ export const GENRES_COMPLETS = {
   10764: "Téléréalité", 10765: "SF & Fantastique", 10766: "Feuilleton", 10767: "Talk-show",
   10768: "Guerre & Politique",
 };
-const LIBELLES_STATUT = { bientot: "BIENTÔT", salle: "AU CINÉMA", nouveau: "NOUVEAU", saison: "NOUVELLE SAISON" };
+const LIBELLES_STATUT = { bientot: "BIENTÔT", sansvf: "SANS VF", salle: "AU CINÉMA", nouveau: "NOUVEAU", saison: "NOUVELLE SAISON" };
 const LIBELLES_LANGUE = { multi: "MULTI", vf: "VF", vostfr: "VOSTFR", vo: "VO" };
 const MOIS = ["JANV.", "FÉVR.", "MARS", "AVR.", "MAI", "JUIN", "JUIL.", "AOÛT", "SEPT.", "OCT.", "NOV.", "DÉC."];
 // Seul : « DÈS LE » (dispo chez soi, date sûre), « PRÉVU VERS LE » (estimée), « PRÉVU LE » (sortie annoncée, au cinéma

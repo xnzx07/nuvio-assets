@@ -9,6 +9,14 @@ import { feuilles } from "./statique.js";
 
 export const NOUVEAUTES = [
   {
+    date: "2026-11-01",
+    titre: "« SANS VF » pour les vieux films qui n'en ont pas",
+    points: [
+      "Un vieux film que personne n'a en VF (Bad Genius) sort des rangées, et son affiche passe en noir et blanc avec « SANS VF » : il reste trouvable par la recherche. Un film n'est marqué que si toutes les sources le disent, deux fois de suite : la liste grandit un peu chaque nuit.",
+      "« Bientôt dispo » est triée sur toute la rangée : les dates les plus proches d'abord, « Aucune date » à la fin.",
+    ],
+  },
+  {
     date: "2026-10-30",
     titre: "ADN dans tes plateformes",
     points: [

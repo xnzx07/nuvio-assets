@@ -545,3 +545,10 @@ test("annonce_sans_aucune_image", () => {
   assert.deepEqual([saga.image, saga.fondLarge, saga.fondUni, saga.titreTexte], ["/saga.jpg", true, undefined, "Gladiator III"]);
   assert.equal(contenu({ ...annonce, fondSaga: "/saga.jpg" }, extra, "landscape").image, "/saga.jpg");
 });
+
+test("vieux_film_sans_vf", () => {
+  const vieux = { ...facts, originalLanguage: "th", releases: [{ iso_3166_1: "TH", release_dates: [{ type: 3, release_date: "2017-05-03" }] }], releaseDate: "2017-05-03", sansVf: true };
+  const c = contenu(vieux, plein);
+  assert.equal(c.gris, true);
+  assert.equal(c.statut, "SANS VF");
+});

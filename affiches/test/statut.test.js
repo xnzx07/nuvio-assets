@@ -364,3 +364,11 @@ test("dispo_estimee_d_apres_le_distributeur", async () => {
   assert.deepEqual(etatSortie(film(enSalle), AUJ).quand, { quoi: "dispo", date: jours(35), vers: true });
   assert.deepEqual(etatSortie(avec([pays("US", [3, jours(-10)], [4, jours(5)])], "tt1"), AUJ).quand, { quoi: "dispo", date: jours(5), vers: false });
 });
+
+// Bad Genius (2017) : un vieux film que les trois sources voient sans VF (data/sans-vf.json) : elle n'arrivera sans doute
+// jamais, donc pas « Bientôt » ; et pas sorti non plus.
+test("vieux film sans VF confirmée → pas sorti, statut sansvf", () => {
+  const vieux = film([pays("TH", [3, jours(-3000)])], jours(-3000), "th");
+  assert.deepEqual(etatSortie({ ...vieux, sansVf: true }, AUJ), { sorti: false, statut: "sansvf" });
+  assert.deepEqual(etatSortie(vieux, AUJ), { sorti: true, statut: null });
+});

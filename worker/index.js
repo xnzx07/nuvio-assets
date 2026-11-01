@@ -65,7 +65,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.47.0";
+const VERSION = "5.48.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -327,7 +327,7 @@ async function tmdb(env, path, params = {}, lang = "fr-FR") {
 const INFOS = new Map();
 const INFOS_MAX = 3000, INFOS_MS = 3 * 3600e3;
 /** Pour les tests : oublie les résumés gardés en mémoire, et la table des estimations. */
-export const oublierInfos = () => { INFOS.clear(); avisLu.clear(); oublierEstimations(); oublierCinemeta(); };
+export const oublierInfos = () => { INFOS.clear(); avisLu.clear(); SANS_VF = null; oublierEstimations(); oublierCinemeta(); };
 
 async function extraInfo(env, kind, tmdbId, budget) {
   const k = `${kind}:${tmdbId}`, memo = INFOS.get(k);
@@ -547,6 +547,30 @@ function tableVod(d) {
  * requête qui arrive pendant celle d'une autre ne l'attend pas plus de VOD_DELAI_MS (l'autre requête peut finir avant).
  * Échec : l'ancienne table sert encore, nouvel essai dans 5 minutes.
  */
+/**
+ * Les vieux films sans VF (data/sans-vf.json, scripts/build_sans_vf.py) : Set de tt…, vide tant qu'il n'est pas lu (un
+ * film jamais marqué à tort : il garde sa place habituelle). Une lecture par heure ; échec : l'ancienne liste sert encore.
+ */
+const SANS_VF_URL = `${ASSETS}/data/sans-vf.json`;
+let SANS_VF = null;       // { films, until, promesse }
+function sansVfListe() {
+  const now = Date.now();
+  if (!SANS_VF || (!SANS_VF.promesse && now >= SANS_VF.until)) {
+    const etat = { films: SANS_VF ? SANS_VF.films : new Set(), until: Infinity, promesse: null };
+    etat.promesse = fetch(SANS_VF_URL, { signal: AbortSignal.timeout(VOD_DELAI_MS), cf: { cacheTtl: 3600, cacheEverything: true } })
+      .then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      .then((d) => {
+        const lu = d && Array.isArray(d.films);
+        if (lu) etat.films = new Set(d.films);
+        etat.until = Date.now() + (lu ? VOD_MS : VOD_ECHEC_MS);
+        etat.promesse = null;
+        return etat.films;
+      });
+    SANS_VF = etat;
+  }
+  return SANS_VF.promesse || Promise.resolve(SANS_VF.films);
+}
+
 function estimationsVod() {
   const now = Date.now();
   if (!VOD || (!VOD.promesse && now >= VOD.until)) {
@@ -939,6 +963,53 @@ async function avisDuJour(env, cles, origine = "affiches") {
   return { avis, plafond: reste.length > nSf && cles.some((c) => !avis.has(c)) };
 }
 
+/**
+ * L'avis pour « SANS VF » (data/sans-vf.json) : { etat: "non" } seulement si Torrentio, Lumio et StreamFusion ont vu des
+ * sources et les ont toutes écartées pour leur langue (Bad Genius). « vf » si l'un d'eux a la VF (Chocolate : rien chez
+ * Torrentio, MULTi.VFF chez les deux autres). « doute » sinon : une réponse qui ne dit pas ça clairement ne marque rien
+ * (Locataires : « 2 sources trouvées, aucune prête chez AllDebrid » ; « Aucune source trouvée » : le site cherché était
+ * peut-être en panne). { plafond: true } : son plafond du jour atteint (voir PLAFONDS), à part de celui des rangées.
+ */
+async function avisSansVf(env, imdb) {
+  const cle = `movie/${imdb}`;
+  const torrentio = (await lireVf(env, [cle])).get(cle);
+  if (!torrentio || !(torrentio.sources > 0)) return { etat: "doute" };
+  if (torrentio.vf) return { etat: "vf" };
+  if (!env.LIENS || !(await reserver(env, "sansvf", 1, "sansvf"))) return { plafond: true };
+  const lumio = await refusLumio(env, cle);
+  if (lumio !== "non") return { etat: lumio || "doute" };
+  const sf = await refusStreamFusion(env, cle);
+  return { etat: sf || "doute" };
+}
+
+/** Les flux d'un addon de sources pour cette clé, ou null (panne, pas de lien). */
+async function fluxDe(url, cle) {
+  const base = String(url || "").trim().replace(/\/manifest\.json$/, "");
+  if (!/^https:\/\//.test(base)) return null;
+  try {
+    const res = await fetch(`${base}/stream/${cle}.json`, { signal: AbortSignal.timeout(SF_ATTENTE_MS) });
+    return res.ok ? ((await res.json()) || {}).streams || [] : null;
+  } catch (e) { return null; }
+}
+const texteFlux = (s) => `${s.name || ""} ${s.title || ""} ${s.description || ""}`;
+
+/** Lumio : « vf » (des sources), « non » (« 5 sources, mais aucune ne passe vos filtres », « Langues »), ou null. */
+async function refusLumio(env, cle) {
+  const streams = await fluxDe(env.LUMIO_URL, cle);
+  if (!streams) return null;
+  if (streams.some((s) => s.url || s.infoHash)) return "vf";
+  return streams.some((s) => /[1-9]\d*\s+sources?\b[\s\S]*ne passe/i.test(texteFlux(s)) && /langues?/i.test(texteFlux(s))) ? "non" : null;
+}
+
+/** StreamFusion : « non » (« Aucun résultat trouvé, 9 exclus… exclusion langue »), « vf » (des sources), ou null. */
+async function refusStreamFusion(env, cle) {
+  const streams = await fluxDe(env.STREAMFUSION_URL, cle);
+  if (!streams) return null;
+  const vide = streams.find((s) => /aucun r[ée]sultat/i.test(texteFlux(s)));
+  if (vide) return /[1-9]\d*\s+exclus\b/i.test(texteFlux(vide)) && /langu/i.test(texteFlux(vide)) ? "non" : null;
+  return streams.length ? "vf" : null;
+}
+
 async function lireVfStreamFusion(env, cles) {
   const base = String(env.STREAMFUSION_URL || "").trim().replace(/\/manifest\.json$/, "");
   if (!/^https:\/\//.test(base)) return new Map();
@@ -982,7 +1053,9 @@ async function lireVfStreamFusion(env, cles) {
  */
 const RESERVE_PHOTO_JUSQUA = 7;
 const reservePhotoTenue = () => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" }).format(new Date(Date.now()))) < RESERVE_PHOTO_JUSQUA;
-const PLAFONDS = { sf: ["SF_PLAFOND", 300, "", 0.4], lumio: ["LUMIO_PLAFOND", 50, "lumio:", 0.6] };
+// sansvf : les films examinés chaque nuit pour la liste « SANS VF » (avisSansVf), une ou deux demandes par film, à part
+// des plafonds des rangées et des affiches.
+const PLAFONDS = { sf: ["SF_PLAFOND", 300, "", 0.4], lumio: ["LUMIO_PLAFOND", 50, "lumio:", 0.6], sansvf: ["SANSVF_PLAFOND", 15, "sansvf:", 0] };
 const plafondsAtteints = new Set();
 const plafondCache = (cle) => new Request(`https://avis.cache/plafond/${cle}`);
 let budgetPret = null;
@@ -1156,6 +1229,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
   const vfIndex = opts.search ? {} : await (opts.vfIndex = opts.vfIndex || readVfIndex());
   // VF des sources (« Dispo depuis peu », « Bientôt dispo », « Prochainement ») : un appel pour la page.
   const sources = opts.sources || (opts.lireSources && kind === "movie" ? await sourcesVf(env, ids) : new Map());
+  const sansVfConnus = kind === "movie" ? await sansVfListe() : new Set();
   return results.map((it, i) => {
     const recent = kind === "movie" && filmRecent(infos[i].releases, today);
     const lu = recent ? avecAbonnement(sources.get(ids[i]), infos[i].abonnementVf) : null;
@@ -1168,6 +1242,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
     // Films : quand ils deviennent regardables (« Les plus attendus » : quand ils sortent au cinéma) ;
     // séries : l'épisode de la semaine.
     const note = kind !== "movie" ? episodeNote(infos[i].episode, today)
+      : sansVfConnus.has(ids[i]) ? "Sans VF"
       : opts.upcoming ? cinemaNote(infos[i].releases, opts.region, date, today)
       : releaseNote(infos[i].releases, it.original_language, today,
         lu ? { vf: lu.vf, vo: sansVf(lu) } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
@@ -1440,7 +1515,8 @@ function moitieParSelf(env, prefixe, type, id) {
 // « pour qui » compris) : de quoi garder une marge, au pire une quarantaine d'appels en tout.
 const MAX_CHECKED = 30;   // Tendances : titres examinés pour en garder 20 déjà regardables en VF
 const MAX_FILL = 8;       // « Prochainement » : titres de la page TMDB suivante pour compléter la page
-const MAX_VF = 28;        // « Dispo depuis peu », « Bientôt dispo » : candidats examinés
+const MAX_VF = 28;        // « Dispo depuis peu », « Bientôt dispo » : candidats examinés par lot
+const VF_LOTS = 3, VF_PAGES_TMDB = 3;   // et les lots d'une rangée, lus sur ces pages de TMDB
 const CINEMETA_PAR_PAGE = 3;   // saisons d'animes recomptées (lireInfo) : appels à Cinemeta au plus, la mémoire en plus
 async function fetchReleasedPage(env, ctx, def, kind, page, today, opts) {
   // Dans l'ordre de la photo du jour (celle des « N° » des affiches maison), sinon de TMDB.
@@ -1512,7 +1588,10 @@ async function filmsRegardables(env, released, today, max, lire = lireVf) {
   }
   const recent = (it) => !!infos.get(it.id).releases && filmRecent(infos.get(it.id).releases, today);
   const sources = await sourcesVf(env, picked.filter(recent).map((it) => infos.get(it.id).imdb), lire);
+  // Retiré ici, pas seulement de la page (catalog) : son N° laisserait un trou dans les Tendances.
+  const sansVfConnus = await sansVfListe();
   picked = picked.filter((it) => {
+    if (sansVfConnus.has(infos.get(it.id).imdb)) return false;
     if (!recent(it)) return true;
     const info = infos.get(it.id);
     if (sansImdb(info, it)) return false;
@@ -1664,40 +1743,98 @@ async function fetchUpcomingPage(env, ctx, kind, page, today, opts) {
  * fenêtre) ramènent de quoi trier : c'est la date de dispoChezSoi qui décide ensuite.
  */
 async function fetchVfPage(env, ctx, def, kind, page, today, opts) {
+  const rangee = await rangeeVf(env, ctx, def, kind, today, opts);
+  return rangee.slice((page - 1) * PAGE, page * PAGE);
+}
+
+/**
+ * La rangée entière, triée, puis coupée en pages (fetchVfPage). Avant, chaque page de TMDB était triée à part : « Aucune
+ * date » (Buddy) passait avant « Dispo le 10 nov. » (Malfaisante, page suivante), et Crawlers revenait dans deux pages.
+ * Gardée comme une page de catalogue. Une fiche manquante (page incomplète) : pas gardée, relue à la page suivante.
+ */
+async function rangeeVf(env, ctx, def, kind, today, opts) {
+  const cle = new Request(`https://rangee.cache/${CACHE_V}/${today}/${def.id}?k=${await sha(contentKey(opts.cfg))}`);
+  const hit = await caches.default.match(cle).catch(() => null);
+  const gardee = hit ? await hit.json().catch(() => null) : null;
+  if (Array.isArray(gardee)) return gardee;
+  const avant = opts.bilan ? opts.bilan.rates : 0;
+  const metas = await trierRangeeVf(def, today, await fichesEnLots(env, ctx, await candidatsVf(env, def, kind, today, opts), kind, opts, today));
+  if (metas.length && !(opts.bilan && opts.bilan.rates > avant)) {
+    ctx.waitUntil(caches.default.put(cle, new Response(JSON.stringify(metas), { headers: { "Cache-Control": `public, max-age=${CACHE_CATALOG_S}` } })));
+  }
+  return metas;
+}
+
+/** Les films à examiner, de la popularité la plus forte à la plus faible : VF_LOTS lots de MAX_VF au plus. */
+async function candidatsVf(env, def, kind, today, opts) {
   const future = def.digital[0] > 0;
   // Filtres de la config (genres masqués, note mini, famille…) appliqués comme ailleurs.
-  const base = { ...discoverParams(def, kind, today, opts), page };
+  const base = discoverParams(def, kind, today, opts);
   base["primary_release_date.gte"] = maxDate(base["primary_release_date.gte"], addDays(today, -365));
-  const reqs = [tmdb(env, "/discover/movie", { ...base, with_release_type: "4",
-    "release_date.gte": addDays(today, def.digital[0]), "release_date.lte": addDays(today, def.digital[1]) }, opts.lang)];
-  // Sorties en salle dont la sortie chez soi (annoncée ou estimée) peut tomber dans la fenêtre : de la plus longue à la
-  // plus courte fenêtre des distributeurs (la même table que dispoChezSoi, déjà lue pour les fiches de la page). Pour
-  // « Dispo depuis peu » aussi : la recherche de TMDB ignore une sortie numérique ajoutée le jour même (Verity, le 27
-  // octobre) ; la date de la fiche décide ensuite.
   const [court, long] = bornesVod(await estimationsVod());
-  reqs.push(tmdb(env, "/discover/movie", { ...base, with_release_type: "3|2",
-    "release_date.gte": addDays(today, def.digital[0] - long), "release_date.lte": addDays(today, def.digital[1] - court) }, opts.lang));
-  // « Bientôt dispo » : aussi les films déjà sortis chez soi (depuis moins de 90 jours) mais pas encore en VF, d'après
-  // leurs sources (The Weight) — la fiche dit « Pas encore en VF » : ils ont leur place ici, à la fin.
-  if (future) reqs.push(tmdb(env, "/discover/movie", { ...base, with_release_type: "4",
-    "release_date.gte": addDays(today, -90), "release_date.lte": today }, opts.lang));
+  const numeriques = [], autres = [];
+  for (let page = 1; page <= VF_PAGES_TMDB; page++) {
+    const parPage = { ...base, page };
+    const reqs = [tmdb(env, "/discover/movie", { ...parPage, with_release_type: "4",
+      "release_date.gte": addDays(today, def.digital[0]), "release_date.lte": addDays(today, def.digital[1]) }, opts.lang)];
+    // Sorties en salle dont la sortie chez soi (annoncée ou estimée) peut tomber dans la fenêtre : de la plus longue à la
+    // plus courte fenêtre des distributeurs (la même table que dispoChezSoi, déjà lue pour les fiches de la page). Pour
+    // « Dispo depuis peu » aussi : la recherche de TMDB ignore une sortie numérique ajoutée le jour même (Verity, le 27
+    // octobre) ; la date de la fiche décide ensuite.
+    reqs.push(tmdb(env, "/discover/movie", { ...parPage, with_release_type: "3|2",
+      "release_date.gte": addDays(today, def.digital[0] - long), "release_date.lte": addDays(today, def.digital[1] - court) }, opts.lang));
+    // « Bientôt dispo » : aussi les films déjà sortis chez soi (depuis moins de 90 jours) mais pas encore en VF, d'après
+    // leurs sources (The Weight) — la fiche dit « Pas encore en VF » : ils ont leur place ici, à la fin.
+    if (future) reqs.push(tmdb(env, "/discover/movie", { ...parPage, with_release_type: "4",
+      "release_date.gte": addDays(today, -90), "release_date.lte": today }, opts.lang));
+    const lists = await Promise.all(reqs);
+    numeriques.push(lists[0]);
+    autres.push(...lists.slice(1));
+    if (lists.every((d) => !(d.total_pages > page))) break;
+  }
   // « Bientôt » : aussi les films des tendances encore au cinéma (retirés des Tendances), que
   // « discover » laisse parfois passer (trop peu de votes). Pas avec des filtres : les tendances
   // n'en acceptent pas.
-  const trending = future && page === 1 && !opts.filtered;
-  if (trending) [1, 2].forEach((p) => reqs.push(tmdb(env, "/trending/movie/week", { page: p }, opts.lang)));
-  const lists = await Promise.all(reqs);
-  if (trending) lists.slice(-2).forEach((d) => {
-    d.results = (d.results || []).filter((it) => it.release_date && it.release_date <= today && it.release_date >= addDays(today, -120));
-  });
+  if (future && !opts.filtered) {
+    const tendances = await Promise.all([1, 2].map((p) => tmdb(env, "/trending/movie/week", { page: p }, opts.lang)));
+    tendances.forEach((d) => autres.push({ results: (d.results || []).filter((it) => it.release_date && it.release_date <= today && it.release_date >= addDays(today, -120)) }));
+  }
   const seen = new Set(), merged = [];
   const parPopularite = (l) => l.flatMap((d) => d.results || []).sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-  // « Dispo depuis peu » : les sorties numériques de la fenêtre d'abord, les sorties en salle ensuite (MAX_VF candidats
-  // au plus : des films encore au cinéma, plus populaires, en chassaient L'Île des Souvenirs).
-  (future ? parPopularite(lists) : [...parPopularite(lists.slice(0, 1)), ...parPopularite(lists.slice(1))])
+  // « Dispo depuis peu » : les sorties numériques de la fenêtre d'abord, les sorties en salle ensuite (des films encore
+  // au cinéma, plus populaires, en chassaient L'Île des Souvenirs).
+  (future ? parPopularite([...numeriques, ...autres]) : [...parPopularite(numeriques), ...parPopularite(autres)])
     .forEach((it) => { if (!seen.has(it.id)) { seen.add(it.id); merged.push(it); } });
-  if (!merged.length) return [];
-  const metas = await toMetas(env, ctx, merged.slice(0, MAX_VF), kind, { ...opts, lireSources: true }, today);
+  return merged.slice(0, MAX_VF * VF_LOTS);
+}
+
+/**
+ * Les fiches des candidats (champs internes compris), par lots de MAX_VF : chaque lot dans un appel de l'addon à lui-même
+ * (liaison SELF, /rangee/lot : son budget de 50 appels sortants), sinon ici même (Docker, sans limite).
+ */
+async function fichesEnLots(env, ctx, films, kind, opts, today) {
+  const lots = [];
+  for (let i = 0; i < films.length; i += MAX_VF) lots.push(films.slice(i, i + MAX_VF));
+  const lus = await Promise.all(lots.map(async (items) => {
+    if (env.SELF) {
+      try {
+        const res = await env.SELF.fetch("https://self/rangee/lot", { method: "POST", headers: { "Content-Type": "application/json", "x-tri": await triCle(env) },
+          body: JSON.stringify({ items, region: opts.region, today }) });
+        if (res.ok) {
+          const d = await res.json();
+          if (opts.bilan) { opts.bilan.vus += d.vus || 0; opts.bilan.rates += d.rates || 0; }
+          return d.metas;
+        }
+      } catch (e) { /* ici même */ }
+    }
+    return toMetas(env, ctx, items, kind, { ...opts, lireSources: true }, today);
+  }));
+  return lus.flat();
+}
+
+/** Ceux de la fenêtre, dans l'ordre de la rangée, sans les champs internes. */
+function trierRangeeVf(def, today, metas) {
+  const future = def.digital[0] > 0;
   const from = addDays(today, def.digital[0]), to = addDays(today, def.digital[1]);
   // « Dispo depuis peu » : une date estimée passée compte si les sources confirment la VF (la fiche TMDB, gardée un jour,
   // peut ne pas encore avoir la sortie numérique : Verity le 27 octobre).
@@ -1707,9 +1844,8 @@ async function fetchVfPage(env, ctx, def, kind, page, today, opts) {
     .filter((m) => future || m._vf)   // « Dispo depuis peu » : seulement ceux qui ont sûrement une VF
     // « Bientôt dispo » : sans ceux déjà regardables en VF (sources VF, ou plateforme en France : date TMDB en retard).
     .filter((m) => !(future && m._dejaVf))
-    .sort((a, b) => (future ? (a._vo !== b._vo ? (a._vo ? 1 : -1) : when(a) < when(b) ? -1 : 1) : (when(a) > when(b) ? -1 : 1)))
-    // Une page au plus (voir pageOf) : les dates les plus proches d'abord.
-    .slice(0, PAGE)
+    // « Bientôt dispo » : les dates les plus proches d'abord, « Aucune date » à la fin.
+    .sort((a, b) => (future ? (a._vo !== b._vo ? (a._vo ? 1 : -1) : when(a) === when(b) ? 0 : when(a) < when(b) ? -1 : 1) : when(a) === when(b) ? 0 : when(a) > when(b) ? -1 : 1))
     .map(sansInternes);
 }
 
@@ -1901,7 +2037,11 @@ const pageOf = (skip, size) => Math.ceil(Math.max(0, skip) / size) + 1;
 async function catalog(env, ctx, type, id, extra, today, cfg, prefixe = "") {
   // Fiches TMDB de la page (extraInfo) et celles restées sans réponse (limite d'appels de TMDB, panne).
   const bilan = { vus: 0, rates: 0 };
-  const metas = await catalogPage(env, ctx, type, id, extra, today, cfg, bilan, prefixe);
+  const lues = await catalogPage(env, ctx, type, id, extra, today, cfg, bilan, prefixe);
+  // Les vieux films sans VF (sansVfListe) : hors des rangées, trouvables par la recherche seulement.
+  const sansVfConnus = type === "movie" && !extra.search ? await sansVfListe() : new Set();
+  const metas = sansVfConnus.size ? lues.filter((m) => !sansVfConnus.has(m.imdb_id)) : lues;
+  metas.partial = lues.partial;
   // Plus d'une sur dix sans ses infos (IMDb, dates, logo, bande-annonce) : page incomplète, gardée 5 min seulement.
   if (metas.length && bilan.rates > bilan.vus / 10) metas.degrade = true;
   return metas;
@@ -2272,7 +2412,8 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
   ]);
   // En VO seulement (comme pas sorti : seule la VF compte) : d'après les sources seulement (voir releaseNote).
   const etat = lu ? { vf: lu.vf, vo: sansVf(lu) } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
-  const note = movie ? releaseNote(releases, d.original_language, today, etat, vod) : await noteSerie(env, d, imdb, wp, today);
+  const note = movie && (await sansVfListe()).has(imdb) ? "Sans VF"
+    : movie ? releaseNote(releases, d.original_language, today, etat, vod) : await noteSerie(env, d, imdb, wp, today);
   // La même date que l'affiche et les rangées : la sortie numérique américaine (dispoChezSoi), ou son estimation.
   const dispo = movie ? dispoChezSoi(releases, d.original_language, vod).date : "";
   const shownDate = dispo && dispo > today ? dispo : date;
@@ -2724,7 +2865,7 @@ function json(data, maxAge) {
   });
 }
 
-const RESERVED = new Set(["manifest.json", "catalog", "configure", "collections.json", "accueil.json", "guide", "tv", "trailer", "lien", "meta", "logo.png", "debug", "affiche", "prefetch", "dossier", "hote", "statique", "copie", "lien-fixe", "tendances", "sf", "avis", "saison.json", "seance", "diagnostic", "nouveautes", "cpu", "reserve", "compte-nuvio"]);
+const RESERVED = new Set(["manifest.json", "catalog", "configure", "collections.json", "accueil.json", "guide", "tv", "trailer", "lien", "meta", "logo.png", "debug", "affiche", "prefetch", "dossier", "hote", "statique", "copie", "lien-fixe", "tendances", "sf", "avis", "rangee", "sans-vf", "saison.json", "seance", "diagnostic", "nouveautes", "cpu", "reserve", "compte-nuvio"]);
 
 async function loadCollections() {
   const res = await fetch(`${ASSETS}/collections/collections.json`, { cf: { cacheTtl: 600, cacheEverything: true } });
@@ -3088,6 +3229,25 @@ const app = {
       const body = await request.json().catch(() => ({}));
       const cles = (Array.isArray(body.cles) ? body.cles : []).filter((c) => typeof c === "string" && CLE_AVIS.test(c)).slice(0, SF_MAX);
       return json({ avis: Object.fromEntries((await avisDuJour(env, cles, "rangees")).avis) }, 0);
+    }
+    // Un lot de fiches d'une rangée « Dispo depuis peu » ou « Bientôt dispo » (appel de l'addon à lui-même, voir fichesEnLots).
+    if (path === "/rangee/lot" && request.method === "POST") {
+      if (!same(request.headers.get("x-tri") || "", await triCle(env))) return json({ error: "interdit" }, 0);
+      const body = await request.json().catch(() => ({}));
+      const items = (Array.isArray(body.items) ? body.items : []).filter((it) => it && Number.isInteger(it.id) && it.id > 0).slice(0, MAX_VF);
+      const bilan = { vus: 0, rates: 0 };
+      const metas = await toMetas(env, ctx, items, "movie", { region: body.region, bilan, lireSources: true }, /^\d{4}-\d{2}-\d{2}$/.test(body.today || "") ? body.today : parisToday());
+      return json({ metas, ...bilan }, 0);
+    }
+    // L'avis pour la liste des films sans VF (scripts/build_sans_vf.py, avec la clé du relais).
+    if (path === "/sans-vf/avis" && request.method === "POST") {
+      const entete = { ...HEADERS, "Cache-Control": "no-store" };
+      if (!env.RELAIS_KEY || (await sha256(request.headers.get("X-Relais-Cle") || "")) !== (await sha256(env.RELAIS_KEY))) {
+        return new Response(JSON.stringify({ error: "refusé" }), { status: 403, headers: entete });
+      }
+      const body = await request.json().catch(() => ({}));
+      if (!/^tt\d{1,10}$/.test(body.imdb || "")) return new Response(JSON.stringify({ etat: "doute" }), { headers: entete });
+      return new Response(JSON.stringify(await avisSansVf(env, body.imdb)), { headers: entete });
     }
     if (path === "/tendances/tri" && request.method === "POST") {
       if (!same(request.headers.get("x-tri") || "", await triCle(env))) return json({ error: "interdit" }, 0);

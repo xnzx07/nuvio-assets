@@ -144,7 +144,8 @@ test("page_incomplete_gardee_peu_de_temps", async () => {
   assert.match([...gardes.values()][0], /max-age=300 partiel$/);
 });
 
-// « Dispo depuis peu » : 3 titres sur la page 1. Nuvio demande ensuite skip = 3 : c'est la page 2 de TMDB, pas la 1.
+// « Dispo depuis peu » : la rangée entière d'abord, lue sur les 3 premières pages de TMDB ; moins d'une page d'addon :
+// Nuvio demande ensuite skip = 9, la page 2, vide.
 test("rangee_triee_apres_coup_page_suivante", async () => {
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const pages = [];
@@ -161,10 +162,9 @@ test("rangee_triee_apres_coup_page_suivante", async () => {
     return new Response(JSON.stringify({ results: [] }));
   };
   const noms = async (path) => (await (await get(path)).json()).metas.map((m) => m.name);
-  assert.deepEqual(await noms("/catalog/movie/accueil-vod-semaine.json"), ["F1-1", "F1-2", "F1-3"]);
-  assert.deepEqual(await noms("/catalog/movie/accueil-vod-semaine/skip=3.json"), ["F2-1", "F2-2", "F2-3"]);
-  // Deux recherches par page (sorties numériques, sorties en salle) : toujours la même page TMDB.
-  assert.deepEqual([...new Set(pages)], [1, 2]);
+  assert.deepEqual(await noms("/catalog/movie/accueil-vod-semaine.json"), ["F1-1", "F2-1", "F3-1", "F1-2", "F2-2", "F3-2", "F1-3", "F2-3", "F3-3"]);
+  assert.deepEqual(await noms("/catalog/movie/accueil-vod-semaine/skip=9.json"), []);
+  assert.deepEqual([...new Set(pages)], [1, 2, 3]);
 });
 
 // ---------- budget d'appels (50 par requête chez Cloudflare) ----------
@@ -230,8 +230,9 @@ test("rangee_melangee_sans_self_lue_ici", async () => {
   assert.equal(n.self.length, 0);
 });
 
-// Au pire 38 (appels sortants, SELF et cache comptés) : de quoi relire un lien fixe (cache, base) sous 40. Dont un pour
-// la table des estimations (data/estimations-vod.json), lue au plus une fois par requête, gardée ensuite une heure.
+// Au pire 39 (appels sortants, SELF et cache comptés), loin des 50 permis. Dont un pour la table des estimations
+// (data/estimations-vod.json) et un pour les films sans VF (data/sans-vf.json), lues au plus une fois par requête,
+// gardées ensuite une heure.
 test("budget_pire_cas_des_rangees", async () => {
   for (const path of ["/catalog/movie/accueil-top10.json", "/catalog/movie/accueil-vod-bientot.json", "/catalog/movie/accueil-vod-semaine.json",
     "/catalog/movie/films-cinema/genre=Prochainement.json", "/catalog/movie/accueil-attendus.json", "/catalog/series/accueil-series-a-devorer.json"]) {
@@ -239,7 +240,7 @@ test("budget_pire_cas_des_rangees", async () => {
     oublierInfos();
     const n = compteur();
     const { metas } = await (await get(cle + path, avecSelf(n))).json();
-    assert.ok(n.sortants + n.cache <= 38, `${path} : ${n.sortants} appels sortants + ${n.cache} accès au cache`);
+    assert.ok(n.sortants + n.cache <= 39, `${path} : ${n.sortants} appels sortants + ${n.cache} accès au cache`);
     if (path.includes("top10")) assert.ok(metas.length > 0 && n.sortants >= 33, `${path} : pire cas pas atteint (${n.sortants})`);
   }
 });

@@ -1385,3 +1385,154 @@ test("fiches_tmdb_des_rangees_gardees_trois_heures", async () => {
   await get("/catalog/movie/accueil-vod-semaine.json");
   assert.ok(ttl.length && ttl.every((s) => s === 3 * 3600), JSON.stringify(ttl));
 });
+
+// Le tri de « Bientôt dispo » : toute la rangée d'abord, puis les pages. Avant, chaque page de TMDB était triée à part :
+// « Aucune date » (Buddy, The Fix) passait avant « Dispo le 10 nov. » (Malfaisante, page suivante), et un film présent
+// dans deux pages revenait deux fois (Crawlers).
+const rangeeFiches = new Map();
+const jourDans = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+const rangeeSurPages = (pages, lus = {}) => async (url) => {
+  const u = String(url);
+  calls.push(u);
+  if (u.includes("/vf.json")) return sourcesDe(lus)(u);
+  const q = new URL(u).searchParams;
+  if (u.includes("/discover/movie") && q.get("with_release_type") === "4" && q.get("release_date.gte") >= jourDans(0)) {
+    const p = Number(q.get("page")) || 1;
+    return new Response(JSON.stringify({ results: pages[p - 1] || [], page: p, total_pages: pages.length }));
+  }
+  const m = /\/movie\/(\d+)\?/.exec(u);
+  if (m) return new Response(JSON.stringify(rangeeFiches.get(Number(m[1])) || {}));
+  return new Response(JSON.stringify({ results: [], page: 1, total_pages: 1 }));
+};
+const aVenir = (id, dans) => {
+  rangeeFiches.set(id, filmVod(id, "en", [["US", 3, jourDans(-20)], ["US", 4, jourDans(dans)]]));
+  return { id, title: `Film ${id}`, original_language: "en", release_date: jourDans(-20), popularity: 100 - id };
+};
+
+test("bientot_dispo_trie_toute_la_rangee_pas_page_par_page", async () => {
+  rangeeFiches.clear();
+  const sansDate = { id: 1, title: "Film 1", original_language: "en", release_date: jourDans(-35), popularity: 99 };
+  rangeeFiches.set(1, filmVod(1, "en", [["US", 4, jourDans(-1)]]));
+  globalThis.fetch = rangeeSurPages([[sansDate, aVenir(2, 30)], [aVenir(3, 5), aVenir(4, 10)]], { tt901: { vf: false, sources: 47 } });
+  const { metas } = await (await get("/catalog/movie/accueil-vod-bientot.json")).json();
+  assert.deepEqual(metas.map((m) => m.name), ["Film 3", "Film 4", "Film 2", "Film 1"]);
+  assert.match(metas[3].description || "", /Aucune date/);
+});
+
+test("bientot_dispo_pages_de_la_rangee_sans_doublon", async () => {
+  rangeeFiches.clear();
+  const films = Array.from({ length: 25 }, (_, i) => aVenir(i + 1, 26 - i));
+  globalThis.fetch = rangeeSurPages([films.slice(0, 20), films.slice(5)]);
+  const page1 = (await (await get("/catalog/movie/accueil-vod-bientot.json")).json()).metas;
+  const page2 = (await (await get("/catalog/movie/accueil-vod-bientot/skip=20.json")).json()).metas;
+  assert.equal(page1.length, 20);
+  assert.equal(page2.length, 5);
+  assert.equal(new Set([...page1, ...page2].map((m) => m.name)).size, 25);
+  assert.equal(page1[0].name, "Film 25");
+  assert.equal(page2[4].name, "Film 1");
+});
+
+// Une rangée de plusieurs lots : chaque lot dans un appel de l'addon à lui-même (son budget de 50 appels sortants).
+test("bientot_dispo_lots_par_appel_a_lui_meme", async () => {
+  rangeeFiches.clear();
+  const films = Array.from({ length: 30 }, (_, i) => aVenir(i + 1, 31 - i));
+  globalThis.fetch = rangeeSurPages([films]);
+  const lots = [];
+  const envSelf = { ...env, SELF: { fetch: (req, init) => {
+    lots.push(JSON.parse(init.body).items.length);
+    return worker.fetch(new Request(req, init), env, ctx);
+  } } };
+  const res = await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-bientot.json"), envSelf, ctx);
+  const { metas } = await res.json();
+  assert.deepEqual(lots.sort((a, b) => b - a), [28, 2]);
+  assert.equal(metas[0].name, "Film 30");
+  assert.ok(!metas.some((m) => "_vo" in m));
+});
+
+test("lot_de_rangee_refuse_sans_la_cle", async () => {
+  const res = await at("https://x/rangee/lot", { method: "POST", body: JSON.stringify({ kind: "movie", items: [] }) });
+  assert.deepEqual(await res.json(), { error: "interdit" });
+});
+
+// « SANS VF » : data/sans-vf.json (scripts/build_sans_vf.py), les films que Torrentio, Lumio et StreamFusion ont tous
+// vus sans VF. Hors des rangées, mais trouvables par la recherche, avec « Sans VF » sur la fiche.
+const SANS_VF_URL = "/data/sans-vf.json";
+const avecListeSansVf = (suite) => async (url) => (String(url).includes(SANS_VF_URL)
+  ? new Response(JSON.stringify({ films: ["tt901"] })) : suite(url));
+const vieuxThai = (id) => {
+  rangeeFiches.set(id, filmVod(id, "th", [["TH", 3, "2017-05-03"]]));
+  return { id, title: `Film ${id}`, original_language: "th", release_date: "2017-05-03", popularity: 9, vote_count: 500, poster_path: "/a.jpg" };
+};
+
+test("sans_vf_hors_des_rangees_mais_dans_la_recherche", async () => {
+  rangeeFiches.clear();
+  const liste = [vieuxThai(1), vieuxThai(2)];
+  globalThis.fetch = avecListeSansVf(async (url) => {
+    const m = /\/movie\/(\d+)\?/.exec(String(url));
+    if (m) return new Response(JSON.stringify(rangeeFiches.get(Number(m[1])) || {}));
+    return new Response(JSON.stringify({ results: liste, page: 1, total_pages: 1 }));
+  });
+  const { metas } = await (await get("/catalog/movie/accueil-top10.json")).json();
+  assert.deepEqual(metas.map((m) => m.name), ["Film 2"]);
+  const trouves = (await (await get("/catalog/movie/recherche-films/search=film.json")).json()).metas;
+  assert.ok(trouves.some((m) => m.name === "Film 1" && /Sans VF/.test(m.description || "")));
+});
+
+test("sans_vf_sur_la_fiche", async () => {
+  globalThis.fetch = avecListeSansVf(async (url) => {
+    const u = String(url);
+    if (u.includes("/find/tt901")) return new Response(JSON.stringify({ movie_results: [{ id: 1 }] }));
+    if (/\/movie\/\D*(1|tt901)\?/.test(u)) return new Response(JSON.stringify({ ...filmVod(1, "th", [["TH", 3, "2017-05-03"]]), title: "Bad Genius", release_date: "2017-05-03", overview: "Résumé" }));
+    return new Response(JSON.stringify({ results: [] }));
+  });
+  const { meta } = await (await get("/meta/movie/tt901.json")).json();
+  assert.match(meta.description, /Sans VF/);
+});
+
+// L'avis pour « SANS VF » : les trois sources doivent le dire. Le moindre doute (panne, sources pas prêtes) : rien.
+const avisSansVf = async (reponses, envPlus = {}) => {
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/vf.json")) return new Response(JSON.stringify({ "movie/tt1": reponses.torrentio }));
+    if (u.startsWith("https://lumio.test")) return new Response(JSON.stringify({ streams: reponses.lumio }));
+    if (u.startsWith("https://sf.test")) return new Response(JSON.stringify({ streams: reponses.sf }));
+    return new Response("{}");
+  };
+  const e = { ...env, LIENS: fakeD1(), RELAIS_KEY: "cle", LUMIO_URL: "https://lumio.test", STREAMFUSION_URL: "https://sf.test", ...envPlus };
+  const res = await worker.fetch(new Request("https://x/sans-vf/avis", { method: "POST", headers: { "X-Relais-Cle": "cle" }, body: JSON.stringify({ imdb: "tt1" }) }), e, ctx);
+  return res.json();
+};
+const REFUS_LUMIO = [{ name: "⚙️ Lumio", description: "5 sources,\nmais aucune ne passe vos filtres\nAssouplissez « Langues » dans les réglages du profil." }];
+const REFUS_SF = [{ name: "🚩 Stream-Fusion", title: "Aucun résultat trouvé, 9 exclus en raison du ou des paramètre(s) suivant(s) : exclusion langue", url: "https://sf.test/x" }];
+const SOURCE = [{ name: "[AD⚡️] Lumio 1080p", title: "Film.MULTI.VFF.1080p", url: "https://a.test/f" }];
+const TORRENTIO_NON = { vf: false, sources: 22 };
+
+test("avis_sans_vf_les_trois_sources_d_accord", async () => {
+  assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: REFUS_LUMIO, sf: REFUS_SF }), { etat: "non" });
+});
+// Chocolate : rien chez Torrentio, une vraie VF chez Lumio et StreamFusion.
+test("avis_sans_vf_une_source_a_la_vf", async () => {
+  assert.deepEqual(await avisSansVf({ torrentio: { vf: true, sources: 3 }, lumio: REFUS_LUMIO, sf: REFUS_SF }), { etat: "vf" });
+  assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: SOURCE, sf: REFUS_SF }), { etat: "vf" });
+  assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: REFUS_LUMIO, sf: SOURCE }), { etat: "vf" });
+});
+// Locataires : « 2 sources trouvées, aucune prête chez AllDebrid » n'est pas un refus. « Aucune source trouvée », sans
+// source vue ni écartée, non plus : le site cherché était peut-être en panne.
+test("avis_sans_vf_le_doute_ne_marque_rien", async () => {
+  const pasPrete = [{ name: "⏳ Lumio", title: "2 sources trouvées, aucune prête chez AllDebrid" }];
+  const rienLumio = [{ name: "🔴 Lumio", title: "Aucune source trouvée" }];
+  const rienSf = [{ name: "🚩 Stream-Fusion", title: "Aucun résultat trouvé", url: "https://sf.test/x" }];
+  assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: pasPrete, sf: REFUS_SF }), { etat: "doute" });
+  assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: rienLumio, sf: REFUS_SF }), { etat: "doute" });
+  assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: REFUS_LUMIO, sf: rienSf }), { etat: "doute" });
+  assert.deepEqual(await avisSansVf({ torrentio: null, lumio: REFUS_LUMIO, sf: REFUS_SF }), { etat: "doute" });
+  assert.deepEqual(await avisSansVf({ torrentio: { vf: false, sources: 0 }, lumio: REFUS_LUMIO, sf: REFUS_SF }), { etat: "doute" });
+  assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: REFUS_LUMIO, sf: REFUS_SF }, { STREAMFUSION_URL: "" }), { etat: "doute" });
+});
+test("avis_sans_vf_son_propre_plafond", async () => {
+  assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: REFUS_LUMIO, sf: REFUS_SF }, { LIENS: null }), { plafond: true });
+});
+test("avis_sans_vf_refuse_sans_la_cle", async () => {
+  const res = await worker.fetch(new Request("https://x/sans-vf/avis", { method: "POST", body: JSON.stringify({ imdb: "tt1" }) }), { ...env, RELAIS_KEY: "cle" }, ctx);
+  assert.equal(res.status, 403);
+});

@@ -19,6 +19,7 @@ SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import build_imdb_ratings as ratings  # noqa: E402
+import build_sans_vf as sansvf  # noqa: E402
 import build_search_words as words  # noqa: E402
 import update_addon as ua  # noqa: E402
 
@@ -61,6 +62,56 @@ class TMDB(unittest.TestCase):
     def test_titre_disparu_reste_vide(self):
         with mock.patch.object(ua.urllib.request, "urlopen", side_effect=http_error(404)):
             self.assertEqual(ua.tmdb("/movie/1"), {})
+
+
+class SansVf(unittest.TestCase):
+    def test_deux_non_d_affilee_pour_entrer_dans_la_liste(self):
+        suivi = {}
+        sansvf.noter(suivi, "tt1", 1, "non", "2026-11-01")
+        self.assertEqual(sansvf.films_de(suivi), [])
+        sansvf.noter(suivi, "tt1", 1, "non", "2026-11-03")
+        self.assertEqual(sansvf.films_de(suivi), ["tt1"])
+
+    def test_un_doute_retire_de_la_liste_et_repart_de_zero(self):
+        suivi = {"tt1": {"id": 1, "e": "non", "j": "2026-09-01", "n": 2}}
+        sansvf.noter(suivi, "tt1", 1, "doute", "2026-11-01")
+        self.assertEqual(sansvf.films_de(suivi), [])
+        sansvf.noter(suivi, "tt1", 1, "non", "2026-12-01")
+        self.assertEqual(sansvf.films_de(suivi), [])
+
+    def test_une_vf_ou_une_plateforme_retire_de_la_liste(self):
+        for etat in ("vf", "plateforme"):
+            suivi = {"tt1": {"id": 1, "e": "non", "j": "2026-09-01", "n": 2}}
+            sansvf.noter(suivi, "tt1", 1, etat, "2026-11-01")
+            self.assertEqual(sansvf.films_de(suivi), [])
+
+    def test_a_revoir_confirmations_d_abord_et_jamais_un_film_en_vf(self):
+        suivi = {
+            "ttvf": {"id": 1, "e": "vf", "j": "2020-01-01", "n": 0},
+            "ttdoute": {"id": 2, "e": "doute", "j": "2026-09-01", "n": 0},
+            "ttconfirme": {"id": 3, "e": "non", "j": "2026-08-01", "n": 2},
+            "ttdemain": {"id": 4, "e": "non", "j": "2026-10-31", "n": 1},
+            "ttpret": {"id": 5, "e": "non", "j": "2026-10-30", "n": 1},
+            "ttrecent": {"id": 6, "e": "non", "j": "2026-10-20", "n": 2},
+        }
+        self.assertEqual(sansvf.a_revoir(suivi, "2026-11-01"), ["ttpret", "ttconfirme", "ttdoute"])
+
+    def test_plateforme_meme_en_location(self):
+        self.assertTrue(sansvf.plateforme_en_france({"watch/providers": {"results": {"FR": {"rent": [{"provider_name": "Apple TV"}]}}}}))
+        self.assertFalse(sansvf.plateforme_en_france({"watch/providers": {"results": {"US": {"rent": [{}]}}}}))
+        self.assertFalse(sansvf.plateforme_en_france({}))
+
+    def test_plafond_atteint_rien_de_note(self):
+        suivi = {}
+        with mock.patch.object(sansvf, "avis_addon", return_value={"plafond": True}):
+            self.assertFalse(sansvf.examiner(suivi, "tt1", 1, {}, "2026-11-01"))
+        self.assertEqual(suivi, {})
+
+    def test_reponse_inconnue_vaut_doute(self):
+        suivi = {}
+        with mock.patch.object(sansvf, "avis_addon", return_value={"etat": "autre"}):
+            sansvf.examiner(suivi, "tt1", 1, {}, "2026-11-01")
+        self.assertEqual(suivi["tt1"]["e"], "doute")
 
 
 class CacheIMDb(unittest.TestCase):
