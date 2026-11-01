@@ -109,7 +109,7 @@ export async function wikidataDe(query) {
       // Élément trouvé en plein texte : gardé si son nom contient les mots tapés (« Jean-Paul Belmondo »).
       const libelles = new Map(lignes.map((b) => [b.item.value.split("/").pop(), b.itemLabel && b.itemLabel.value]));
       const retenus = choisis.map((e) => ({ ...e, nom: e.nom || libelles.get(e.id) }))
-        .filter((e) => e.nom && (correspond(query, e.nom) || noms.search.some((s) => s.id === e.id)));
+        .filter((e) => e.nom && (correspond(query, e.nom) || (noms.search || []).some((s) => s.id === e.id)));
       refs = referencesDe(retenus, lignes);
     }
   } catch (e) {
