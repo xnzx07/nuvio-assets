@@ -15,6 +15,20 @@
         "focusGifEnabled": true,
         "sources": [
           {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "movie",
+            "catalogId": "top-netflix-films",
+            "genre": "Top"
+          },
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "series",
+            "catalogId": "top-netflix-series",
+            "genre": "Top"
+          },
+          {
             "provider": "tmdb",
             "tmdbSourceType": "DISCOVER",
             "title": "Films populaires",
@@ -101,6 +115,20 @@
         "hideTitle": true,
         "focusGifEnabled": true,
         "sources": [
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "movie",
+            "catalogId": "top-prime-films",
+            "genre": "Top"
+          },
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "series",
+            "catalogId": "top-prime-series",
+            "genre": "Top"
+          },
           {
             "provider": "tmdb",
             "tmdbSourceType": "DISCOVER",
@@ -189,6 +217,20 @@
         "focusGifEnabled": true,
         "sources": [
           {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "movie",
+            "catalogId": "top-paramount-films",
+            "genre": "Top"
+          },
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "series",
+            "catalogId": "top-paramount-series",
+            "genre": "Top"
+          },
+          {
             "provider": "tmdb",
             "tmdbSourceType": "DISCOVER",
             "title": "Films populaires",
@@ -275,6 +317,20 @@
         "hideTitle": true,
         "focusGifEnabled": true,
         "sources": [
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "movie",
+            "catalogId": "top-disney-films",
+            "genre": "Top"
+          },
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "series",
+            "catalogId": "top-disney-series",
+            "genre": "Top"
+          },
           {
             "provider": "tmdb",
             "tmdbSourceType": "DISCOVER",
@@ -363,6 +419,20 @@
         "focusGifEnabled": true,
         "sources": [
           {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "movie",
+            "catalogId": "top-hbo-films",
+            "genre": "Top"
+          },
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "series",
+            "catalogId": "top-hbo-series",
+            "genre": "Top"
+          },
+          {
             "provider": "tmdb",
             "tmdbSourceType": "DISCOVER",
             "title": "Films populaires",
@@ -449,6 +519,20 @@
         "hideTitle": true,
         "focusGifEnabled": true,
         "sources": [
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "movie",
+            "catalogId": "top-apple-films",
+            "genre": "Top"
+          },
+          {
+            "provider": "addon",
+            "addonId": "com.xnzx07.catalogue-fr",
+            "type": "series",
+            "catalogId": "top-apple-series",
+            "genre": "Top"
+          },
           {
             "provider": "tmdb",
             "tmdbSourceType": "DISCOVER",

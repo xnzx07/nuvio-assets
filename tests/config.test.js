@@ -109,7 +109,7 @@ test("chaque_plateforme_a_sa_tuile_et_ses_images", () => {
     const tuile = dossiers.find((f) => f.id === p.folder);
     assert.ok(tuile, p.name);
     assert.equal(tuile.title, p.name);
-    for (const s of tuile.sources) assert.equal(s.filters.withWatchProviders, p.id, p.name);
+    for (const s of tuile.sources.filter((x) => x.provider === "tmdb")) assert.equal(s.filters.withWatchProviders, p.id, p.name);
     assert.ok(images.some((t) => t[0] === p.folder && t[1] === p.id), p.name);
   }
 });

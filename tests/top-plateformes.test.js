@@ -166,3 +166,20 @@ test("collections_sans_top_hors_de_france", async () => {
   assert.equal((await sources({ c, p: [0] })).length, 2);
   assert.deepEqual((await sources({ c, p: [0], g: "BE" })).map((s) => s.provider), ["tmdb"]);
 });
+
+test("chaque_top_est_en_tete_de_sa_tuile", async () => {
+  const { readFileSync } = await import("node:fs");
+  const dossiers = JSON.parse(readFileSync(new URL("../collections/collections.json", import.meta.url), "utf8")).find((c) => c.id === "plateformes-streaming").folders;
+  const cats = await lireCatalogues(`/${seg({ p: [0, 1, 2, 3, 4, 5] })}`);
+  const tops = dossiers.flatMap((f) => (f.sources || []).filter((s) => s.provider === "addon" && s.catalogId.startsWith("top-")));
+  assert.equal(tops.length, TOPS.length);
+  for (const s of tops) {
+    const cat = cats.find((c) => c.id === s.catalogId && c.type === s.type);
+    assert.ok(cat, s.catalogId);
+    assert.ok(cat.extra[0].options.includes(s.genre));
+  }
+  for (const f of dossiers.filter((d) => (d.sources || []).some((s) => s.provider === "addon"))) {
+    assert.deepEqual(f.sources.slice(0, 2).map((s) => s.type), ["movie", "series"], f.id);
+    assert.ok(f.sources.slice(2).every((s) => s.provider === "tmdb"), f.id);
+  }
+});
