@@ -64,7 +64,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.46.0";
+const VERSION = "5.46.1";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -977,7 +977,10 @@ async function lireVfStreamFusion(env, cles) {
  * et « jour:refus » (demandes au-delà du plafond) ; « lumio:jour… » pour Lumio.
  * Une part réservée à la photo des tendances (60 % de Lumio, 40 % de StreamFusion) : elle passe à 4 h UTC, et son avis
  * sert aux N° et aux affiches de tout le monde. Le 28 octobre, les rangées de minuit avaient tout pris avant elle.
+ * Réservée jusqu'à 7 h à Paris (4 h UTC plus une marge, été comme hiver) : ce qu'elle n'a pas pris sert ensuite au reste.
  */
+const RESERVE_PHOTO_JUSQUA = 7;
+const reservePhotoTenue = () => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" }).format(new Date(Date.now()))) < RESERVE_PHOTO_JUSQUA;
 const PLAFONDS = { sf: ["SF_PLAFOND", 300, "", 0.4], lumio: ["LUMIO_PLAFOND", 50, "lumio:", 0.6] };
 const plafondsAtteints = new Set();
 const plafondCache = (cle) => new Request(`https://avis.cache/plafond/${cle}`);
@@ -986,7 +989,7 @@ async function reserver(env, source, n, origine = "affiches") {
   if (!env.LIENS || !(n > 0)) return 0;
   const [variable, defaut, prefixe, partPhoto] = PLAFONDS[source];
   const total = Number(env[variable]) > 0 ? Number(env[variable]) : defaut;
-  const plafond = origine === "photo" ? total : total - Math.floor(total * partPhoto);
+  const plafond = origine === "photo" || !reservePhotoTenue() ? total : total - Math.floor(total * partPhoto);
   const jour = prefixe + parisToday(), atteint = `${jour}/${plafond}`;
   if (plafondsAtteints.has(atteint)) return 0;
   if (await caches.default.match(plafondCache(atteint)).catch(() => null)) { plafondsAtteints.add(atteint); return 0; }

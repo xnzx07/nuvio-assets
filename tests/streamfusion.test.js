@@ -24,6 +24,9 @@ beforeEach(() => {
   env = { TMDB_API_KEY: "tmdb", RELAIS_KEY: "cle-relais", STREAMFUSION_URL: "https://sf.test/c/manifest.json", SF_PLAFOND: "2", LIENS: fakeD1() };
 });
 const ctx = { waitUntil: () => {} };
+// La réserve de la photo tombe après 7 h à Paris : ces tests fixent l'heure.
+const aHeure = async (iso, fn) => { const h = mock.method(Date, "now", () => Date.parse(iso)); try { return await fn(); } finally { h.mock.restore(); } };
+const LA_NUIT = "2026-11-01T02:00:00Z";
 const sf = (video, cle = "cle-relais", e = env) => worker.fetch(new Request(`https://x/sf/${video}.json`, { headers: cle ? { "X-Relais-Cle": cle } : {} }), e, ctx);
 
 // L'avis de StreamFusion pour le service d'affiches : seulement avec la clé du relais ; gardé un jour (un titre n'est
@@ -204,24 +207,26 @@ test("lumio_plafonne_et_plafond_retenu", async () => {
   };
   // 5 au total : 3 réservés à la photo, 2 pour les affiches.
   const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LUMIO_PLAFOND: "5", SF_PLAFOND: "1" };
-  for (const id of ["tt871", "tt872", "tt873"]) assert.equal((await (await sf(`movie/${id}`, "cle-relais", e)).json()).vf, true);
-  assert.equal(appels.filter((u) => u.startsWith("https://lumio.test")).length, 2, "Lumio : 2 au plus");
-  assert.ok(appels.includes("https://sf.test/c/stream/movie/tt873.json"), "le troisième chez StreamFusion");
-  assert.deepEqual(await (await sf("movie/tt874", "cle-relais", e)).json(), { plafond: true });
-  const ecrites = e.LIENS.ecritures.length;
-  assert.deepEqual(await (await sf("movie/tt875", "cle-relais", e)).json(), { plafond: true });
-  assert.deepEqual(await (await sf("movie/tt876", "cle-relais", e)).json(), { plafond: true });
-  assert.equal(e.LIENS.ecritures.length, ecrites, "plafonds atteints : plus rien d'écrit");
-  assert.equal(appels.length, 3);
-  const jour = [...e.LIENS.budget.keys()].find((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
-  assert.equal(e.LIENS.budget.get(`lumio:${jour}`), 2);
-  assert.equal(e.LIENS.budget.get(jour), 1);
-  // Plusieurs titres d'un coup, plafond presque atteint : ce qui reste, pas rien.
-  oublierAvis();
-  const f = { ...e, LUMIO_PLAFOND: "6", SF_PLAFOND: "1" };
-  appels.length = 0;
-  assert.equal((await (await sf("movie/tt877", "cle-relais", f)).json()).vf, true);
-  assert.equal(f.LIENS.budget.get(`lumio:${jour}`), 3);
+  await aHeure(LA_NUIT, async () => {
+    for (const id of ["tt871", "tt872", "tt873"]) assert.equal((await (await sf(`movie/${id}`, "cle-relais", e)).json()).vf, true);
+    assert.equal(appels.filter((u) => u.startsWith("https://lumio.test")).length, 2, "Lumio : 2 au plus");
+    assert.ok(appels.includes("https://sf.test/c/stream/movie/tt873.json"), "le troisième chez StreamFusion");
+    assert.deepEqual(await (await sf("movie/tt874", "cle-relais", e)).json(), { plafond: true });
+    const ecrites = e.LIENS.ecritures.length;
+    assert.deepEqual(await (await sf("movie/tt875", "cle-relais", e)).json(), { plafond: true });
+    assert.deepEqual(await (await sf("movie/tt876", "cle-relais", e)).json(), { plafond: true });
+    assert.equal(e.LIENS.ecritures.length, ecrites, "plafonds atteints : plus rien d'écrit");
+    assert.equal(appels.length, 3);
+    const jour = [...e.LIENS.budget.keys()].find((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
+    assert.equal(e.LIENS.budget.get(`lumio:${jour}`), 2);
+    assert.equal(e.LIENS.budget.get(jour), 1);
+    // Plusieurs titres d'un coup, plafond presque atteint : ce qui reste, pas rien.
+    oublierAvis();
+    const f = { ...e, LUMIO_PLAFOND: "6", SF_PLAFOND: "1" };
+    appels.length = 0;
+    assert.equal((await (await sf("movie/tt877", "cle-relais", f)).json()).vf, true);
+    assert.equal(f.LIENS.budget.get(`lumio:${jour}`), 3);
+  });
 });
 
 // Torrentio sûr (un fichier TRUEFRENCH, VFF… : vff) : ni Lumio ni StreamFusion pour ce titre, sa qualité VF suffit.
@@ -266,12 +271,40 @@ test("part_du_plafond_reservee_a_la_photo", async () => {
     return new Response("{}");
   };
   const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LUMIO_PLAFOND: "5", STREAMFUSION_URL: "", AFFICHES_URL: "https://affiches.test" };
-  for (const id of ["tt891", "tt892", "tt893"]) await sf(`movie/${id}`, "cle-relais", e);
-  assert.equal(appels.length, 2, "les affiches : 2 sur 5");
-  const lus = await lireVfPhoto(e, ["movie/tt894", "movie/tt895", "movie/tt896", "movie/tt897"]);
-  assert.equal(appels.length, 5, "la photo : les 3 réservés");
-  assert.equal([...lus.values()].filter((x) => x.vf).length, 3);
-  const jour = [...e.LIENS.budget.keys()].find((k) => /^lumio:\d{4}-\d{2}-\d{2}$/.test(k));
-  assert.equal(e.LIENS.budget.get(jour), 5);
-  assert.equal(e.LIENS.budget.get(`${jour}:photo`), 3);
+  await aHeure(LA_NUIT, async () => {
+    for (const id of ["tt891", "tt892", "tt893"]) await sf(`movie/${id}`, "cle-relais", e);
+    assert.equal(appels.length, 2, "les affiches : 2 sur 5");
+    const lus = await lireVfPhoto(e, ["movie/tt894", "movie/tt895", "movie/tt896", "movie/tt897"]);
+    assert.equal(appels.length, 5, "la photo : les 3 réservés");
+    assert.equal([...lus.values()].filter((x) => x.vf).length, 3);
+    const jour = [...e.LIENS.budget.keys()].find((k) => /^lumio:\d{4}-\d{2}-\d{2}$/.test(k));
+    assert.equal(e.LIENS.budget.get(jour), 5);
+    assert.equal(e.LIENS.budget.get(`${jour}:photo`), 3);
+  });
+});
+
+// La photo passée, ce qu'elle n'a pas pris sert aux rangées et aux affiches : le 29 octobre, 17 demandes Lumio et 40
+// StreamFusion réservées sont restées sans emploi, et les affiches n'ont eu aucun avis de la journée.
+test("reserve_de_la_photo_liberee_le_matin", async () => {
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (!u.startsWith("https://lumio.test/p/stream/")) return new Response("{}");
+    appels.push(u);
+    return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓", url: "https://lumio.test/play/x" }] });
+  };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LUMIO_PLAFOND: "5", STREAMFUSION_URL: "" };
+  const demander = (id) => sf(`movie/${id}`, "cle-relais", e).then((r) => r.json());
+  await aHeure(LA_NUIT, async () => {
+    assert.equal((await demander("tt901")).vf, true);
+    assert.equal((await demander("tt902")).vf, true);
+    assert.deepEqual(await demander("tt903"), { plafond: true }, "la nuit : 2 sur 5");
+  });
+  // 6 h 30 à Paris (5 h 30 UTC) : la photo n'est peut-être pas finie, la réserve tient.
+  await aHeure("2026-11-01T05:30:00Z", async () => assert.deepEqual(await demander("tt904"), { plafond: true }));
+  // 7 h à Paris : le reste est libre, jusqu'au plafond total.
+  await aHeure("2026-11-01T06:00:00Z", async () => {
+    for (const id of ["tt905", "tt906", "tt907"]) assert.equal((await demander(id)).vf, true);
+    assert.deepEqual(await demander("tt908"), { plafond: true }, "jamais plus que le total");
+  });
+  assert.equal(appels.length, 5);
 });
