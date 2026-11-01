@@ -149,7 +149,9 @@ export async function avecDatesVff(env, imdb, q, fetchImpl = fetch, today = new 
   // Sans clé TMDB (la machine GitHub en secours) : les noms seuls, comme avant.
   if (!imdb || !env.TMDB_API_KEY) return reste;
   let d = null;
-  try { d = await tmdbGet(env, `/movie/${imdb}`, { append_to_response: "release_dates,watch/providers,keywords" }, fetchImpl); } catch { return reste; }
+  // frais : comme lib/tmdb.js, le CDN de TMDB garde pour la clé du service une copie d'avant les dernières dates (Coyote vs.
+  // Acme, numérique en France le 22 octobre : classé en VFQ le 1er novembre, faute de voir cette date).
+  try { d = await tmdbGet(env, `/movie/${imdb}`, { append_to_response: "release_dates,watch/providers,keywords", frais: new Date().toISOString().slice(0, 13) }, fetchImpl); } catch { return reste; }
   const dates = d && d.release_dates && d.release_dates.results;
   if (!d || !dates || !dates.length || d.original_language === "fr" || !filmRecent(dates, today) || abonnementVf(d) || sortieMondiale(dates)) return reste;
   const possible = vffPossible(dates, d.original_language, today), le = prochaineVff(dates, today);

@@ -297,6 +297,10 @@ test("vfq_possible_d_apres_les_dates", async () => {
   const usSeul = sorties(["US", 4, "2026-10-13"]);
   // Seulement « FRENCH », les dates disent non : le doute, et l'avis de Lumio reste utile.
   assert.deepEqual(await lire(french, usSeul), { ...french, vffImpossible: true, vfqPossible: true });
+  // Jamais la vieille copie du CDN de TMDB (voir lib/tmdb.js).
+  let lue = "";
+  await avecDatesVff(env, "tt1", french, async (u) => { lue = String(u); return Response.json({ original_language: "en", release_dates: { results: usSeul } }); }, jour);
+  assert.match(lue, /[?&]frais=\d{4}-\d{2}-\d{2}T\d{2}/);
   // Rien en français chez Torrentio : pas de doute tant que personne ne dit VF.
   assert.deepEqual(await lire(rien, usSeul), { ...rien, vffImpossible: true });
   // Une VFQ en vue, les dates disent oui : le doute, que Lumio ne lèverait pas.
