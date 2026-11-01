@@ -7,6 +7,7 @@ Wants=network-online.target
 User=affiches
 WorkingDirectory=/opt/affiches/depot
 EnvironmentFile=/etc/affiches.env
+EnvironmentFile=-/etc/addon.env
 Environment=NODE_ENV=production
 Environment=TZ=UTC
 # Le cache de l'addon, gardé d'un redémarrage à l'autre : le seul dossier où il écrit.

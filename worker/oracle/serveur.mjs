@@ -1,7 +1,8 @@
 /**
  * Lance l'addon sur le serveur Oracle (serveur/addon.service), derrière Caddy, qui ne lui passe que les catalogues et
  * les fiches. Environnement (/etc/affiches.env) : TMDB_API_KEY, RELAIS_KEY, SERVEUR_URL, CLOUDFLARE_API_TOKEN,
- * CLOUDFLARE_ACCOUNT_ID, D1_LIENS ; ADDON_ORIGINE, ADDON_CACHE, ADDON_PORT facultatifs.
+ * CLOUDFLARE_ACCOUNT_ID, D1_LIENS ; GEMINI_API_KEY (/etc/addon.env : les lignes « Pour qui » des fiches, comme le secret du
+ * Worker), GEMINI_MODEL, ADDON_ORIGINE, ADDON_CACHE, ADDON_PORT facultatifs.
  * --essai : charge le code et s'arrête (serveur/mettre-a-jour.sh, avant de remplacer la version en service).
  */
 import { register } from "node:module";
@@ -24,6 +25,7 @@ if (process.argv.includes("--essai")) { console.log("addon : code chargé"); pro
 
 const env = {
   TMDB_API_KEY: e.TMDB_API_KEY, RELAIS_KEY: e.RELAIS_KEY, RELAIS_URL: e.SERVEUR_URL,
+  ...(e.GEMINI_API_KEY ? { GEMINI_API_KEY: e.GEMINI_API_KEY } : {}), ...(e.GEMINI_MODEL ? { GEMINI_MODEL: e.GEMINI_MODEL } : {}),
   LIENS: creerD1({ jeton: e.CLOUDFLARE_API_TOKEN, compte: e.CLOUDFLARE_ACCOUNT_ID, base: e.D1_LIENS, fetchImpl: fetchDirect }),
 };
 const service = creerService({ worker, env, origine, fetchImpl: fetchDirect });
