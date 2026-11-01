@@ -10,7 +10,9 @@ const DELAI_MS = 2500, GARDE_MS = 86400 * 1000, GARDE_ECHEC_MS = 3600 * 1000, MA
 const SOURCES = { tomatoes: "rt", metacritic: "mc", letterboxd: "lb" };
 
 let memo = new Map();   // imdb → { promesse, until }
-export function resetMemo() { memo = new Map(); }
+// Quota du jour épuisé (429) : plus aucun appel avant la reprise que donne MDBList (Retry-After, minuit UTC).
+let pauseJusqua = 0;
+export function resetMemo() { memo = new Map(); pauseJusqua = 0; }
 
 /**
  * { rt (%), mc (sur 100), lb (sur 5) } d'une réponse MDBList (null pour une note absente) ; null pour une réponse
@@ -32,13 +34,19 @@ export function parseMdblist(d) {
  * d'abord d'après type (« series » : une série), puis l'autre si MDBList ne le trouve pas.
  */
 export async function lireMdblist(env, imdb, fetchImpl = fetch, type = "movie") {
-  if (!env.MDBLIST_API_KEY) return null;
+  if (!env.MDBLIST_API_KEY || Date.now() < pauseJusqua) return null;
   try {
     for (const genre of type === "series" ? ["show", "movie"] : ["movie", "show"]) {
       const url = new URL(`https://api.mdblist.com/imdb/${genre}/${imdb}`);
       url.searchParams.set("apikey", env.MDBLIST_API_KEY);
       const res = await fetchImpl(url.toString(), { signal: AbortSignal.timeout(DELAI_MS) });
       if (res.status === 404) continue;
+      if (res.status === 429) {
+        const attente = Math.min(Number(res.headers.get("Retry-After")) || 3600, 86400);
+        pauseJusqua = Date.now() + attente * 1000;
+        console.warn(`MDBList : quota épuisé, repris dans ${Math.round(attente / 60)} min`);
+        return null;
+      }
       if (!res.ok) { console.warn(`MDBList ${res.status} pour ${imdb}`); return null; }
       const d = await res.json();
       if (d && /not found/i.test(d.error || "")) continue;

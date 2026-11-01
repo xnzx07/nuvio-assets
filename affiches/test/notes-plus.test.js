@@ -82,3 +82,40 @@ test("revue_relais_sans_cle_et_panne", async () => {
   assert.equal(panne.headers.get("Vercel-CDN-Cache-Control"), "max-age=3600");
   assert.equal(await notesPlus("tt3", async () => json({ erreur: true }), "https://affiches.test"), null);
 });
+
+// 1 000 lectures par jour chez MDBList : le quota épuisé (429 et Retry-After, jusqu'à minuit UTC), plus aucun appel
+// avant la reprise. Le 1er novembre 2026 : 5 533 appels refusés en 24 h.
+test("quota_mdblist_plus_aucun_appel_avant_la_reprise", async (t) => {
+  let appels = 0, now = 1000000;
+  t.mock.method(Date, "now", () => now);
+  const f = async () => { appels++; return new Response("{}", { status: 429, headers: { "Retry-After": "600" } }); };
+  const env = { MDBLIST_API_KEY: "cle" };
+  assert.equal(await lireMdblist(env, "tt1", f), null);
+  assert.equal(await lireMdblist(env, "tt2", f), null);
+  assert.equal(appels, 1);
+  now += 599 * 1000;
+  assert.equal(await lireMdblist(env, "tt3", f), null);
+  assert.equal(appels, 1);
+  now += 2 * 1000;
+  assert.deepEqual(await lireMdblist(env, "tt4", async () => { appels++; return json(MDB); }), { rt: 94, mc: 81, lb: 4.1 });
+  assert.equal(appels, 2);
+});
+
+// Sur le serveur, les notes restent sur le disque : les mêmes titres, redessinés chaque nuit, ne repassent pas par MDBList.
+test("relais_notes_garde_du_serveur", async () => {
+  const req = () => new Request("https://affiches.test/api/notes?imdb=tt15239678", { headers: { "X-Relais-Cle": "k" } });
+  const gardees = new Map();
+  const garde = { lire: (i) => gardees.get(i) || null, ecrire: (i, n) => gardees.set(i, n) };
+  let appels = 0;
+  const f = async () => { appels++; return json(MDB); };
+  const env = { MDBLIST_API_KEY: "cle", RELAIS_KEY: "k" };
+  const notes = makeNotes({ fetchImpl: f, env, garde });
+  assert.deepEqual(await (await notes(req())).json(), { rt: 94, mc: 81, lb: 4.1 });
+  assert.deepEqual(await (await notes(req())).json(), { rt: 94, mc: 81, lb: 4.1 });
+  assert.equal(appels, 1);
+  // Une panne n'est pas gardée.
+  gardees.clear();
+  const panne = makeNotes({ fetchImpl: async () => json({}, 500), env, garde });
+  assert.deepEqual(await (await panne(req())).json(), { erreur: true });
+  assert.equal(gardees.size, 0);
+});

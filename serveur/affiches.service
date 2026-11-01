@@ -11,10 +11,11 @@ Environment=NODE_ENV=production
 ExecStart=/usr/bin/node serveur.js
 Restart=always
 RestartSec=5
-# Le service lit son code et n'écrit que dans /var/lib/affiches : la liste des affiches en ligne, relue au démarrage
+# Le service lit son code et n'écrit que dans /var/lib/affiches : la liste des affiches en ligne et les notes, relues au démarrage
 # (ProtectSystem=strict met /opt en lecture seule, le dossier personnel par défaut n'y était pas accessible).
 StateDirectory=affiches
 Environment=LISTE_DISQUE=/var/lib/affiches/liste-affiches.json
+Environment=NOTES_DISQUE=/var/lib/affiches/notes-mdblist.json
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

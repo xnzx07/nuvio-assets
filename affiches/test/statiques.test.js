@@ -238,6 +238,42 @@ test("passages_du_serveur_sans_disjoncteur", async () => {
   assert.equal(envDesPassages({ TMDB_API_KEY: "x" }).TMDB_API_KEY, "x");
 });
 
+// Les affiches demandées par le Worker (avec la clé) : plafond à part, plus haut que l'adresse publique. Le 1er novembre
+// 2026, 34 disjoncteurs en 24 h (6 000 par heure, partagés avec elle) : des affiches d'origine, redemandées ensuite.
+test("demandes_du_worker_plafond_a_part", async () => {
+  const { envDuWorker, envDuService } = await import("../serveur.js");
+  const { disjoncteurDe } = await import("../lib/disjoncteur.js");
+  const service = envDuService({ TMDB_API_KEY: "x" });
+  const public_ = disjoncteurDe(service), worker = disjoncteurDe(envDuWorker(service));
+  for (let i = 0; i < 6000; i++) public_.compte();
+  assert.ok(public_.plein());
+  for (let i = 0; i < 600; i++) worker.compte();
+  assert.ok(worker.plein(), "600 par minute");
+  const lent = disjoncteurDe({ ...envDuWorker(service), RENDUS_MINUTE: "1000000000" });
+  for (let i = 0; i < 19999; i++) lent.compte();
+  assert.ok(!lent.plein(), "moins de 20 000 par heure");
+  lent.compte();
+  assert.ok(lent.plein(), "20 000 par heure");
+  assert.equal(envDuWorker(service).TMDB_API_KEY, "x");
+});
+
+// Les notes passent par le disque du serveur : une seule lecture chez MDBList pour deux demandes.
+test("serveur_notes_sur_le_disque", async (t) => {
+  const { creerServeur } = await import("../serveur.js");
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const d = mkdtempSync(join(tmpdir(), "notes-"));
+  t.after(() => rmSync(d, { recursive: true, force: true }));
+  let appels = 0;
+  const s = creerServeur({ env: { RELAIS_KEY: "k", TMDB_API_KEY: "x", MDBLIST_API_KEY: "m", PORT: "8797", NOTES_DISQUE: join(d, "notes.json") },
+    fetchImpl: async () => { appels++; return Response.json({ ratings: [{ source: "tomatoes", value: 90 }] }); } });
+  const req = { url: "/notes/tt987654.json", headers: { "x-relais-cle": "k" } };
+  assert.deepEqual(await (await s.route(req)).json(), { rt: 90, mc: null, lb: null });
+  assert.deepEqual(await (await s.route(req)).json(), { rt: 90, mc: null, lb: null });
+  assert.equal(appels, 1);
+});
+
 // Relancer « tout » à la main (une nuit ratée) : avec la clé seulement, sans attendre la fin.
 test("serveur_relance_tout_avec_la_cle", async () => {
   const { creerServeur } = await import("../serveur.js");

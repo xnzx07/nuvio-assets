@@ -26,6 +26,7 @@ import { makeNotes } from "./api/notes.js";
 import { makeVf } from "./api/vf.js";
 import { makeQualite } from "./api/qualite.js";
 import { makeAnilist } from "./api/anilist.js";
+import { creerNotesDisque } from "./lib/notes-disque.js";
 import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, lireEtat, empreinte, contenuListe, lireListe } from "./lib/statiques.js";
 import { definirSecours } from "./lib/qualite.js";
 import { lireReglages, ecrireReglages } from "./lib/lien-affiches.js";
@@ -48,6 +49,11 @@ const APERCUS_MAX = 400;
 export const envDuService = (env) => ({ ...env, RESERVE: "off", STREAMFUSION: "off", AVIS_DU_JOUR: "on", CPU_BUDGET_MIN: "1000000",
   RENDUS_MINUTE: env.RENDUS_MINUTE || "300", RENDUS_HEURE: env.RENDUS_HEURE || "6000" });
 export const envDesPassages = (env) => ({ ...env, RENDUS_MINUTE: "1000000000", RENDUS_HEURE: "1000000000" });
+/**
+ * Les affiches demandées par le Worker (avec la clé) : un plafond à part, plus haut que l'adresse publique. Partagé avec
+ * elle, il sautait le soir (34 fois le 1er novembre 2026, ~6 000 par heure) : affiche d'origine, redemandée ensuite.
+ */
+export const envDuWorker = (env) => ({ ...env, RENDUS_MINUTE: "600", RENDUS_HEURE: "20000" });
 
 export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = Date.now } = {}) {
   const PORT = Number(env.PORT) || 8080, BASE = `http://127.0.0.1:${PORT}`;
@@ -55,7 +61,9 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
   const sansCompteur = (url, init) => (/\/cpu\?/.test(String(url)) ? Promise.resolve(Response.json({ ms: 0 })) : fetchImpl(url, init));
   const affiche = makeHandler({ env: envService, fetchImpl: sansCompteur });
   const afficheDesPassages = makeHandler({ env: envDesPassages(envService), fetchImpl: sansCompteur });
-  const relais = { tendances: makeTendances({ env: envService, fetchImpl }), notes: makeNotes({ env: envService, fetchImpl }), vf: makeVf({ env: envService, fetchImpl }),
+  const afficheDuWorker = makeHandler({ env: envDuWorker(envService), fetchImpl: sansCompteur });
+  const notesDisque = creerNotesDisque({ chemin: env.NOTES_DISQUE || join(homedir(), "notes-mdblist.json"), horloge });
+  const relais = { tendances: makeTendances({ env: envService, fetchImpl }), notes: makeNotes({ env: envService, fetchImpl, garde: notesDisque }), vf: makeVf({ env: envService, fetchImpl }),
     qualite: makeQualite({ env: envService, fetchImpl }), anilist: makeAnilist({ env: envService, fetchImpl }) };
   const cf = env.CLOUDFLARE_API_TOKEN && env.D1_AFFICHES
     ? creerCloudflare({ jeton: env.CLOUDFLARE_API_TOKEN, compte: env.CLOUDFLARE_ACCOUNT_ID, base: env.D1_AFFICHES, worker: env.AFFICHES_WORKER || "affiches", fetchImpl })
@@ -116,7 +124,7 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
       if (!cleOk(req)) return new Response(null, { status: 403 });
       let chemin;
       try { chemin = decodeURIComponent(st[1]); } catch { return new Response(null, { status: 404 }); }
-      const r = await dessinerStatique(affiche, BASE, chemin);
+      const r = await dessinerStatique(afficheDuWorker, BASE, chemin);
       if (!r.jpg) return new Response(null, { status: r.statut === 404 ? 404 : 503, headers: { "Cache-Control": "no-store" } });
       etat.dessinees++;
       enAttente.set(chemin, { jpg: r.jpg, hash: empreinte(r.jpg), retard: r.retard });
@@ -215,6 +223,7 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
     serveur, route, passage, etat, enAttente,
     demarrer() {
       serveur.listen(PORT, "127.0.0.1", () => console.log(`affiches sur ${BASE}`));
+      minuteries.push(setInterval(() => notesDisque.sauver(), 5 * 60000));
       if (!cf) { console.warn("pas de publication : CLOUDFLARE_API_TOKEN ou D1_AFFICHES manquant"); return; }
       // Son adresse et la clé pour le Worker, dès le démarrage : sans lire la base (elle peut être bloquée pour la journée).
       if (env.SERVEUR_URL && env.RELAIS_KEY) {
