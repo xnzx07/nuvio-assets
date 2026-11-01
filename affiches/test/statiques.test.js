@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { STYLES, parametresDuStyle } from "../lib/styles.js";
 import { lireReglages, lireReglagesPaysage, ecrireReglages } from "../lib/lien-affiches.js";
-import { cheminValable } from "../lib/statiques.js";
+import { cheminValable, ENTETES } from "../lib/statiques.js";
+
+// Le 1er novembre 2026, AppTV montrait encore les N° de la veille : un navigateur ressert la vieille copie pendant ce délai.
+test("statique_pas_de_vieille_copie_servie_apres_max_age", () => {
+  assert.match(ENTETES, /Cache-Control: public, max-age=3600\n/);
+  assert.doesNotMatch(ENTETES, /stale-while-revalidate/);
+});
 
 test("styles_le_style_signature_est_garde_tel_quel", () => {
   assert.equal(STYLES.signature.s, "coD1faild1Wc0a10b02do3b13c13e11he1ia3f23h13i13j1");

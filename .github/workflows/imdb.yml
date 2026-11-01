@@ -1,4 +1,4 @@
-name: Notes IMDb (chaque semaine)
+name: Notes IMDb (chaque jour)
 
 on:
   push:
@@ -6,7 +6,9 @@ on:
     paths:
       - "scripts/build_imdb_ratings.py"
   schedule:
-    - cron: "41 4 * * 1"   # chaque lundi vers 6 h (heure de Paris en été)
+    # Chaque soir, largement avant le passage des affiches (4 h 17 UTC) : GitHub peut lancer une tâche planifiée
+    # plusieurs heures en retard, et un push sur main redémarre le serveur des affiches.
+    - cron: "30 20 * * *"
   workflow_dispatch:
 
 permissions:
@@ -56,7 +58,10 @@ jobs:
         if: steps.save.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run docker.yml --repo "$GITHUB_REPOSITORY" --ref main
+        # Une fois par semaine (le lundi) : l'image Docker n'a pas besoin de se refaire chaque jour.
+        run: |
+          [ "$(date +%u)" = 1 ] || exit 0
+          gh workflow run docker.yml --repo "$GITHUB_REPOSITORY" --ref main
       - name: Signaler l'échec
         if: failure()
         env:

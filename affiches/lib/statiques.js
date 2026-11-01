@@ -34,8 +34,9 @@ export function cheminValable(c) {
 export const FICHIERS_MAX = 19000;
 // Un titre inconnu de TMDB est essayé trois jours de suite, puis sort de la file.
 const INCONNUE_ESSAIS = 3;
-// Une heure dans Nuvio, puis revérifiée par son ETag (304 si rien n'a changé) : les N° et statuts du jour suivent.
-export const ENTETES = "/*\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=3600, stale-while-revalidate=86400\n";
+// Une heure dans l'appli, puis revérifiée par son ETag (304 si rien n'a changé) : les N° et statuts du jour suivent. Pas de
+// stale-while-revalidate : AppTV (navigateur) ressert alors la copie de la veille, avec ses N° (1er novembre 2026).
+export const ENTETES = "/*\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=3600\n";
 
 // Empreinte d'un fichier statique : 32 caractères hexadécimaux, au choix de l'envoyeur (comme wrangler : contenu en
 // base64 suivi de l'extension).

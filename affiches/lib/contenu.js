@@ -70,7 +70,7 @@ const aujourdhui = () => jourParis();
 /** La note et sa source (« imdb », ou « tmdb » choisie ou en repli), ou null. */
 function note(facts, imdbRating, source) {
   if (imdbRating && source !== "tmdb") return { valeur: virgule(imdbRating), source: "imdb" };
-  if (facts.vote && facts.vote.count >= 50 && facts.vote.average > 0) return { valeur: virgule(facts.vote.average.toFixed(1)), source: "tmdb" };
+  if (facts.vote && facts.vote.count > 0 && facts.vote.average > 0) return { valeur: virgule(facts.vote.average.toFixed(1)), source: "tmdb" };
   return null;
 }
 

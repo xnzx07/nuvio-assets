@@ -1,10 +1,11 @@
 /**
- * Vraies notes IMDb, d'après data/imdb-ratings.bin du dépôt (refait chaque semaine par GitHub Actions).
+ * Vraies notes IMDb, d'après data/imdb-ratings.bin du dépôt (refait chaque jour par GitHub Actions).
  * Le fichier est lu sur GitHub au lieu d'être intégré au service : les commits de chaque nuit ne
  * redéploient donc pas le service et ne vident pas le cache des affiches. Même format que worker/ratings.js.
  */
 export const NOTES_URL = "https://raw.githubusercontent.com/xnzx07/nuvio-assets/main/data/imdb-ratings.bin";
-const GARDE_MS = 12 * 3600 * 1000;
+// 3 h : le passage de 4 h 17 UTC doit voir le fichier du soir, pour les notes des nouveautés.
+const GARDE_MS = 3 * 3600 * 1000;
 
 let memo = null;   // { lire (ou null), until, promesse (lecture en cours, ou null) }
 export function resetMemo() { memo = null; }
@@ -45,7 +46,7 @@ async function charger(fetchImpl) {
 }
 
 /**
- * Lance la lecture du fichier s'il le faut (jamais lu, ou gardé depuis plus de 12 h). Pendant une nouvelle lecture,
+ * Lance la lecture du fichier s'il le faut (jamais lu, ou gardé depuis plus de 3 h). Pendant une nouvelle lecture,
  * et si elle échoue, l'ancien fichier sert encore : seul un fichier bien lu remplace le précédent. Échec : on
  * réessaiera dans 10 min, pas à chaque affiche.
  */

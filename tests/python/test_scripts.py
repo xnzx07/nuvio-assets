@@ -3,6 +3,7 @@
 Pillow est nécessaire (scripts/make_assets.py, importé par update_addon.py) : pip install pillow.
 """
 import datetime as dt
+import gzip
 import io
 import json
 import shutil
@@ -240,6 +241,17 @@ class GardeFous(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 ratings.check(150_000)          # moins de 200 000
             ratings.check(210_000)
+
+    def test_notes_imdb_sans_minimum_de_votes(self):
+        # The Perfect Lie (7 votes, le 1er novembre 2026) : une note, même sur peu de votes. Les épisodes restent écartés.
+        with gzip.open(self.tmp / "title.ratings.tsv.gz", "wt", encoding="utf-8") as f:
+            f.write("tconst\taverageRating\tnumVotes\ntt0000007\t7.5\t7\ntt0000009\t8.0\t900\n")
+        with gzip.open(self.tmp / "title.episode.tsv.gz", "wt", encoding="utf-8") as f:
+            f.write("tconst\tparentTconst\tseasonNumber\tepisodeNumber\ntt0000009\ttt0000001\t1\t1\n")
+        out = self.tmp / "imdb-ratings.bin"
+        with mock.patch.object(ratings, "OUT", out), mock.patch.object(ratings, "ROOT", self.tmp), mock.patch.object(ratings, "check"):
+            ratings.build(self.tmp)
+        self.assertEqual(out.read_bytes(), struct.pack("<I", 1) + bytes([7, 75]))
 
 
 if __name__ == "__main__":

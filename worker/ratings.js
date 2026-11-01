@@ -1,9 +1,9 @@
 /**
  * Vraies notes IMDb des films et séries, d'après les fichiers publics d'IMDb.
  *
- * data/imdb-ratings.bin est refait chaque semaine par scripts/build_imdb_ratings.py et intégré à
- * l'addon : lire une note ne coûte aucun appel réseau (l'offre gratuite de Cloudflare en limite le
- * nombre). Les titres de moins de 50 votes n'y sont pas : pas de note plutôt qu'une note peu sûre.
+ * data/imdb-ratings.bin est refait chaque jour par scripts/build_imdb_ratings.py et intégré à
+ * l'addon à sa mise en ligne : lire une note ne coûte aucun appel réseau (l'offre gratuite de
+ * Cloudflare en limite le nombre). Tous les titres notés y sont, même sur peu de votes.
  */
 import RAW from "../data/imdb-ratings.bin";
 
@@ -20,7 +20,7 @@ for (let i = 0, id = 0; i < count; i++) {
 }
 const NOTES = bytes.subarray(pos, pos + count);
 
-/** Note IMDb (« 7.9 ») d'un identifiant « tt… », ou undefined si IMDb n'en a pas (assez de votes). */
+/** Note IMDb (« 7.9 ») d'un identifiant « tt… », ou undefined si IMDb n'en a pas. */
 export function imdbRating(imdbId) {
   const m = /^tt(\d+)$/.exec(imdbId || "");
   if (!m) return undefined;

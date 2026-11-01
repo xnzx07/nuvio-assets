@@ -56,10 +56,12 @@ test("sans image du tout : null", () => {
   assert.equal(contenu({ ...facts, backdrop: null, textlessBackdrop: null }, extra, "landscape"), null);
 });
 
-test("note TMDB de repli à partir de 50 votes", () => {
+test("note TMDB de repli dès le premier vote", () => {
   const sansImdb = { ...extra, imdbRating: undefined };
   assert.deepEqual(contenu({ ...facts, vote: { average: 7.25, count: 120 } }, sansImdb).line, { genre: "SF", note: "7,3", annee: "2024" });
-  assert.deepEqual(contenu({ ...facts, genreIds: [18], year: "2023", vote: { average: 7.25, count: 49 } }, sansImdb).line, { genre: "Drame", annee: "2023" });
+  // The Perfect Lie, N°5 le 1er novembre 2026 : 2 votes chez TMDB, et une note quand même.
+  assert.deepEqual(contenu({ ...facts, vote: { average: 8.5, count: 2 } }, sansImdb).line, { genre: "SF", note: "8,5", annee: "2024" });
+  assert.deepEqual(contenu({ ...facts, genreIds: [18], year: "2023", vote: { average: 0, count: 0 } }, sansImdb).line, { genre: "Drame", annee: "2023" });
 });
 
 test("sans genre, sans année", () => {
@@ -110,7 +112,8 @@ test("voies éteintes", () => {
 
 test("source_tmdb", () => {
   assert.deepEqual(contenu(facts, plein, "poster", reglages("nt")).line, { genre: "SF", note: "8,1", annee: "2024" });
-  assert.deepEqual(contenu({ ...facts, vote: { average: 8.1, count: 10 } }, plein, "poster", reglages("nt")).line, { genre: "SF", annee: "2024" });
+  assert.deepEqual(contenu({ ...facts, vote: { average: 8.1, count: 10 } }, plein, "poster", reglages("nt")).line, { genre: "SF", note: "8,1", annee: "2024" });
+  assert.deepEqual(contenu({ ...facts, vote: { average: 0, count: 0 } }, plein, "poster", reglages("nt")).line, { genre: "SF", annee: "2024" });
 });
 
 test("bientot_gris_sans_note", () => {
