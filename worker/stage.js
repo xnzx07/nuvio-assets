@@ -815,6 +815,7 @@ const CREDITS = [
   ["Lettrage des affiches", "Inter"],
   ["Sources", "Lumio, StreamFusion, Torrentio, WAStream"],
   ["Sous-titres", "OpenSubtitles"],
+  ["Classements des plateformes", '<a href="https://www.movieofthenight.com/about/api">Streaming Availability API</a>'],
   ["Lettrage de l'enseigne", "Bebas Neue"],
   ["Pop-corn", "Toi"],
   ["Avec la participation de", "TMDB<small>Ce site utilise l'API TMDB mais n'est ni approuvé ni certifié par TMDB.</small>"],

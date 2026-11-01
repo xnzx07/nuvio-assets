@@ -108,6 +108,7 @@ le cache, tes choix et le secret de connexion sont gardés dans `./donnees`. Ima
 | `GEMINI_API_KEY` | facultatif | Clé Gemini de ta copie (pages `/debug`) |
 | `GEMINI_PUBLIC` | facultatif | `on` : cette clé sert aussi aux liens sans clé, et au diagnostic par photo du guide pour qui n'a pas de clé |
 | `RELAIS_KEY` | facultatif | Si tu héberges aussi le service d'affiches avec une variable `RELAIS_KEY` : la même valeur, pour que l'addon y lise la VF des sources (`/vf.json`) |
+| `TOP_10_KEY` | facultatif | Clé gratuite de la [Streaming Availability API](https://www.movieofthenight.com/about/api) : le top de chaque plateforme en France, lu une fois par jour (12 appels). Sans elle, ces rangées restent vides |
 | `DEPOT` | Cloudflare | `ton-pseudo/nuvio-assets`, pour que « Mettre à jour » mène à ton fork |
 | `ADRESSE_PUBLIQUE` | Docker | Ton adresse https derrière un tunnel ou un proxy |
 

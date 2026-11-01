@@ -60,11 +60,12 @@ import { sha256 } from "./outils-serveur.js";
 import { programmationPublique } from "./soiree.js";
 import { galerieRoute } from "./galerie.js";
 import { secondesAvantBascule, jourTendances, routeTendances, prendrePhotos } from "./tendances.js";
+import { TOPS, topCatalogs, prendreTops, listeDuTop } from "./top-plateformes.js";
 import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.46.1";
+const VERSION = "5.47.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -293,7 +294,7 @@ function manifest(today, cfg, url, alerts) {
     // Recherche : deux catalogues « Films » et « Séries » (titres en français), à la place
     // des « TMDB Search » de Discover Plus dont le nom ne se change pas.
     // Lien de l'hébergeur d'une copie : la rangée « Mise à jour » en tête (vide, donc masquée, sans mise à jour).
-    catalogs: [...(alerts ? [UPDATE_CATALOG] : []), ...discover, ...home, ...sagaCatalog(cfg, PAGE), ...facultativeCatalogs(cfg, PAGE), ...SEARCH.map((c) => ({
+    catalogs: [...(alerts ? [UPDATE_CATALOG] : []), ...discover, ...home, ...sagaCatalog(cfg, PAGE), ...facultativeCatalogs(cfg, PAGE), ...topCatalogs(cfg, PAGE), ...SEARCH.map((c) => ({
       type: c.type, id: c.id, name: c.name, showInHome: false,
       extra: [{ name: "search", isRequired: true }, paging], extraRequired: ["search"], extraSupported: ["search", "skip"],
     }))],
@@ -1944,6 +1945,20 @@ async function catalogPage(env, ctx, type, id, extra, today, cfg, bilan, prefixe
     const parts = inReleaseOrder(d.parts || []).filter((it) => !opts.filtered || passeLesFiltres(it, type, cfg)).slice(skip, skip + PAGE);
     return parts.length ? (await toMetas(env, ctx, parts, type, opts, today)).map(sansInternes) : [];
   }
+  // Le top d'une plateforme : l'ordre de la liste du jour, sans trous (ce que la rangée ne montre pas : pas de VF, filtres
+  // du lien) et sans rien pour compléter. Une fiche TMDB pas lue : la page n'est pas gardée en cache.
+  const top = TOPS.find((t) => t.id === id && t.type === type);
+  if (top) {
+    if (cfg.g !== "FR" || skip) return [];
+    const ids = await listeDuTop(env, id);
+    const fiches = await Promise.all(ids.map((n) => tmdb(env, `/${type === "series" ? "tv" : "movie"}/${n}`, {}, opts.lang)));
+    const lus = fiches.filter((d) => d && d.id).map((d) => ({ ...d, genre_ids: (d.genres || []).map((g) => g.id) }));
+    const sortis = lus.filter((it) => { const date = it.release_date || it.first_air_date; return date && date <= today && (!opts.filtered || passeLesFiltres(it, type, cfg)); });
+    const garde = await (type === "series" ? seriesRegardables : filmsRegardables)(env, sortis, today, ids.length);
+    const metas = garde.picked.length ? (await toMetas(env, ctx, garde.picked, type, { ...opts, infos: garde.infos, sources: garde.sources }, today)).map(sansInternes) : [];
+    if (lus.length < ids.length) metas.partial = true;
+    return metas;
+  }
   // Rangées des collections facultatives (lauréats, durée, mini-séries) : servies même décochées (sans danger).
   const fac = FAC_ROWS.find((r) => r.id === id && r.type === type);
   if (fac) {
@@ -2779,6 +2794,8 @@ async function collections(cfg, url) {
         // Plateformes : dans l'ordre choisi sur le site (« Tes plateformes »), les autres tuiles après.
         .sort((a, b) => (c.id === "plateformes-streaming" ? rangPlateforme(a, cfg) - rangPlateforme(b, cfg) || 0 : 0))
         .map((f) => (filtered && f.sources ? { ...f, sources: f.sources.map((src) => filterSource(src, cfg)) } : f))
+        // Le top d'une plateforme : le classement de la France, pas pour les autres pays.
+        .map((f) => (cfg.g !== "FR" && f.sources ? { ...f, sources: f.sources.filter((src) => !TOPS.some((t) => t.id === src.catalogId)) } : f))
         .map((f) => (url && f.sources ? { ...f, sources: f.sources.map((src) => notreAddon(src, addonId(url))) } : f));
       // « Comme l'accueil » : Nuvio TV ouvre la tuile avec la disposition de l'accueil, et ses
       // bandes-annonces au survol si elles y sont activées (les onglets n'en ont pas).
@@ -2853,6 +2870,7 @@ export default {
       ? Promise.all(["movie", "series"].map((k) => env.SELF.fetch(`https://self/tendances/${k}.json`).catch(() => null)))
       : prendrePhotos(env, event.scheduledTime, classerTendances));
     ctx.waitUntil(nettoyerReserve(env, event.scheduledTime));
+    ctx.waitUntil(prendreTops(env, event.scheduledTime).catch((e) => console.warn(`tops : ${e && e.message}`)));
   },
 };
 
