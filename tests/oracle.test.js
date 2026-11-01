@@ -121,7 +121,14 @@ test("service_repond_sous_l_adresse_de_l_addon", async (t) => {
   assert.equal((await s.repondre("GET", "/configure", {})).status, 404);
   assert.equal((await s.repondre("POST", "/catalog/movie/x.json", {})).status, 405);
   assert.equal(journal.length, 1);
-  assert.equal((await s.repondre("GET", "/sante", {})).status, 200);
+  // /sante : par appli, sans adresse.
+  await s.repondre("GET", "/catalog/movie/x.json", { "user-agent": "Nuvio/1.1.0-beta.9" });
+  await s.repondre("GET", "/secret-du-lien/meta/movie/tt1.json", { "user-agent": "okhttp/5.3.2" });
+  const sante = await s.repondre("GET", "/sante", {});
+  assert.equal(sante.status, 200);
+  const bilan = await sante.json();
+  assert.deepEqual(bilan.compte, { "?": { "2xx": 1 }, Nuvio: { "2xx": 1 }, okhttp: { "2xx": 1 } });
+  assert.doesNotMatch(JSON.stringify(bilan), /secret-du-lien/);
 });
 
 test("appels_a_soi_meme_et_avis_par_le_worker", async () => {

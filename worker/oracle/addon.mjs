@@ -36,14 +36,24 @@ export function creerService({ worker, env, origine, fetchImpl = fetch }) {
       },
     },
   };
+  // Le bilan de /sante (seulement sur le serveur, Caddy ne le passe pas) : par appli et par famille de statut, sans
+  // adresse (elles contiennent les réglages des liens, parfois une clé Gemini). Depuis le dernier démarrage.
+  const compte = {}, depuis = new Date().toISOString();
+  const noter = (ua, status) => {
+    const appli = (String(ua || "?").split(/[/ ]/)[0] || "?").slice(0, 30);
+    const c = (compte[appli] = compte[appli] || {}), famille = `${String(status)[0]}xx`;
+    c[famille] = (c[famille] || 0) + 1;
+  };
   return {
     env: service,
     async repondre(methode, adresse, entetes) {
       const chemin = adresse.split("?")[0];
-      if (chemin === "/sante") return new Response("ok");
+      if (chemin === "/sante") return Response.json({ depuis, compte });
       if (!ADRESSES_ADDON.test(chemin)) return new Response("introuvable", { status: 404 });
       if (!["GET", "HEAD", "OPTIONS"].includes(methode)) return new Response(null, { status: 405 });
-      return worker.fetch(new Request(origine + adresse, { method: methode, headers: enteteVersRequete(entetes) }), service, contexte());
+      const r = await worker.fetch(new Request(origine + adresse, { method: methode, headers: enteteVersRequete(entetes) }), service, contexte());
+      noter(entetes["user-agent"], r.status);
+      return r;
     },
   };
 }
