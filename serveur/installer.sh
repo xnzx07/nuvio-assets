@@ -28,12 +28,12 @@ for p in 80 443; do
 done
 sudo netfilter-persistent save
 
-echo "== code (seulement affiches/ et serveur/ du dépôt)"
+echo "== code (seulement ce qui sert ici : les affiches, l'addon et ses données)"
 id affiches >/dev/null 2>&1 || sudo useradd --system --create-home --home-dir /opt/affiches --shell /usr/sbin/nologin affiches
 if [ ! -d "$ICI/.git" ]; then
   sudo -u affiches git clone --depth 1 --filter=blob:none --sparse "$DEPOT" "$ICI"
 fi
-sudo -u affiches git -C "$ICI" sparse-checkout set affiches serveur
+sudo -u affiches git -C "$ICI" sparse-checkout set affiches serveur worker data
 sudo -u affiches git -C "$ICI" pull --ff-only
 sudo -u affiches bash -c "cd $ICI/affiches && npm ci --omit=dev --no-audit --no-fund"
 
@@ -46,16 +46,17 @@ fi
 echo "== https"
 IP=$(curl -fsS https://api.ipify.org)
 HOTE="${IP//./-}.sslip.io"
-printf '%s {\n\tencode gzip\n\treverse_proxy 127.0.0.1:8080\n}\n' "$HOTE" | sudo tee /etc/caddy/Caddyfile >/dev/null
+# Les catalogues et les fiches vont à l'addon (worker/oracle/serveur.mjs) ; tout le reste aux affiches.
+printf '%s {\n\tencode gzip\n\t@addon path_regexp ^/([^/]+/)?(catalog|meta)/\n\thandle @addon {\n\t\treverse_proxy 127.0.0.1:8788\n\t}\n\thandle {\n\t\treverse_proxy 127.0.0.1:8080\n\t}\n}\n' "$HOTE" | sudo tee /etc/caddy/Caddyfile >/dev/null
 sudo grep -q '^SERVEUR_URL=' /etc/affiches.env && sudo sed -i "s|^SERVEUR_URL=.*|SERVEUR_URL=https://$HOTE|" /etc/affiches.env \
   || echo "SERVEUR_URL=https://$HOTE" | sudo tee -a /etc/affiches.env >/dev/null
 
 echo "== services"
-sudo install -m 644 "$ICI/serveur/affiches.service" "$ICI/serveur/affiches-maj.service" "$ICI/serveur/affiches-maj.timer" /etc/systemd/system/
+sudo install -m 644 "$ICI/serveur/affiches.service" "$ICI/serveur/addon.service" "$ICI/serveur/affiches-maj.service" "$ICI/serveur/affiches-maj.timer" /etc/systemd/system/
 sudo install -m 755 "$ICI/serveur/mettre-a-jour.sh" /usr/local/bin/affiches-mettre-a-jour
 sudo systemctl daemon-reload
-sudo systemctl enable --now affiches.service affiches-maj.timer
-sudo systemctl restart affiches.service
+sudo systemctl enable --now affiches.service addon.service affiches-maj.timer
+sudo systemctl restart affiches.service addon.service
 sudo systemctl reload caddy || sudo systemctl restart caddy
 
 echo "== prêt : https://$HOTE/etat"

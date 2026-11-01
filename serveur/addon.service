@@ -1,0 +1,26 @@
+[Unit]
+Description=Addon Catalogue FR : catalogues et fiches (worker/oracle/serveur.mjs)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=affiches
+WorkingDirectory=/opt/affiches/depot
+EnvironmentFile=/etc/affiches.env
+Environment=NODE_ENV=production
+Environment=TZ=UTC
+# Le cache de l'addon, gardé d'un redémarrage à l'autre : le seul dossier où il écrit.
+CacheDirectory=addon
+Environment=ADDON_CACHE=/var/cache/addon
+ExecStart=/usr/bin/node worker/oracle/serveur.mjs
+Restart=always
+RestartSec=5
+# Le code du Worker est écrit pour vivre peu de temps : au-delà, repartir plutôt que gêner les affiches.
+MemoryMax=6G
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
