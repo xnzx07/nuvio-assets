@@ -15,6 +15,8 @@ g reset --quiet --hard "$apres"
 affiches=1; addon=1
 if g diff --quiet "$avant" "$apres" -- affiches serveur; then affiches=0; fi
 if g diff --quiet "$avant" "$apres" -- worker data catalogs.json serveur; then addon=0; fi
+# L'addon n'est suivi qu'une fois installé et activé à la main (worker/ n'est même pas là avant) : jamais mis en service ici.
+if ! systemctl is-enabled --quiet addon.service 2>/dev/null; then addon=0; fi
 [ "$affiches$addon" = "00" ] && exit 0
 if ! g diff --quiet "$avant" "$apres" -- affiches/package-lock.json; then dans "npm ci --omit=dev --no-audit --no-fund"; fi
 retour() {
@@ -30,5 +32,5 @@ install -m 644 "$ICI/serveur/affiches.service" "$ICI/serveur/addon.service" "$IC
 install -m 755 "$ICI/serveur/mettre-a-jour.sh" /usr/local/bin/affiches-mettre-a-jour
 systemctl daemon-reload
 if [ "$affiches" = 1 ]; then systemctl restart affiches.service; fi
-if [ "$addon" = 1 ]; then systemctl enable --quiet addon.service; systemctl restart addon.service; fi
+if [ "$addon" = 1 ]; then systemctl restart addon.service; fi
 echo "à jour : $apres"
