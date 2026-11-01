@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { creerCache, avecCacheCf } from "../worker/oracle/cache.mjs";
 import { creerD1 } from "../worker/oracle/d1.mjs";
 import { creerService, enteteVersRequete, ADRESSES_ADDON } from "../worker/oracle/addon.mjs";
+import { redirige, regles, SERVEUR_ADDON } from "../worker/construire/redirections.mjs";
 
 const O = "https://addon.exemple";
 
@@ -149,4 +150,26 @@ test("entetes_sans_ceux_du_transport", () => {
   assert.equal(e.get("x-a"), "1");
   assert.equal(e.get("cf-connecting-ip"), "9.9.9.9");
   assert.equal(e.get("user-agent"), "a, b");
+});
+
+// Le déploiement de ce dépôt seulement : wrangler dev et les copies gardent le Worker.
+test("redirections_seulement_au_deploiement_de_ce_depot", () => {
+  const depot = "https://github.com/xnzx07/nuvio-assets.git\n";
+  assert.ok(redirige({ commande: "deploy", depot }));
+  assert.ok(redirige({ commande: undefined, depot: "git@github.com:xnzx07/nuvio-assets.git" }));
+  assert.ok(!redirige({ commande: "dev", depot }));
+  assert.ok(!redirige({ commande: "deploy", depot: "https://github.com/quelquun/nuvio-assets.git" }));
+  assert.ok(!redirige({ commande: "deploy", depot: "" }));
+  assert.ok(!redirige({ actif: false, commande: "deploy", depot }));
+});
+
+test("regles_comme_l_essai_et_comme_le_service", () => {
+  const r = regles("https://s.test").trim().split("\n");
+  assert.deepEqual(r, ["/:cfg/catalog/* https://s.test/:cfg/catalog/:splat 307", "/catalog/* https://s.test/catalog/:splat 307",
+    "/:cfg/meta/* https://s.test/:cfg/meta/:splat 307", "/meta/* https://s.test/meta/:splat 307"]);
+  // Sans ? dans la destination : Cloudflare garde les paramètres.
+  assert.ok(!regles().includes("?"));
+  assert.match(SERVEUR_ADDON, /^https:\/\/[^/]+$/);
+  // Tout ce qui est redirigé, le serveur le prend ; et rien du site.
+  for (const l of r) assert.ok(ADRESSES_ADDON.test(l.split(" ")[0].replace(":cfg", "abc").replace("*", "x.json")), l);
 });
