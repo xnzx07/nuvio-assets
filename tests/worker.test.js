@@ -1,5 +1,6 @@
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import worker, { oublierInfos, oublierPauseYoutube, oublierAvis } from "../worker/index.js";
 import { fakeD1 } from "./support/d1.mjs";
 import { resetFails } from "../worker/hote.js";
@@ -1490,6 +1491,8 @@ test("sans_vf_sur_la_fiche", async () => {
 });
 
 // L'avis pour « SANS VF » : les trois sources doivent le dire. Le moindre doute (panne, sources pas prêtes) : rien.
+// La clé des appels internes de l'addon, tirée de la clé TMDB : celle que calcule scripts/build_sans_vf.py.
+const cleInterne = (tmdb) => createHash("sha256").update("tri:" + tmdb).digest("hex").slice(0, 24);
 const avisSansVf = async (reponses, envPlus = {}) => {
   globalThis.fetch = async (url) => {
     const u = String(url);
@@ -1498,8 +1501,8 @@ const avisSansVf = async (reponses, envPlus = {}) => {
     if (u.startsWith("https://sf.test")) return new Response(JSON.stringify({ streams: reponses.sf }));
     return new Response("{}");
   };
-  const e = { ...env, LIENS: fakeD1(), RELAIS_KEY: "cle", LUMIO_URL: "https://lumio.test", STREAMFUSION_URL: "https://sf.test", ...envPlus };
-  const res = await worker.fetch(new Request("https://x/sans-vf/avis", { method: "POST", headers: { "X-Relais-Cle": "cle" }, body: JSON.stringify({ imdb: "tt1" }) }), e, ctx);
+  const e = { ...env, LIENS: fakeD1(), LUMIO_URL: "https://lumio.test", STREAMFUSION_URL: "https://sf.test", ...envPlus };
+  const res = await worker.fetch(new Request("https://x/sans-vf/avis", { method: "POST", headers: { "x-tri": cleInterne(env.TMDB_API_KEY) }, body: JSON.stringify({ imdb: "tt1" }) }), e, ctx);
   return res.json();
 };
 const REFUS_LUMIO = [{ name: "⚙️ Lumio", description: "5 sources,\nmais aucune ne passe vos filtres\nAssouplissez « Langues » dans les réglages du profil." }];
@@ -1533,8 +1536,10 @@ test("avis_sans_vf_son_propre_plafond", async () => {
   assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: REFUS_LUMIO, sf: REFUS_SF }, { LIENS: null }), { plafond: true });
 });
 test("avis_sans_vf_refuse_sans_la_cle", async () => {
-  const res = await worker.fetch(new Request("https://x/sans-vf/avis", { method: "POST", body: JSON.stringify({ imdb: "tt1" }) }), { ...env, RELAIS_KEY: "cle" }, ctx);
-  assert.equal(res.status, 403);
+  for (const headers of [{}, { "x-tri": "fausse" }]) {
+    const res = await worker.fetch(new Request("https://x/sans-vf/avis", { method: "POST", headers, body: JSON.stringify({ imdb: "tt1" }) }), env, ctx);
+    assert.equal(res.status, 403);
+  }
 });
 
 // « VFQ possible » : pas dans « Dispo depuis peu » ; dans « Bientôt dispo » à sa date française si elle est annoncée, à la

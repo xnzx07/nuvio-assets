@@ -15,10 +15,12 @@ un film n'entre dans la liste que si tout le dit, deux fois :
    une VF l'en retire.
 
 data/sans-vf.json : { "maj", "films": [tt…] }. data/sans-vf-suivi.json : { tt…: { "id", "e", "j", "n" } } : où en est
-chaque film (e : etat, j : dernier examen, n : « non » d'affilée). Exécuté chaque nuit par GitHub Actions (secrets
-TMDB_API_KEY, RELAIS_KEY). Une panne ne change rien aux films déjà lus : le suivi est écrit avec ce qui a été lu.
+chaque film (e : etat, j : dernier examen, n : « non » d'affilée). Exécuté chaque nuit par GitHub Actions (secret
+TMDB_API_KEY, dont l'addon tire aussi la clé de /sans-vf/avis). Une panne ne change rien aux films déjà lus : le suivi est
+écrit avec ce qui a été lu.
 """
 import datetime as dt
+import hashlib
 import json
 import os
 import sys
@@ -58,9 +60,14 @@ def tmdb(chemin, **params):
     return _json(f"{TMDB}{chemin}?{urllib.parse.urlencode(params)}")
 
 
+def cle_interne():
+    """La clé des appels internes de l'addon (worker/index.js : triCle), tirée de la clé TMDB."""
+    return hashlib.sha256(f"tri:{os.environ['TMDB_API_KEY']}".encode()).hexdigest()[:24]
+
+
 def avis_addon(imdb):
     req = urllib.request.Request(f"{ADDON}/sans-vf/avis", data=json.dumps({"imdb": imdb}).encode(), method="POST",
-                                 headers={"Content-Type": "application/json", "X-Relais-Cle": os.environ["RELAIS_KEY"]})
+                                 headers={"Content-Type": "application/json", "x-tri": cle_interne()})
     return _json(req, essais=1)
 
 

@@ -101,6 +101,11 @@ class SansVf(unittest.TestCase):
         self.assertFalse(sansvf.plateforme_en_france({"watch/providers": {"results": {"US": {"rent": [{}]}}}}))
         self.assertFalse(sansvf.plateforme_en_france({}))
 
+    def test_cle_interne_tiree_de_la_cle_tmdb(self):
+        # La même que worker/index.js (triCle) : hachage de « tri:<clé TMDB> », 24 premiers caractères.
+        with mock.patch.dict("os.environ", {"TMDB_API_KEY": "tmdb"}):
+            self.assertEqual(sansvf.cle_interne(), "f23892de26192954577b5989")
+
     def test_plafond_atteint_rien_de_note(self):
         suivi = {}
         with mock.patch.object(sansvf, "avis_addon", return_value={"plafond": True}):

@@ -65,7 +65,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.49.0";
+const VERSION = "5.49.1";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -3261,10 +3261,11 @@ const app = {
       const metas = await toMetas(env, ctx, items, "movie", { region: body.region, bilan, lireSources: true }, /^\d{4}-\d{2}-\d{2}$/.test(body.today || "") ? body.today : parisToday());
       return json({ metas, ...bilan }, 0);
     }
-    // L'avis pour la liste des films sans VF (scripts/build_sans_vf.py, avec la clé du relais).
+    // L'avis pour la liste des films sans VF (scripts/build_sans_vf.py). Clé tirée de la clé TMDB de l'instance, comme les
+    // appels internes : la machine GitHub l'a déjà, et un appel venu d'ailleurs ne peut pas dépenser le compte AllDebrid.
     if (path === "/sans-vf/avis" && request.method === "POST") {
       const entete = { ...HEADERS, "Cache-Control": "no-store" };
-      if (!env.RELAIS_KEY || (await sha256(request.headers.get("X-Relais-Cle") || "")) !== (await sha256(env.RELAIS_KEY))) {
+      if (!same(request.headers.get("x-tri") || "", await triCle(env))) {
         return new Response(JSON.stringify({ error: "refusé" }), { status: 403, headers: entete });
       }
       const body = await request.json().catch(() => ({}));

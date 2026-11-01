@@ -76,7 +76,6 @@ jobs:
         continue-on-error: true
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          RELAIS_KEY: ${{ secrets.RELAIS_KEY }}
         run: python scripts/build_sans_vf.py
       - name: Enregistrer
         run: |
