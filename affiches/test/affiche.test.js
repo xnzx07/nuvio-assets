@@ -887,3 +887,28 @@ test("sans_affiche_sans_texte_le_fond_recadre", async () => {
   assert.ok(!f.calls.some((u) => u.includes("/w500/fr.jpg")), "pas l'affiche officielle");
   assert.ok(!f.calls.some((u) => u.includes("/w1280/texte-fond.jpg")), "le fond avec du texte écarté");
 });
+
+// Le doute (VFQ POSSIBLE) : une moitié de l'image en couleur, l'autre en noir et blanc. Lumio dit « non » : tout en gris.
+test("vfq_possible_moitie_noir_et_blanc", async () => {
+  const lancer = async (avis) => {
+    r4();
+    const base = internet({ detail: avecSorties([4, jour(-20)]) });
+    const relais = async (u) => Response.json({ uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: true, sources: 8, langue: "vf", vffImpossible: true, vfqPossible: true });
+    const f = async (url, opts = {}) => {
+      if (String(url).startsWith("https://relais.test/qualite/")) return relais(url);
+      if (String(url) === "https://addon.test/sf/movie/tt15239678.json") return json(avis);
+      return base(url, opts);
+    };
+    const res = await makeHandler({ fetchImpl: f, env: { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test", AVIS_DU_JOUR: "on", QUALITE_RELAIS: "https://relais.test" } })(req("type=movie&shape=poster&id=tt15239678"));
+    assert.equal(res.status, 200);
+    return { vf: /vf=(\w+)/.exec(res.headers.get("X-Affiche-Sortie"))[1], jpg: Buffer.from(await res.arrayBuffer()) };
+  };
+  const coloree = (raw, w, x, y) => { const i = (y * w + x) * 3; return Math.max(raw[i], raw[i + 1], raw[i + 2]) - Math.min(raw[i], raw[i + 1], raw[i + 2]); };
+  const oui = await lancer({ vf: true, sources: 3 });
+  assert.equal(oui.vf, "true");
+  const { data, info } = await sharp(oui.jpg).raw().toBuffer({ resolveWithObject: true });
+  const y = Math.round(info.height * 0.4);
+  assert.ok(coloree(data, info.width, Math.round(info.width * 0.75), y) <= 6, "la moitié droite en noir et blanc");
+  const non = await lancer({ vf: false, sources: 3 });
+  assert.equal(non.vf, "false", "Lumio dit non : pas de VF");
+});

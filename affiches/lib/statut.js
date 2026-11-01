@@ -117,7 +117,8 @@ function sortieFilm(facts, today, sources) {
   }
   // Vieux film que Torrentio, Lumio et StreamFusion voient tous sans VF (facts.sansVf : data/sans-vf.json, Bad Genius) :
   // ni sorti, ni « Bientôt » (elle n'arrivera sans doute jamais).
-  if (estVieux(facts, today)) return facts.sansVf ? { sorti: false, statut: "sansvf" } : { sorti: true, statut: null };
+  // La liste SANS VF a jusqu'à 60 jours de retard : un fichier VFF explicite (sources.vff) passe avant elle.
+  if (estVieux(facts, today)) return facts.sansVf && !(sources && sources.vff) ? { sorti: false, statut: "sansvf" } : { sorti: true, statut: null };
   const s = lues(sources);
   const { date: dispo, vers } = dispoChezSoi(facts.releases, facts.originalLanguage, facts.vod);
   const arrive = !!dispo && dispo <= today;

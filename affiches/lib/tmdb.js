@@ -99,7 +99,7 @@ const DOUBLENT_TOUT = new Set([8, 1796, 337]);   // Netflix, Disney+ : aussi les
  * documentaires Netflix, Turning Point, L'Envers du sport : personne ne publie la VF, Netflix l'a). Film en anglais ou
  * en français ; un autre film étranger seulement sur Netflix ou Disney+. Jamais un spectacle de stand-up.
  */
-function abonnementVf(d) {
+export function abonnementVf(d) {
   const fr = ((d["watch/providers"] || {}).results || {}).FR || {};
   const ids = ["flatrate", "free", "ads"].flatMap((k) => fr[k] || []).map((p) => p.provider_id);
   if (standUp(d)) return false;

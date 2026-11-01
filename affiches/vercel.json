@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["cdg1"],
-  "buildCommand": "env -u RELAIS_KEY -u MDBLIST_API_KEY -u QUALITE -u RENDUS_MINUTE -u RENDUS_HEURE -u CPU_BUDGET_MIN -u RESERVE npm test",
+  "buildCommand": "env -u RELAIS_KEY -u TMDB_API_KEY -u MDBLIST_API_KEY -u QUALITE -u RENDUS_MINUTE -u RENDUS_HEURE -u CPU_BUDGET_MIN -u RESERVE npm test",
   "outputDirectory": ".",
   "redirects": [
     { "source": "/:type(movie|series)/:shape(poster|landscape)/:id.jpg", "has": [{ "type": "query", "key": "s", "value": "1.S0T0G0A0" }], "destination": "https://affiches.xnzxflix.workers.dev/essentiel/:type/:shape/:id.jpg", "permanent": false },

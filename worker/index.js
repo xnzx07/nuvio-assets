@@ -65,7 +65,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.48.0";
+const VERSION = "5.49.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -750,12 +750,26 @@ async function avisPhoto(env, kind) {
     return vfi;
   } catch (e) { return {}; }
 }
-/** Les sources lues, corrigées par l'avis de la photo (pas pendant la photo elle-même : lireVfPhoto). */
+/**
+ * L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose (affiches/lib/qualite.js) ? Pas pour une VF sûre,
+ * de la VFQ, ou le doute d'une VFQ en vue.
+ */
+const avisUtile = (lu) => !(lu && (lu.vff || lu.quebec || (lu.vfqPossible && !lu.vffImpossible)));
+/** Un avis appliqué, sans VFF possible d'après les dates (vffImpossible) : « oui » est le doute, « non » le lève. */
+function douteux(lu) {
+  if (!lu.vffImpossible) return lu;
+  const { vfqPossible, ...reste } = lu;
+  return reste.vf ? { ...reste, vfqPossible: true } : reste;
+}
+/**
+ * Les sources lues, corrigées par l'avis de la photo (pas pendant la photo elle-même : lireVfPhoto). Sauf de la VFQ
+ * seulement chez Torrentio (quebec) : la photo a pu la prendre pour de la VF.
+ */
 async function avecAvisPhoto(env, kind, lus, lire) {
   if (lire !== lireVf || !lus.size) return lus;
   const avis = await avisPhoto(env, kind);
   for (const [imdb, lu] of lus) {
-    if (avis[imdb] === 0 || avis[imdb] === 1) lus.set(imdb, { ...lu, vf: avis[imdb] === 1, sources: Math.max(1, lu.sources || 0) });
+    if ((avis[imdb] === 0 || avis[imdb] === 1) && avisUtile(lu)) lus.set(imdb, douteux({ ...lu, vf: avis[imdb] === 1, sources: Math.max(1, lu.sources || 0) }));
   }
   return lus;
 }
@@ -772,17 +786,17 @@ async function sourcesVf(env, imdbs, lire = lireVf) {
  * L'avis du jour (avisDuJour : Lumio, sinon StreamFusion) par-dessus Torrentio et la photo, pour les rangées et les
  * fiches : le même que celui des affiches. Seulement avec Lumio (LUMIO_URL) : StreamFusion seul garde son plafond pour
  * la photo et les affiches. paires : [[imdb, clé]] ; lus : Map imdb → { vf, sources, langue } (complétée ici).
- * Pas pour un titre dont Torrentio est sûr (vff : un fichier TRUEFRENCH, VFF…) : pas une demande de plus au compte
- * AllDebrid de la personne.
+ * Pas pour un titre dont Torrentio est sûr (vff : un fichier TRUEFRENCH, VFF… ; quebec : de la VFQ seulement, que Lumio
+ * prend pour de la VF) : pas une demande de plus au compte AllDebrid de la personne.
  */
 export async function avecAvisDuJour(env, lus, paires) {
   if (!env.LUMIO_URL) return lus;
-  paires = paires.filter(([imdb]) => !(lus.get(imdb) || {}).vff);
+  paires = paires.filter(([imdb]) => avisUtile(lus.get(imdb)));
   if (!paires.length) return lus;
   const avis = await avisEnLots(env, paires.map(([, cle]) => cle));
   for (const [imdb, cle] of paires) {
     const a = avis.get(cle);
-    if (a) lus.set(imdb, { ...(lus.get(imdb) || {}), vf: a.vf, sources: Math.max(1, a.sources || 0) });
+    if (a) lus.set(imdb, douteux({ ...(lus.get(imdb) || {}), vf: a.vf, sources: Math.max(1, a.sources || 0) }));
   }
   return lus;
 }
@@ -1112,14 +1126,15 @@ async function routeStreamFusion(request, env, cle) {
 /**
  * La VF pour la photo du jour : Torrentio (lireVf), puis l'avis du jour (Lumio, sinon StreamFusion) pour ce dont il
  * n'est pas sûr. Sûr (vff : un fichier TRUEFRENCH, VFF… chez lui) : sa réponse suffit, avec la qualité de ses sources
- * VF (vfq) ; pas une demande de plus au compte AllDebrid.
+ * VF (vfq) ; pas une demande de plus au compte AllDebrid. De même s'il ne voit que de la VFQ (quebec) : pas de VF, que
+ * Lumio et StreamFusion auraient prise pour de la VF (Hope, N°5 le 28 octobre 2026).
  */
 export async function lireVfPhoto(env, cles) {
   const tr = cles.length ? await lireVf(env, cles) : new Map();
   for (const [cle, lu] of tr) if (lu.vff && lu.vfq) tr.set(cle, { ...lu, qualite: lu.vfq });
-  const pris = cles.filter((c) => !(tr.get(c) || {}).vff).slice(0, SF_MAX);
+  const pris = cles.filter((c) => avisUtile(tr.get(c))).slice(0, SF_MAX);
   const avis = pris.length ? (await avisDuJour(env, pris, "photo")).avis : new Map();
-  return new Map([...tr, ...avis]);
+  return new Map([...tr, ...[...avis].map(([c, a]) => { const lu = tr.get(c) || {}; return [c, douteux({ ...a, ...(lu.vffImpossible ? { vffImpossible: true } : {}), ...(lu.vffLe ? { vffLe: lu.vffLe } : {}) })]; })]);
 }
 
 /** Pour les tests : oublie les plafonds atteints et la table des avis déjà préparée. */
@@ -1163,6 +1178,8 @@ function filmRecent(releases, today) {
  * une plateforme en France sans savoir si c'est en VF (sources pas lues) }. vod = estimationDe (voir dispoChezSoi).
  */
 function releaseNote(releases, langue, today, etat = {}, vod = null) {
+  // Le doute : VFF ou VFQ (affiches/lib/qualite.js, avecDatesVff), et la sortie française annoncée, avec laquelle la VFF arrive.
+  if (etat.vfq) return etat.vffLe ? `VFQ possible · VFF le ${shortDate(etat.vffLe)}` : "VFQ possible";
   const { date, vers } = dispoChezSoi(releases || [], langue, vod);
   const connuPasse = !!date && !vers && date <= today;
   // Les dates et les plateformes se trompent (Kraken, norvégien, en VF sur Paramount+) : seules les sources disent
@@ -1245,7 +1262,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       : sansVfConnus.has(ids[i]) ? "Sans VF"
       : opts.upcoming ? cinemaNote(infos[i].releases, opts.region, date, today)
       : releaseNote(infos[i].releases, it.original_language, today,
-        lu ? { vf: lu.vf, vo: sansVf(lu) } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
+        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
     // Pas encore regardable : la date affichée par Nuvio (carrousel, « date de sortie
     // complète ») devient la date de dispo plutôt que la sortie en salle.
     const dispo = chezSoi.date;
@@ -1280,6 +1297,9 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       _vf: vf,
       // En VF d'après les sources (pas seulement d'après la date) : « Dispo depuis peu » accepte alors une date estimée.
       _vfLu: !!(lu && lu.vf),
+      // Le doute VFF ou VFQ : pas dans « Dispo depuis peu », dans « Bientôt dispo » à la date française annoncée.
+      _vfq: !!(lu && lu.vfqPossible),
+      _vffLe: lu && lu.vfqPossible ? lu.vffLe || "" : "",
       // Déjà en VF aujourd'hui, avant la date (pour « Bientôt dispo ») : sources VF, sinon une plateforme en France.
       _dejaVf: lu ? lu.vf : !!infos[i].plateformeFr,
       // Déjà chez soi (date passée), mais en VO seulement (sources sans VF) : « Pas encore en VF ».
@@ -1290,7 +1310,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
 }
 
 /** Une fiche sans les champs internes de toMetas (« _digital »…), telle qu'envoyée à Nuvio. */
-const sansInternes = ({ _digital, _guess, _vf, _vfLu, _dejaVf, _vo, ...m }) => m;
+const sansInternes = ({ _digital, _guess, _vf, _vfLu, _vfq, _vffLe, _dejaVf, _vo, ...m }) => m;
 
 /** Paramètres TMDB d'une recherche « discover », avec les règles de qualité communes
  *  et les réglages de la config (pays, genres masqués, note et année minimales, famille). */
@@ -1838,14 +1858,16 @@ function trierRangeeVf(def, today, metas) {
   const from = addDays(today, def.digital[0]), to = addDays(today, def.digital[1]);
   // « Dispo depuis peu » : une date estimée passée compte si les sources confirment la VF (la fiche TMDB, gardée un jour,
   // peut ne pas encore avoir la sortie numérique : Verity le 27 octobre).
-  const when = (m) => m._digital || (future || m._vfLu ? m._guess : "");
+  const when = (m) => (future && m._vffLe) || m._digital || (future || m._vfLu ? m._guess : "");
+  // « Bientôt dispo » : à la fin, ceux dont on ne sait pas quand la VF viendra (pas encore en VF, doute sans date française).
+  const sansDate = (m) => m._vo || (m._vfq && !m._vffLe);
   return metas
-    .filter((m) => (when(m) && when(m) >= from && when(m) <= to) || (future && m._vo))
-    .filter((m) => future || m._vf)   // « Dispo depuis peu » : seulement ceux qui ont sûrement une VF
+    .filter((m) => (when(m) && when(m) >= from && when(m) <= to) || (future && (m._vo || m._vfq)))
+    .filter((m) => future || (m._vf && !m._vfq))   // « Dispo depuis peu » : seulement ceux qui ont sûrement une VF
     // « Bientôt dispo » : sans ceux déjà regardables en VF (sources VF, ou plateforme en France : date TMDB en retard).
-    .filter((m) => !(future && m._dejaVf))
-    // « Bientôt dispo » : les dates les plus proches d'abord, « Aucune date » à la fin.
-    .sort((a, b) => (future ? (a._vo !== b._vo ? (a._vo ? 1 : -1) : when(a) === when(b) ? 0 : when(a) < when(b) ? -1 : 1) : when(a) === when(b) ? 0 : when(a) > when(b) ? -1 : 1))
+    .filter((m) => !(future && m._dejaVf && !m._vfq))
+    // « Bientôt dispo » : les dates les plus proches d'abord, « Aucune date » et le doute sans date française à la fin.
+    .sort((a, b) => (future ? (sansDate(a) !== sansDate(b) ? (sansDate(a) ? 1 : -1) : when(a) === when(b) ? 0 : when(a) < when(b) ? -1 : 1) : when(a) === when(b) ? 0 : when(a) > when(b) ? -1 : 1))
     .map(sansInternes);
 }
 
@@ -2411,7 +2433,7 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
     movie && besoinEstimation(releases) ? estimationsVod().then((table) => estimationDe(table, imdb)) : null,
   ]);
   // En VO seulement (comme pas sorti : seule la VF compte) : d'après les sources seulement (voir releaseNote).
-  const etat = lu ? { vf: lu.vf, vo: sansVf(lu) } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
+  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
   const note = movie && (await sansVfListe()).has(imdb) ? "Sans VF"
     : movie ? releaseNote(releases, d.original_language, today, etat, vod) : await noteSerie(env, d, imdb, wp, today);
   // La même date que l'affiche et les rangées : la sortie numérique américaine (dispoChezSoi), ou son estimation.

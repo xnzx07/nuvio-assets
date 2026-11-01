@@ -4,7 +4,7 @@
  * une seule lecture sert à toutes les instances du service. Avec RELAIS_KEY, seul le service fait lire une adresse
  * pas encore au CDN (lib/relais.js).
  */
-import { lireTorrentio, avecStreamFusion, SF_ATTENTE_MS } from "../lib/qualite.js";
+import { lireTorrentio, avecStreamFusion, avecDatesVff, SF_ATTENTE_MS } from "../lib/qualite.js";
 import { ADDON_URL } from "../lib/tendances.js";
 import { relaisRefuse, refusRelais } from "../lib/relais.js";
 
@@ -35,7 +35,10 @@ export function makeQualite({ fetchImpl = fetch, env = process.env } = {}) {
     // Sans clé (machine GitHub) ou STREAMFUSION=off (le serveur des affiches) : jamais l'addon. Chaque demande à /sf y
     // compte une requête, même refusée ; les affiches ont déjà l'avis VF de la photo du jour.
     const sf = q.get("sf") === "1" && !!env.RELAIS_KEY && env.STREAMFUSION !== "off";
-    const [torrentio, avis] = await Promise.all([lireTorrentio(`${type}/${video}`, fetchImpl), sf ? avisStreamFusion(env, type, video, fetchImpl) : null]);
+    // Un film avec une VFQ et rien de sûr pour la France : ses dates disent si ses flux « FRENCH » peuvent être une VFF.
+    const [torrentio, avis] = await Promise.all([
+      lireTorrentio(`${type}/${video}`, fetchImpl).then((t) => avecDatesVff(env, type === "movie" ? video : null, t, fetchImpl)),
+      sf ? avisStreamFusion(env, type, video, fetchImpl) : null]);
     const qualite = avis && !avis.plafond ? avecStreamFusion(torrentio, avis) : torrentio;
     // Torrentio en panne ou qui refuse : { erreur: true } gardé 30 min (le CDN de Vercel ne garde jamais une 503 :
     // chaque affiche redemanderait Torrentio, et Vercel risquerait d'être bloqué).

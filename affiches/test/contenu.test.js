@@ -552,3 +552,18 @@ test("vieux_film_sans_vf", () => {
   assert.equal(c.gris, true);
   assert.equal(c.statut, "SANS VF");
 });
+
+// Le doute : libellé « VFQ POSSIBLE », la date française annoncée dessous, et la moitié de l'image en noir et blanc.
+test("contenu_vfq_possible", () => {
+  const today = "2026-11-01";
+  const faits = { type: "movie", title: "Runner", firstAir: null, poster: "/p.jpg", textlessPoster: "/t.jpg", logo: "/l.png", genreIds: [], releases: [{ iso_3166_1: "US", release_dates: [{ type: 4, release_date: "2026-10-13T00:00:00.000Z" }] }], originalLanguage: "en", year: "2026" };
+  const q = { uhd: false, extra: null, vf: true, sources: 8, langue: "vf", vfqPossible: true };
+  const c = posterContent(faits, { quality: q }, "poster", undefined, today);
+  assert.equal(c.statut, "VFQ POSSIBLE");
+  assert.equal(c.moitie, true);
+  assert.equal(c.gris, false);
+  assert.equal(c.statut2, undefined);
+  const d = posterContent(faits, { quality: { ...q, vffLe: "2026-11-17" } }, "poster", undefined, today);
+  assert.equal(d.statut2, "VFF LE 17 NOV.");
+  assert.equal(posterContent(faits, { quality: { ...q, vfqPossible: false } }, "poster", undefined, today).moitie, undefined);
+});

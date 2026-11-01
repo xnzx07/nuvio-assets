@@ -153,7 +153,7 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
   if (!image && !fondUni) return null;
   // Pas sorti = pas encore chez soi en VF, comme les rangées de l'addon (au cinéma compris).
   // Les sources lues avec la qualité (VF ou pas) décident pour un titre récent ; sinon, les dates.
-  const { sorti, statut, quand, cinema, saison: saisonProchaine } = etatSortie(facts, today, quality ? { vf: quality.vf, sources: quality.sources } : null);
+  const { sorti, statut, quand, cinema, saison: saisonProchaine } = etatSortie(facts, today, quality ? { vf: quality.vf, sources: quality.sources, vff: !!quality.vff } : null);
   const pasSorti = !sorti;
   const plateforme = r.plateforme.on && facts.provider ? facts.provider.logo : null;
   const line = {};
@@ -210,6 +210,14 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
   // de plus fort à dire (priorités : lib/statut.js).
   const suite = suiteSerie(facts, today);
   if (r.statut.on && !libelle) libelle = libelleSuite(suite, r.statut);
+  // Le doute : VFF ou VFQ, les noms et les dates ne le disent pas (lib/qualite.js, avecDatesVff). Dessous, la date de la
+  // sortie numérique française annoncée : la VFF arrive avec elle.
+  const vfqPossible = !!(quality && quality.vfqPossible);
+  if (vfqPossible && r.statut.on) {
+    libelle = "VFQ POSSIBLE";
+    const le = quality.vffLe;
+    libelle2 = le ? `VFF LE ${Number(le.slice(8, 10))} ${MOIS[Number(le.slice(5, 7)) - 1]}${le.slice(0, 4) === today.slice(0, 4) ? "" : " " + le.slice(0, 4)}` : null;
+  }
   let place = r.tendance.on && rank >= 1 && rank <= 20 ? rank : null;
   // Bandeau en coin : il porte le statut ou le N° de tendance, qui ne sont alors plus écrits en haut.
   let bandeau = null;
@@ -226,6 +234,7 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
     image,
     full,
     gris: r.sortie.nb && pasSorti,
+    ...(vfqPossible && r.sortie.nb ? { moitie: true } : {}),
     logo,
     ...(full && titreTexte ? { titreTexte } : {}),
     ...(full && titreTexte && titreInter ? { titreInter: true } : {}),

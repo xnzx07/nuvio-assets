@@ -419,6 +419,13 @@ async function calqueTexte(content, taille, m, accent, images) {
 
 // ---------- Couleurs, dégradés, flous ----------
 
+/** L'image avec sa moitié droite en noir et blanc. */
+async function moitieEnGris(base, w, h) {
+  const moitie = Math.round(w / 2);
+  const droite = await sharp(base).extract({ left: moitie, top: 0, width: w - moitie, height: h }).grayscale().toColourspace("srgb").toBuffer();
+  return sharp(base).composite([{ input: droite, left: moitie, top: 0 }]).toBuffer();
+}
+
 /** Couleur moyenne du bas de l'image, en HSL (teinte 0–6, saturation). */
 async function hslDuBas(base, [w, hgt]) {
   const bande = await sharp(base).extract({ left: 0, top: Math.round(hgt * 0.6), width: w, height: Math.round(hgt * 0.4) }).toBuffer();
@@ -681,6 +688,8 @@ export async function draw(content, fetchImpl = fetch) {
   let image = sharp(fond).resize(w, hgt, { fit: "cover", position: "attention" });
   if (content.gris) image = image.grayscale().toColourspace("srgb");
   let base = await image.toBuffer();
+  // Le doute (VFQ possible) : une moitié de l'image en noir et blanc ; les badges, posés ensuite, gardent leurs couleurs.
+  if (content.moitie) base = await moitieEnGris(base, w, hgt);
   // Retouches choisies (luminosité, contraste, saturation, filtre), puis grain de film.
   if (st.retouche) base = await retoucher(base, st.retouche);
   if (st.retouche && st.retouche.grain) base = await ajouterGrain(base);

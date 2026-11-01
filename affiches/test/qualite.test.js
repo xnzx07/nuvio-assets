@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { parseQuality, qualityOf, resetMemo, tailleMemo, avecStreamFusion } from "../lib/qualite.js";
+import { parseQuality, qualityOf, resetMemo, tailleMemo, avecStreamFusion, vffPossible, avecDatesVff, avisUtile } from "../lib/qualite.js";
 
 beforeEach(() => resetMemo());
 
@@ -230,4 +230,101 @@ test("VF sûre : vff et la qualité des sources VF", () => {
   assert.equal(douteux.vf, true);
   assert.equal(douteux.vff, undefined);
   assert.equal(douteux.vfq, undefined);
+});
+
+// « FRENCH.CA », « MULTi.CA » : la version du Canada, une VFQ ; un doublage IA (« MULTi.AI ») : jamais une VF.
+test("canada_et_ia_pas_de_vf", () => {
+  const de = (...noms) => parseQuality(noms.map((title) => ({ name: "Torrentio 1080p", title: `${title}\n⚙️ Torrent9\nMulti Audio / 🇫🇷` })));
+  assert.deepEqual([de("Onslaught.2026.MULTi.CA.1080p.WEB.H264-SUPPLY").vf, de("Onslaught.2026.MULTi.CA.1080p.WEB.H264-SUPPLY").vfqDoute], [false, true]);
+  assert.equal(de("Coyote.vs.Acme.2026.FRENCH.CA.1080p.WEB.H264-SUPPLY").vf, false);
+  assert.equal(de("Hope.2026.MULTi.AI.1080p.AMZN.WEB-DL-MAXX").vf, false);
+  // Une VFQ en vue, sans rien de sûr à côté : le doute (les dates trancheront), même avec un FRENCH.
+  const hope = de("Hope.2026.MULTi.VFQ.1080p.WEBRip-GL0P", "Hope FRENCH WEBRIP 720p 2026");
+  assert.deepEqual([hope.vf, hope.vfqDoute], [true, true]);
+  assert.equal(de("Film.2026.MULTi.VFQ.1080p", "Film.2026.TRUEFRENCH.1080p").vfqDoute, undefined, "TRUEFRENCH : sûr");
+  assert.equal(de("Film FRENCH WEBRIP 720p 2026").vfqDoute, undefined, "sans VFQ en vue : pas de doute");
+});
+
+// Les dates de TMDB le 29 octobre 2026 : la VFF est dans le fichier américain si le film est sorti en France avant.
+const sortie = (pays, ...dates) => ({ iso_3166_1: pays, release_dates: dates.map(([release_date, type]) => ({ release_date, type })) });
+const AU_29_OCT = {
+  verity: [sortie("FR", ["2026-09-21", 1], ["2026-09-30", 3]), sortie("US", ["2026-10-02", 3], ["2026-10-27", 4])],
+  dogStars: [sortie("FR", ["2026-08-26", 3]), sortie("US", ["2026-10-27", 4])],
+  hope: [sortie("FR", ["2026-05-17", 1], ["2026-10-28", 3]), sortie("US", ["2026-10-13", 4])],
+  byAnyMeans: [sortie("US", ["2026-10-20", 4])],
+  coyote: [sortie("FR", ["2026-09-25", 1], ["2026-10-22", 4]), sortie("US", ["2026-09-29", 4])],
+};
+test("vff_possible_d_apres_les_dates", () => {
+  const jour = "2026-10-29";
+  assert.equal(vffPossible(AU_29_OCT.verity, "en", jour), true, "en France avant le fichier américain");
+  assert.equal(vffPossible(AU_29_OCT.dogStars, "en", jour), true);
+  assert.equal(vffPossible(AU_29_OCT.hope, "ko", jour), false, "en France après le fichier américain : VFQ");
+  assert.equal(vffPossible(AU_29_OCT.byAnyMeans, "en", jour), false, "jamais en France");
+  assert.equal(vffPossible(AU_29_OCT.coyote, "en", jour), true, "sortie numérique en France");
+  assert.equal(vffPossible(AU_29_OCT.coyote, "en", "2026-10-21"), false, "pas encore");
+  assert.equal(vffPossible([], "fr", jour), true, "film français");
+});
+
+// Le doute tranché par les dates (TMDB lu par l'identifiant IMDb) : VFQ seulement, quebec ; TMDB pas lu, une série ou
+// une VFF possible : le doute s'efface, la qualité reste celle de Torrentio.
+test("avec_dates_vff", async () => {
+  const q = { uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: true, sources: 9, langue: "multi", vfqDoute: true };
+  const tmdb = (releases) => async (u) => (String(u).includes("/movie/tt1?")
+    ? Response.json({ original_language: "en", release_dates: { results: releases } }) : new Response("", { status: 500 }));
+  const env = { TMDB_API_KEY: "k" };
+  assert.deepEqual(await avecDatesVff(env, "tt1", q, tmdb(AU_29_OCT.byAnyMeans), "2026-10-29"),
+    { uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: false, sources: 9, langue: "vo", quebec: true });
+  const { vfqDoute, ...sansDoute } = q;
+  assert.deepEqual(await avecDatesVff(env, "tt1", q, tmdb(AU_29_OCT.dogStars), "2026-10-29"), { ...sansDoute, vfqPossible: true }, "une VFQ en vue, les dates disent oui : le doute");
+  assert.deepEqual(await avecDatesVff(env, "tt2", q, tmdb([]), "2026-10-29"), sansDoute, "TMDB en panne");
+  assert.deepEqual(await avecDatesVff(env, null, q, tmdb([]), "2026-10-29"), sansDoute, "série");
+  const sur = { ...sansDoute, vff: true };
+  assert.equal(await avecDatesVff(env, "tt1", sur, tmdb([])), sur, "pas de doute : rien n'est lu");
+});
+
+// L'avis de StreamFusion ne contredit pas Torrentio quand il ne voit que de la VFQ (quebec).
+test("vfq_seulement_streamfusion_ne_la_change_pas", () => {
+  const t = { uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: false, sources: 5, langue: "vo", quebec: true };
+  assert.equal(avecStreamFusion(t, { vf: true, sources: 2 }), t);
+});
+
+// Le doute VFF ou VFQ d'un film récent : les noms et les dates ne le tranchent pas (2026-11-01).
+test("vfq_possible_d_apres_les_dates", async () => {
+  const env = { TMDB_API_KEY: "k" }, jour = "2026-11-01";
+  const sorties = (...l) => l.map(([pays, type, date]) => ({ iso_3166_1: pays, release_dates: [{ type, release_date: date + "T00:00:00.000Z" }] }));
+  const lire = (q, results, plus = {}) => avecDatesVff(env, "tt1", q, async () => Response.json({ original_language: "en", release_dates: { results }, ...plus }), jour);
+  const french = { vf: true, sources: 9, langue: "vf" }, rien = { vf: false, sources: 4, langue: "vo" };
+  const usSeul = sorties(["US", 4, "2026-10-13"]);
+  // Seulement « FRENCH », les dates disent non : le doute, et l'avis de Lumio reste utile.
+  assert.deepEqual(await lire(french, usSeul), { ...french, vffImpossible: true, vfqPossible: true });
+  // Rien en français chez Torrentio : pas de doute tant que personne ne dit VF.
+  assert.deepEqual(await lire(rien, usSeul), { ...rien, vffImpossible: true });
+  // Une VFQ en vue, les dates disent oui : le doute, que Lumio ne lèverait pas.
+  const doute = await lire({ ...french, vfqDoute: true }, sorties(["FR", 3, "2026-09-30"], ["US", 4, "2026-10-27"]));
+  assert.deepEqual(doute, { ...french, vfqPossible: true });
+  assert.equal(avisUtile(doute), false);
+  // La date française annoncée.
+  assert.deepEqual(await lire(french, sorties(["US", 4, "2026-10-13"], ["FR", 4, "2026-11-17"])), { ...french, vffImpossible: true, vfqPossible: true, vffLe: "2026-11-17" });
+  // Rien ne change : plateforme en France qui double, sortie mondiale, film français, film ancien, aucune date.
+  const netflix = { "watch/providers": { results: { FR: { flatrate: [{ provider_id: 8 }] } } } };
+  assert.deepEqual(await lire(french, usSeul, netflix), french, "Netflix en France");
+  const pays = ["US", "GB", "DE", "ES", "IT", "BR", "MX", "JP"].map((p) => [p, 4, "2026-10-30"]);
+  assert.deepEqual(await lire(french, sorties(...pays)), french, "sortie mondiale");
+  assert.deepEqual(await lire(french, usSeul, { original_language: "fr" }), french, "film français");
+  assert.deepEqual(await lire(french, sorties(["US", 4, "2024-03-01"])), french, "film ancien");
+  assert.deepEqual(await lire(french, []), french, "aucune date");
+});
+
+// L'avis appliqué, sans VFF possible : « oui » reste le doute, « non » le lève.
+test("avis_sur_un_film_en_doute", () => {
+  const q = { uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: true, sources: 9, langue: "vf", vffImpossible: true, vfqPossible: true };
+  assert.equal(avisUtile(q), true);
+  assert.equal(avecStreamFusion(q, { vf: true, sources: 2 }).vfqPossible, true);
+  const non = avecStreamFusion(q, { vf: false, sources: 3 });
+  assert.equal(non.vf, false);
+  assert.equal(non.vfqPossible, undefined);
+  assert.equal(avecStreamFusion({ ...q, vfqPossible: undefined, vf: false, langue: "vo" }, { vf: true, sources: 1 }).vfqPossible, true);
+  assert.equal(avisUtile({ vf: true, vff: true }), false);
+  assert.equal(avisUtile({ vf: false, quebec: true }), false);
+  assert.equal(avisUtile(null), true);
 });

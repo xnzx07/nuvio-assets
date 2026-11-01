@@ -371,4 +371,7 @@ test("vieux film sans VF confirmée → pas sorti, statut sansvf", () => {
   const vieux = film([pays("TH", [3, jours(-3000)])], jours(-3000), "th");
   assert.deepEqual(etatSortie({ ...vieux, sansVf: true }, AUJ), { sorti: false, statut: "sansvf" });
   assert.deepEqual(etatSortie(vieux, AUJ), { sorti: true, statut: null });
+  // La liste a du retard : un fichier VFF explicite passe avant elle.
+  assert.deepEqual(etatSortie({ ...vieux, sansVf: true }, AUJ, { vf: true, sources: 3, vff: true }), { sorti: true, statut: null });
+  assert.deepEqual(etatSortie({ ...vieux, sansVf: true }, AUJ, { vf: true, sources: 3 }), { sorti: false, statut: "sansvf" });
 });

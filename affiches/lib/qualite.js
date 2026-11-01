@@ -6,6 +6,7 @@
  * ce qu'une instance a lu sert à toutes les autres (même badge partout, donc même ETag).
  */
 import { enteteRelais } from "./relais.js";
+import { tmdbGet, abonnementVf } from "./tmdb.js";
 
 export const TORRENTIO = "https://torrentio.strem.fun";
 const DELAI_MS = 2500;
@@ -32,9 +33,12 @@ const ATMOS = /\batmos\b/i;
 // Seule la VF de France compte (choix de la personne) : un flux québécois (VFQ, QUÉBEC) n'est pas de la VF, sauf s'il
 // porte aussi une VF de France (MULTi.VFF.VFQ, TRUEFRENCH). Comme StreamFusion, réglé pour écarter la VFQ.
 const VF = /\b(TRUEFRENCH|FRENCH|VFF|VFI|VF2|VOF)\b|\bMULTI\b.*\bVF\b|Multi Audio.*🇫🇷/i;
-const VFQ = /\b(VFQ|QU[EÉ]BEC|QU[EÉ]B[EÉ]COIS)\b/i;
+// « FRENCH.CA », « MULTi.CA » : la version du Canada, une VFQ aussi.
+const VFQ = /\b(VFQ|QU[EÉ]BEC|QU[EÉ]B[EÉ]COIS)\b|\b(FRENCH|MULTI)[ ._-]CA\b/i;
 const VF_FRANCE = /\b(TRUEFRENCH|VFF|VFI|VF2)\b/i;
-const enVf = (t) => VF.test(t) && !(VFQ.test(t) && !VF_FRANCE.test(t));
+// Doublage fait par une IA (« MULTi.AI ») : pas une VF.
+const IA = /\bMULTI[ ._-]?AI\b/i;
+const enVf = (t) => VF.test(t) && !IA.test(t) && !(VFQ.test(t) && !VF_FRANCE.test(t));
 // Langue (badge « Langue » des affiches) : un flux VF qui porte aussi MULTI (ou « Multi Audio ») a la VF et la VO ;
 // sans VF, des sous-titres français (VOSTFR, SUBFRENCH) ; sinon de la VO seulement.
 const MULTI = /\bMULTI\b|Multi Audio/i;
@@ -69,14 +73,103 @@ function qualiteCourte(textes) {
  * langue : la meilleure (langueDe), « multi » ou « vf » exactement quand vf est vrai.
  * Et vff, vfq quand la VF est sûre (un fichier TRUEFRENCH, VFF, VFI, VF2) : vfq = la qualité des seules sources VF.
  * L'addon ne demande alors pas l'avis de Lumio ni de StreamFusion (le compte AllDebrid de la personne).
+ * Et vfqDoute quand une VFQ est en vue sans rien de sûr pour la France : les autres flux « FRENCH », « MULTI » sont
+ * peut-être la même VFQ renommée (Torrent9), et Lumio ou StreamFusion la prendraient pour de la VF même sans eux
+ * (L'Invitation, en « MULTi.CA » seulement). Les dates de sortie le disent (avecDatesVff).
  */
 export function parseQuality(streams) {
   const tous = (streams || []).filter((s) => !filmeEnSalle(s)).map((s) => `${s.name || ""} ${s.title || ""}`);
   const uhd = tous.filter((t) => UHD.test(t));
   const extra = uhd.some((t) => DV.test(t)) ? "DV" : uhd.some((t) => HDR.test(t)) ? "HDR" : null;
   const vff = tous.some((t) => VF_FRANCE.test(t));
+  const vf = tous.some(enVf);
   return { uhd: uhd.length > 0, extra, fhd: tous.some((t) => FHD.test(t)), hdr10p: uhd.some((t) => HDR10P.test(t)), atmos: tous.some((t) => ATMOS.test(t)),
-    vf: tous.some(enVf), sources: tous.length, langue: langueDe(tous), ...(vff ? { vff: true, vfq: qualiteCourte(tous.filter(enVf)) } : {}) };
+    vf, sources: tous.length, langue: langueDe(tous), ...(vff ? { vff: true, vfq: qualiteCourte(tous.filter(enVf)) } : {}),
+    ...(!vff && tous.some((t) => VFQ.test(t)) ? { vfqDoute: true } : {}) };
+}
+
+/**
+ * Une VFF peut-elle être dans les sources d'un film ? Elles viennent du fichier américain (sortie numérique aux
+ * États-Unis) : sa piste française n'est une VFF que si le doublage pour la France existait déjà, le film sorti en France
+ * avant (Verity : en salle le 30 sept., en numérique aux États-Unis le 27 oct., TRUEFRENCH) ; sinon c'est la VFQ (Hope :
+ * le 13 oct. aux États-Unis, le 28 en France ; By Any Means : jamais en France). La VFF arrive alors avec la sortie
+ * numérique française. Film français : toujours. releases : release_dates de TMDB ; today : AAAA-MM-JJ.
+ */
+export function vffPossible(releases, langue, today) {
+  if (langue === "fr") return true;
+  const dates = (types, pays) => (releases || []).filter((r) => r.iso_3166_1 === pays).flatMap((r) => r.release_dates || [])
+    .filter((r) => types.includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter(Boolean).sort();
+  const frNumerique = dates([4, 5, 6], "FR")[0];
+  if (frNumerique && frNumerique <= today) return true;
+  const fr = dates([2, 3, 4, 5, 6], "FR")[0];
+  if (!fr || fr > today) return false;
+  const us = dates([4], "US")[0];
+  return !us || fr <= us;
+}
+
+/** La prochaine sortie numérique en France, annoncée (AAAA-MM-JJ) : la VFF arrive avec elle. Sinon null. */
+export function prochaineVff(releases, today) {
+  return (releases || []).filter((r) => r.iso_3166_1 === "FR").flatMap((r) => r.release_dates || [])
+    .filter((r) => [4, 5, 6].includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter((d) => d > today).sort()[0] || null;
+}
+
+// Sortie numérique le même jour dans au moins ce nombre de pays : une plateforme mondiale, doublée, même si TMDB ne la
+// liste pas encore en France (Colisión : 10 pays, Runner : 2).
+const PAYS_MONDIALE = 8;
+function sortieMondiale(releases) {
+  const parJour = new Map();
+  for (const r of releases || []) for (const x of r.release_dates || []) {
+    if (x.type !== 4) continue;
+    const j = (x.release_date || "").slice(0, 10);
+    parJour.set(j, (parJour.get(j) || new Set()).add(r.iso_3166_1));
+  }
+  return [...parJour.values()].some((p) => p.size >= PAYS_MONDIALE);
+}
+const ilYaUnAn = (today) => new Date(Date.parse(today) - 365 * 86400000).toISOString().slice(0, 10);
+const filmRecent = (releases, today) => {
+  const d = (releases || []).flatMap((r) => r.release_dates || []).filter((r) => [2, 3, 4, 5, 6].includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter(Boolean).sort()[0];
+  return !d || d >= ilYaUnAn(today);
+};
+
+/**
+ * Le doute VFF ou VFQ d'un film récent, tranché par ses dates (vffPossible, TMDB lu par son identifiant IMDb). Pas pour
+ * une VF sûre (vff), un film français, en abonnement sur une plateforme en France qui le double, ou sorti partout le
+ * même jour.
+ * - quebec : une VFQ en vue et pas de VFF possible : vf false. Ni Lumio ni StreamFusion (ils la prennent pour de la VF).
+ * - vfqPossible : on ne sait pas. Seulement « FRENCH » alors que les dates disent non (Torrent9 renomme tout), ou une VFQ
+ *   en vue alors que les dates disent oui (Coyote vs. Acme). vf reste true ; l'affiche est coupée en deux.
+ * - vffImpossible : pas de VFF possible et pas de VFQ en vue. L'avis de Lumio ou StreamFusion est encore utile : « non »,
+ *   pas de VF (Runner, en MULTi.LAT, sans français) ; « oui », le doute, car ils ne distinguent pas la VFQ (Citizen
+ *   Vigilante, rien chez Torrentio). Voir avecAvisDoute.
+ * Et vffLe : la sortie numérique française annoncée. TMDB pas lu, sans aucune date, ou une série (imdb null) : rien ne change.
+ */
+export async function avecDatesVff(env, imdb, q, fetchImpl = fetch, today = new Date().toISOString().slice(0, 10)) {
+  if (!q || q.vff) return q;
+  const { vfqDoute, ...reste } = q;
+  // Sans clé TMDB (la machine GitHub en secours) : les noms seuls, comme avant.
+  if (!imdb || !env.TMDB_API_KEY) return reste;
+  let d = null;
+  try { d = await tmdbGet(env, `/movie/${imdb}`, { append_to_response: "release_dates,watch/providers,keywords" }, fetchImpl); } catch { return reste; }
+  const dates = d && d.release_dates && d.release_dates.results;
+  if (!d || !dates || !dates.length || d.original_language === "fr" || !filmRecent(dates, today) || abonnementVf(d) || sortieMondiale(dates)) return reste;
+  const possible = vffPossible(dates, d.original_language, today), le = prochaineVff(dates, today);
+  const avecDate = le ? { vffLe: le } : {};
+  if (!possible && vfqDoute) {
+    const enVfAvant = reste.langue === "vf" || reste.langue === "multi";
+    return { ...reste, vf: false, langue: enVfAvant ? "vo" : reste.langue, quebec: true, ...avecDate };
+  }
+  // VFF déjà possible : une date française encore à venir n'est plus la sienne (la sortie vidéo de Coyote vs. Acme).
+  if (possible) return reste.vf && vfqDoute ? { ...reste, vfqPossible: true } : reste;
+  return { ...reste, vffImpossible: true, ...(reste.vf ? { vfqPossible: true } : {}), ...avecDate };
+}
+
+/** L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose ? Pas pour une VF sûre, de la VFQ, ou le doute d'une VFQ en vue. */
+export const avisUtile = (q) => !(q && (q.vff || q.quebec || (q.vfqPossible && !q.vffImpossible)));
+/** La qualité une fois l'avis appliqué (vf à jour) : avec vffImpossible, un « oui » est le doute, un « non » le lève. */
+export function avecAvisDoute(q) {
+  if (!q || !q.vffImpossible) return q;
+  const { vfqPossible, ...reste } = q;
+  return reste.vf ? { ...reste, vfqPossible: true } : reste;
 }
 const LANGUES = ["multi", "vf", "vostfr", "vo"];
 
@@ -104,7 +197,9 @@ async function lireRelais(relais, video, fetchImpl, cle, sf = false) {
     return d && typeof d.uhd === "boolean"
       ? { uhd: d.uhd, extra: d.extra === "DV" || d.extra === "HDR" ? d.extra : null, fhd: d.fhd === true, hdr10p: d.hdr10p === true, atmos: d.atmos === true,
         vf: typeof d.vf === "boolean" ? d.vf : null, sources: Number.isInteger(d.sources) ? d.sources : null, langue: LANGUES.includes(d.langue) ? d.langue : null,
-        ...(d.vff === true && d.vfq && typeof d.vfq === "object" ? { vff: true, vfq: d.vfq } : {}) }
+        ...(d.vff === true && d.vfq && typeof d.vfq === "object" ? { vff: true, vfq: d.vfq } : {}), ...(d.quebec === true ? { quebec: true } : {}),
+        ...(d.vfqPossible === true ? { vfqPossible: true } : {}), ...(d.vffImpossible === true ? { vffImpossible: true } : {}),
+        ...(/^\d{4}-\d{2}-\d{2}$/.test(d.vffLe || "") ? { vffLe: d.vffLe } : {}) }
       : null;
   } catch { return null; }
 }
@@ -146,16 +241,16 @@ export async function qualiteConnue(type, imdbId, lastSeason, fetchImpl = fetch,
 /**
  * La qualité de Torrentio corrigée par l'avis de StreamFusion ({ vf, sources, qualite? }, lu par l'addon : il lit les
  * sites français et écarte la VFQ) : la VF et la langue suivent StreamFusion ; 4K, DV, HDR… ceux de ses sources VF
- * s'il en a, sinon ceux de Torrentio. Sans avis : Torrentio tel quel.
+ * s'il en a, sinon ceux de Torrentio. Sans avis, ou de la VFQ seulement chez Torrentio (quebec) : Torrentio tel quel.
  */
 export function avecStreamFusion(t, avis) {
-  if (!avis || typeof avis.vf !== "boolean") return t;
+  if (!avis || typeof avis.vf !== "boolean" || (t && !avisUtile(t) && !t.vff)) return t;
   const base = t || { uhd: false, extra: null, fhd: false, hdr10p: false, atmos: false, vf: false, sources: 0, langue: null };
   const q = avis.qualite || null;
   const qualite = q ? { uhd: q.u === 1, extra: q.x === "DV" || q.x === "HDR" ? q.x : null, hdr10p: q.p === 1, fhd: q.f === 1, atmos: q.a === 1 } : {};
   const enVf = base.langue === "vf" || base.langue === "multi";
   const langue = avis.vf ? (enVf ? base.langue : "vf") : (enVf ? "vo" : base.langue);
-  return { ...base, ...qualite, vf: avis.vf, sources: Math.max(base.sources || 0, avis.sources || 0, 1), langue };
+  return avecAvisDoute({ ...base, ...qualite, vf: avis.vf, sources: Math.max(base.sources || 0, avis.sources || 0, 1), langue });
 }
 
 /** Attente de StreamFusion (lu par l'addon), en plus de celle de Torrentio. */
