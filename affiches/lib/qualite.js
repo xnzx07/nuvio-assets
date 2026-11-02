@@ -136,11 +136,13 @@ const filmRecent = (releases, today) => {
  * une VF sûre (vff), un film français, en abonnement sur une plateforme en France qui le double, ou sorti partout le
  * même jour.
  * - quebec : une VFQ en vue et pas de VFF possible : vf false. Ni Lumio ni StreamFusion (ils la prennent pour de la VF).
- * - vfqPossible : on ne sait pas. Seulement « FRENCH » alors que les dates disent non (Torrent9 renomme tout), ou une VFQ
- *   en vue alors que les dates disent oui (Coyote vs. Acme). vf reste true ; l'affiche est coupée en deux.
+ * - vfqPossible : on ne sait pas. Seulement « FRENCH » alors que les dates disent non (Torrent9 renomme tout). vf reste
+ *   true ; l'affiche est coupée en deux.
  * - vffImpossible : pas de VFF possible et pas de VFQ en vue. L'avis de Lumio ou StreamFusion est encore utile : « non »,
  *   pas de VF (Runner, en MULTi.LAT, sans français) ; « oui », le doute, car ils ne distinguent pas la VFQ (Citizen
  *   Vigilante, rien chez Torrentio). Voir avecAvisDoute.
+ * Les dates disent oui : rien ne change, même avec des fichiers VFQ à côté (Evil Dead Burn : en France le 8 juillet, en
+ * numérique aux États-Unis le 4 août, MULTi.VFQ en WEB et sa VFF ailleurs ; classé en doute à tort le 1er novembre 2026).
  * Et vffLe : la sortie numérique française annoncée. TMDB pas lu, sans aucune date, ou une série (imdb null) : rien ne change.
  */
 export async function avecDatesVff(env, imdb, q, fetchImpl = fetch, today = new Date().toISOString().slice(0, 10)) {
@@ -160,13 +162,10 @@ export async function avecDatesVff(env, imdb, q, fetchImpl = fetch, today = new 
     const enVfAvant = reste.langue === "vf" || reste.langue === "multi";
     return { ...reste, vf: false, langue: enVfAvant ? "vo" : reste.langue, quebec: true, ...avecDate };
   }
-  // VFF déjà possible : une date française encore à venir n'est plus la sienne (la sortie vidéo de Coyote vs. Acme).
-  if (possible) return reste.vf && vfqDoute ? { ...reste, vfqPossible: true } : reste;
+  if (possible) return reste;
   return { ...reste, vffImpossible: true, ...(reste.vf ? { vfqPossible: true } : {}), ...avecDate };
 }
 
-/** L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose ? Pas pour une VF sûre, de la VFQ, ou le doute d'une VFQ en vue. */
-export const avisUtile = (q) => !(q && (q.vff || q.quebec || (q.vfqPossible && !q.vffImpossible)));
 /** La qualité une fois l'avis appliqué (vf à jour) : avec vffImpossible, un « oui » est le doute, un « non » le lève. */
 export function avecAvisDoute(q) {
   if (!q || !q.vffImpossible) return q;
@@ -246,7 +245,7 @@ export async function qualiteConnue(type, imdbId, lastSeason, fetchImpl = fetch,
  * s'il en a, sinon ceux de Torrentio. Sans avis, ou de la VFQ seulement chez Torrentio (quebec) : Torrentio tel quel.
  */
 export function avecStreamFusion(t, avis) {
-  if (!avis || typeof avis.vf !== "boolean" || (t && !avisUtile(t) && !t.vff)) return t;
+  if (!avis || typeof avis.vf !== "boolean" || (t && t.quebec)) return t;
   const base = t || { uhd: false, extra: null, fhd: false, hdr10p: false, atmos: false, vf: false, sources: 0, langue: null };
   const q = avis.qualite || null;
   const qualite = q ? { uhd: q.u === 1, extra: q.x === "DV" || q.x === "HDR" ? q.x : null, hdr10p: q.p === 1, fhd: q.f === 1, atmos: q.a === 1 } : {};

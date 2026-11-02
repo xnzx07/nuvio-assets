@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "sans-vf.json"
 SUIVI = ROOT / "data" / "sans-vf-suivi.json"
 ADDON = "https://nuvio-assets.xnzxflix.workers.dev"
+AGENT = "catalogue-fr-nuit"
 TMDB = "https://api.themoviedb.org/3"
 LANGUES = "ko|ja|zh|cn|th|hi|ta|te|ml|tr|es|pt|it|de|ru|fa|id|vi|tl|ar|sv|da|no|pl|nl"
 VOTES_MIN = 30
@@ -67,7 +68,8 @@ def cle_interne():
 
 def avis_addon(imdb):
     req = urllib.request.Request(f"{ADDON}/sans-vf/avis", data=json.dumps({"imdb": imdb}).encode(), method="POST",
-                                 headers={"Content-Type": "application/json", "x-tri": cle_interne()})
+                                 # Sans lui, Cloudflare répond 403 (erreur 1010) à l'en-tête par défaut de Python-urllib.
+                                 headers={"Content-Type": "application/json", "x-tri": cle_interne(), "User-Agent": AGENT})
     return _json(req, essais=1)
 
 

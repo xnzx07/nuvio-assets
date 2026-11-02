@@ -106,6 +106,12 @@ class SansVf(unittest.TestCase):
         with mock.patch.dict("os.environ", {"TMDB_API_KEY": "tmdb"}):
             self.assertEqual(sansvf.cle_interne(), "f23892de26192954577b5989")
 
+    def test_avis_avec_un_en_tete_que_cloudflare_accepte(self):
+        # Sans lui, Cloudflare répond 403 (erreur 1010) : le passage de nuit du 2 novembre 2026 a échoué ainsi.
+        with mock.patch.dict("os.environ", {"TMDB_API_KEY": "tmdb"}), mock.patch.object(sansvf, "_json", return_value={}) as lire:
+            sansvf.avis_addon("tt1")
+        self.assertEqual(lire.call_args[0][0].get_header("User-agent"), sansvf.AGENT)
+
     def test_plafond_atteint_rien_de_note(self):
         suivi = {}
         with mock.patch.object(sansvf, "avis_addon", return_value={"plafond": True}):

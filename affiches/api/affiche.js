@@ -12,7 +12,7 @@
 import { titleFacts } from "../lib/tmdb.js";
 import { lireNoteImdb } from "../lib/notes.js";
 import { lireRang, secondesAvantBascule, ADDON_URL } from "../lib/tendances.js";
-import { qualityOf, avisDuJour, qualiteDeQ, avisUtile, avecAvisDoute } from "../lib/qualite.js";
+import { qualityOf, avisDuJour, qualiteDeQ, avecAvisDoute } from "../lib/qualite.js";
 import { posterContent, contentKey } from "../lib/contenu.js";
 import { etatSortie, sourcesUtiles, dispoChezSoi, estimationDe, besoinEstimation, LIBELLES_FIN } from "../lib/statut.js";
 import { lireEstimations } from "../lib/estimations.js";
@@ -277,8 +277,6 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       const avisLu = videoAvis ? chrono.mesure("avis", Promise.resolve(qualiteLue).then(({ quality: q }) => (q && q.vff
         ? { vf: true, sources: Math.max(1, q.sources || 0), qualite: q.vfq || null }
         : q && q.quebec ? { vf: false, sources: Math.max(1, q.sources || 0) }
-          // Le doute d'une VFQ en vue (VFQ possible) : Lumio ne le lèverait pas, il ne fait pas la différence.
-          : !avisUtile(q) ? null
           : avisDuJour(env.ADDON_URL || ADDON_URL, videoAvis, env.RELAIS_KEY, fetchImpl)))) : null;
       const lectures = Promise.all([
         noteImdb && facts.imdbId ? chrono.mesure("imdb", lireNoteImdb(facts.imdbId, fetchImpl, ATTENTE_NOTES_MS)) : { note: undefined, manque: false },
@@ -326,8 +324,7 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       // De la VFQ seulement chez Torrentio (quebec) : la photo, qui a pu la prendre pour de la VF, ne le contredit pas.
       let quality = avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, avisJour.vf ? qualiteDeQ(avisJour.qualite) : SANS_QUALITE)
         : qualiteTorrentio && qualiteTorrentio.quebec ? avecAvisVf(qualiteTorrentio, false, SANS_QUALITE)
-          : !avisUtile(qualiteTorrentio) ? qualiteTorrentio
-            : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
+          : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
       quality = avecAvisDoute(quality);
       // Récent sans VF d'après l'avis du jour : « revoir », le serveur la redessine quelques heures plus tard.
       const aRevoir = !!avisJour && avisJour.vf === false;

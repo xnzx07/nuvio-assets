@@ -38,10 +38,10 @@ const lireJson = async (r) => { if (!r.ok) throw new Error(`réponse ${r.status}
 
 /**
  * Le bilan complet. outils : { version, assets (dépôt brut), affiches (service d'affiches), appel(chemin) (l'addon
- * lui-même), today (date de Paris) }.
+ * lui-même), appelCatalogue(chemin) (qui sert vraiment les rangées, s'il n'est pas l'addon lui-même), today (date de Paris) }.
  */
 export async function bilan(env, outils) {
-  const { version, assets, affiches, appel, today } = outils;
+  const { version, assets, affiches, appel, appelCatalogue = appel, today } = outils;
   const controles = await Promise.all([
     controle("tmdb", "TMDB", async () => {
       if (!env.TMDB_API_KEY) throw new Error("clé TMDB absente");
@@ -56,12 +56,12 @@ export async function bilan(env, outils) {
       return { detail: `${d.catalogs.length} catalogues` };
     }),
     controle("rangee", "Une rangée de l'accueil", async () => {
-      const d = await lireJson(await appel("/catalog/movie/accueil-top10.json"));
+      const d = await lireJson(await appelCatalogue("/catalog/movie/accueil-top10.json"));
       const n = Array.isArray(d.metas) ? d.metas.length : 0;
       return n ? { detail: `${n} films` } : { etat: "orange", detail: "rangée vide" };
     }),
     controle("recherche", "Recherche", async () => {
-      const d = await lireJson(await appel("/catalog/movie/recherche-films/search=dune.json"));
+      const d = await lireJson(await appelCatalogue("/catalog/movie/recherche-films/search=dune.json"));
       const n = Array.isArray(d.metas) ? d.metas.length : 0;
       return n ? { detail: `${n} résultats` } : { etat: "orange", detail: "aucun résultat" };
     }),

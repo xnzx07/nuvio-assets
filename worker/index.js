@@ -36,6 +36,7 @@ import {
 import { configurePage } from "./page.js";
 import { guidePage, NUVIO_TV_APK } from "./guide.js";
 import { AFFICHES_STATIQUES, APERCU_V, apercusDe, relaisUrl } from "./reglages.js";
+import { ACTIF, SERVEUR_ADDON } from "./construire/redirections.mjs";
 import { lireReglages, ecrireReglages, dossierDe, MEMOIRES, MEMOIRES_PAYSAGE } from "./lien-affiches.js";
 import { lienPage } from "./lien.js";
 import { compteNuvioPage } from "./compte-nuvio.js";
@@ -52,7 +53,7 @@ import { statique } from "./statique.js";
 import { smartSearch, prepareWords, isExact, norm, capQuery, genreQuery, filmography } from "./search.js";
 import { imdbRating } from "./ratings.js";
 import { ROWS as FAC_ROWS, facultativeCatalogs, laureats, SAGA_IDS, SAGA_CATALOGS, sagaCatalog, inReleaseOrder } from "./facultatives.js";
-import { isCopy, addonId, hostRoute, hasAlerts, pendingUpdate, updateInfo, updateCard, same, UPDATE_CATALOG } from "./hote.js";
+import { isCopy, addonId, hostRoute, hasAlerts, pendingUpdate, updateInfo, updateCard, same, UPDATE_CATALOG, SOURCE_HOST } from "./hote.js";
 import { SEANCE_ID, carteSeance, rechercheSeance, routeSeance } from "./seance.js";
 import { routeDiagnostic } from "./diagnostic.js";
 import { isFixedId, readFixed, fixedRoute, fixedAvailable, noteLecture } from "./fixe.js";
@@ -65,7 +66,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.49.1";
+const VERSION = "5.49.2";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -750,11 +751,8 @@ async function avisPhoto(env, kind) {
     return vfi;
   } catch (e) { return {}; }
 }
-/**
- * L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose (affiches/lib/qualite.js) ? Pas pour une VF sûre,
- * de la VFQ, ou le doute d'une VFQ en vue.
- */
-const avisUtile = (lu) => !(lu && (lu.vff || lu.quebec || (lu.vfqPossible && !lu.vffImpossible)));
+/** L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose ? Pas pour une VF sûre, ni de la VFQ. */
+const avisUtile = (lu) => !(lu && (lu.vff || lu.quebec));
 /** Un avis appliqué, sans VFF possible d'après les dates (vffImpossible) : « oui » est le doute, « non » le lève. */
 function douteux(lu) {
   if (!lu.vffImpossible) return lu;
@@ -3067,7 +3065,10 @@ const app = {
         }
         return app.fetch(new Request(url.origin + p), env, ctx);
       };
-      return routeEtat(request, env, ctx, url, path, { version: VERSION, assets: ASSETS, affiches: AFFICHES_STATIQUES + "/maison", appel, today, saison: decorSaison(url, today) }, HEADERS);
+      // Rangées et recherche : par le serveur Oracle, qui les sert (worker/construire/redirections.mjs). Calculées ici, sans
+      // leur cache, elles dépassent les 50 appels sortants, et le reste du bilan échoue avec elles (rouge à tort, le 2 novembre 2026).
+      const appelCatalogue = ACTIF && url.hostname === SOURCE_HOST ? (p) => fetch(SERVEUR_ADDON + p) : appel;
+      return routeEtat(request, env, ctx, url, path, { version: VERSION, assets: ASSETS, affiches: AFFICHES_STATIQUES + "/maison", appel, appelCatalogue, today, saison: decorSaison(url, today) }, HEADERS);
     }
 
     // Premier segment = config personnalisée, s'il n'est pas un mot réservé.

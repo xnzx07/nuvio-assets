@@ -171,3 +171,24 @@ test("canari_workflow", () => {
   assert.doesNotMatch(wf, /\$\{\{ steps\.verif\.outputs\.pannes \}\}"/);
   assert.match(wf, /PANNES: \$\{\{ steps\.verif\.outputs\.pannes \}\}/);
 });
+
+// Depuis la bascule du 1er novembre 2026, le serveur Oracle sert les rangées. Les recalculer ici dépassait les 50 appels
+// sortants du Worker : rangée, recherche et nuit en rouge, alors que tout marchait.
+test("etat_rangees_lues_chez_le_serveur_oracle", async () => {
+  const { SERVEUR_ADDON } = await import("../worker/construire/redirections.mjs");
+  const { SOURCE_HOST } = await import("../worker/hote.js");
+  const avant = globalThis.fetch, lues = [];
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.startsWith(SERVEUR_ADDON)) { lues.push(u.slice(SERVEUR_ADDON.length)); return new Response(JSON.stringify({ metas: [{ id: "tt1" }] })); }
+    return avant(url, init);
+  };
+  selfCalls.length = 0;
+  store.clear();
+  const env = { TMDB_API_KEY: "k", RELAIS_URL: "https://serveur.test", SELF, LIENS: { prepare: () => ({ first: async () => ({ 1: 1 }) }) } };
+  const b = await (await worker.fetch(new Request(`https://${SOURCE_HOST}/etat.json`), env, ctx)).json();
+  assert.deepEqual(lues.sort(), ["/catalog/movie/accueil-top10.json", "/catalog/movie/recherche-films/search=dune.json"]);
+  assert.ok(!selfCalls.some((p) => p.startsWith("/catalog/")), "pas recalculées ici");
+  assert.equal(b.controles.find((c) => c.id === "rangee").etat, "vert");
+  assert.equal(b.controles.find((c) => c.id === "recherche").etat, "vert");
+});

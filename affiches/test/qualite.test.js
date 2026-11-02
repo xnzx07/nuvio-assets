@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { parseQuality, qualityOf, resetMemo, tailleMemo, avecStreamFusion, vffPossible, avecDatesVff, avisUtile } from "../lib/qualite.js";
+import { parseQuality, qualityOf, resetMemo, tailleMemo, avecStreamFusion, vffPossible, avecDatesVff } from "../lib/qualite.js";
 
 beforeEach(() => resetMemo());
 
@@ -275,7 +275,7 @@ test("avec_dates_vff", async () => {
   assert.deepEqual(await avecDatesVff(env, "tt1", q, tmdb(AU_29_OCT.byAnyMeans), "2026-10-29"),
     { uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: false, sources: 9, langue: "vo", quebec: true });
   const { vfqDoute, ...sansDoute } = q;
-  assert.deepEqual(await avecDatesVff(env, "tt1", q, tmdb(AU_29_OCT.dogStars), "2026-10-29"), { ...sansDoute, vfqPossible: true }, "une VFQ en vue, les dates disent oui : le doute");
+  assert.deepEqual(await avecDatesVff(env, "tt1", q, tmdb(AU_29_OCT.dogStars), "2026-10-29"), sansDoute, "une VFQ en vue, les dates disent oui : VF");
   assert.deepEqual(await avecDatesVff(env, "tt2", q, tmdb([]), "2026-10-29"), sansDoute, "TMDB en panne");
   assert.deepEqual(await avecDatesVff(env, null, q, tmdb([]), "2026-10-29"), sansDoute, "série");
   const sur = { ...sansDoute, vff: true };
@@ -303,10 +303,8 @@ test("vfq_possible_d_apres_les_dates", async () => {
   assert.match(lue, /[?&]frais=\d{4}-\d{2}-\d{2}T\d{2}/);
   // Rien en français chez Torrentio : pas de doute tant que personne ne dit VF.
   assert.deepEqual(await lire(rien, usSeul), { ...rien, vffImpossible: true });
-  // Une VFQ en vue, les dates disent oui : le doute, que Lumio ne lèverait pas.
-  const doute = await lire({ ...french, vfqDoute: true }, sorties(["FR", 3, "2026-09-30"], ["US", 4, "2026-10-27"]));
-  assert.deepEqual(doute, { ...french, vfqPossible: true });
-  assert.equal(avisUtile(doute), false);
+  // Une VFQ en vue, les dates disent oui : VF, sans doute (Evil Dead Burn : en France le 8 juillet, en numérique aux États-Unis le 4 août).
+  assert.deepEqual(await lire({ ...french, vfqDoute: true }, sorties(["FR", 3, "2026-07-08"], ["US", 4, "2026-08-04"])), french);
   // La date française annoncée.
   assert.deepEqual(await lire(french, sorties(["US", 4, "2026-10-13"], ["FR", 4, "2026-11-17"])), { ...french, vffImpossible: true, vfqPossible: true, vffLe: "2026-11-17" });
   // Rien ne change : plateforme en France qui double, sortie mondiale, film français, film ancien, aucune date.
@@ -322,13 +320,9 @@ test("vfq_possible_d_apres_les_dates", async () => {
 // L'avis appliqué, sans VFF possible : « oui » reste le doute, « non » le lève.
 test("avis_sur_un_film_en_doute", () => {
   const q = { uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: true, sources: 9, langue: "vf", vffImpossible: true, vfqPossible: true };
-  assert.equal(avisUtile(q), true);
   assert.equal(avecStreamFusion(q, { vf: true, sources: 2 }).vfqPossible, true);
   const non = avecStreamFusion(q, { vf: false, sources: 3 });
   assert.equal(non.vf, false);
   assert.equal(non.vfqPossible, undefined);
   assert.equal(avecStreamFusion({ ...q, vfqPossible: undefined, vf: false, langue: "vo" }, { vf: true, sources: 1 }).vfqPossible, true);
-  assert.equal(avisUtile({ vf: true, vff: true }), false);
-  assert.equal(avisUtile({ vf: false, quebec: true }), false);
-  assert.equal(avisUtile(null), true);
 });

@@ -331,15 +331,13 @@ test("vfq_seulement_pas_de_demande_au_debrideur", async () => {
   assert.equal(rangee.get("tt891").vf, false);
 });
 
-// Le doute dans l'addon : Lumio est encore demandé pour vffImpossible (« non » : pas de VF ; « oui » : le doute), pas pour
-// le doute d'une VFQ en vue.
-test("doute_vfq_lumio_seulement_si_utile", async () => {
+// Le doute dans l'addon : Lumio est encore demandé pour vffImpossible (« non » : pas de VF ; « oui » : le doute).
+test("doute_vfq_lumio_decide", async () => {
   globalThis.fetch = async (url) => {
     const u = String(url);
     if (u.includes("/vf.json")) return Response.json({
       "movie/tt911": { vf: true, sources: 8, vffImpossible: true, vfqPossible: true, vffLe: "2026-11-17" },
       "movie/tt912": { vf: true, sources: 8, vffImpossible: true, vfqPossible: true },
-      "movie/tt913": { vf: true, sources: 8, vfqPossible: true },
       "movie/tt914": { vf: false, sources: 4, vffImpossible: true } });
     if (u.startsWith("https://lumio.test/p/stream/")) {
       appels.push(u);
@@ -349,11 +347,9 @@ test("doute_vfq_lumio_seulement_si_utile", async () => {
     return new Response("{}");
   };
   const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", STREAMFUSION_URL: "" };
-  const lus = await lireVfPhoto(e, ["movie/tt911", "movie/tt912", "movie/tt913", "movie/tt914"]);
-  assert.ok(!appels.some((u) => u.includes("tt913")), "une VFQ en vue : Lumio n'est pas demandé");
+  const lus = await lireVfPhoto(e, ["movie/tt911", "movie/tt912", "movie/tt914"]);
   assert.equal(appels.length, 3);
   assert.deepEqual([lus.get("movie/tt911").vf, lus.get("movie/tt911").vfqPossible, lus.get("movie/tt911").vffLe], [true, true, "2026-11-17"]);
   assert.deepEqual([lus.get("movie/tt912").vf, lus.get("movie/tt912").vfqPossible], [false, undefined]);
-  assert.deepEqual([lus.get("movie/tt913").vf, lus.get("movie/tt913").vfqPossible], [true, true]);
   assert.deepEqual([lus.get("movie/tt914").vf, lus.get("movie/tt914").vfqPossible], [true, true], "rien chez Torrentio, Lumio dit VF : le doute");
 });
