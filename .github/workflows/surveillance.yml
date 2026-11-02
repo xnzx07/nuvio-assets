@@ -5,7 +5,7 @@ name: Surveillance du serveur Oracle
 # prévenir. Quand il répond de nouveau, elles sont remises. Lancé par le Worker dès qu'il y a quelque chose à faire
 # (worker/surveillance.js, toutes les 5 minutes : les tâches planifiées de GitHub prennent des heures de retard) ; le
 # planning d'ici ne sert que de secours.
-# Le déploiement de main par Cloudflare (Workers Builds) les remet aussi : le passage suivant les retire si besoin.
+# Le déploiement de main par Cloudflare (Workers Builds) ne les remet que si le serveur répond (worker/construire/statiques.mjs).
 on:
   schedule:
     - cron: "17 * * * *"
