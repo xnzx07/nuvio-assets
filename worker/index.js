@@ -36,6 +36,7 @@ import {
 import { configurePage } from "./page.js";
 import { guidePage, NUVIO_TV_APK } from "./guide.js";
 import { AFFICHES_STATIQUES, APERCU_V, apercusDe, relaisUrl } from "./reglages.js";
+import { surveiller, CRON_SURVEILLANCE } from "./surveillance.js";
 import { ACTIF, SERVEUR_ADDON } from "./construire/redirections.mjs";
 import { lireReglages, ecrireReglages, dossierDe, MEMOIRES, MEMOIRES_PAYSAGE } from "./lien-affiches.js";
 import { lienPage } from "./lien.js";
@@ -3026,6 +3027,7 @@ export default {
   },
   // Tâche planifiée de 4 h UTC (wrangler.toml) : la photo du jour des tendances.
   async scheduled(event, env, ctx) {
+    if (event.cron === CRON_SURVEILLANCE) { ctx.waitUntil(surveiller(env).catch((e) => console.warn(`surveillance : ${e && e.message}`))); return; }
     // Une demande à soi-même par photo (liaison SELF : chacune son budget de 50 appels sortants), sinon ici.
     ctx.waitUntil(env.SELF
       ? Promise.all(["movie", "series"].map((k) => env.SELF.fetch(`https://self/tendances/${k}.json`).catch(() => null)))

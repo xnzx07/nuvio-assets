@@ -1,12 +1,14 @@
 name: Surveillance du serveur Oracle
 
-# Le serveur Oracle sert les catalogues et les fiches (worker/construire/redirections.mjs). Toutes les 5 minutes (GitHub
-# peut prendre du retard) : s'il ne répond plus, l'addon est redéployé sans les redirections, et catalogues et fiches
-# repassent par le Worker ; ce passage finit en rouge pour prévenir. Quand il répond de nouveau, elles sont remises.
+# Le serveur Oracle sert les catalogues et les fiches (worker/construire/redirections.mjs). S'il ne répond plus, l'addon
+# est redéployé sans les redirections, et catalogues et fiches repassent par le Worker ; ce passage finit en rouge pour
+# prévenir. Quand il répond de nouveau, elles sont remises. Lancé par le Worker dès qu'il y a quelque chose à faire
+# (worker/surveillance.js, toutes les 5 minutes : les tâches planifiées de GitHub prennent des heures de retard) ; le
+# planning d'ici ne sert que de secours.
 # Le déploiement de main par Cloudflare (Workers Builds) les remet aussi : le passage suivant les retire si besoin.
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       forcer:

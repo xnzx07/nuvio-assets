@@ -54,9 +54,10 @@ database_name = "nuvio-liens"
 binding = "RESERVE"
 database_name = "nuvio-reserve-weur"
 
-# Photo du jour des tendances (worker/tendances.js) : prise à 4 h UTC, la même pour tout le monde.
+# Photo du jour des tendances (worker/tendances.js) : prise à 4 h UTC, la même pour tout le monde. Toutes les 5 minutes :
+# le réveil de la surveillance du serveur Oracle (worker/surveillance.js), qui ne fait rien sans son jeton.
 [triggers]
-crons = ["0 4 * * *"]
+crons = ["0 4 * * *", "*/5 * * * *"]
 
 [observability]
 enabled = true
