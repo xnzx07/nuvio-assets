@@ -10,7 +10,7 @@ import { register } from "node:module";
 import { mkdir, rm, writeFile, copyFile, access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { redirige, regles, ENTETES_REDIRECTIONS } from "./redirections.mjs";
+import { redirige, regles, serveurPret, ENTETES_REDIRECTIONS } from "./redirections.mjs";
 
 register("./chargeur.mjs", import.meta.url);
 const { nomsStatiques, contenuStatique } = await import("../statique.js");
@@ -34,7 +34,7 @@ if (await access(logo).then(() => true, () => false)) {
 // Catalogues et fiches au serveur Oracle (redirections.mjs), au déploiement de ce dépôt seulement.
 let depot = "";
 try { depot = execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch { /* pas un dépôt git : une copie */ }
-const renvoi = redirige({ commande: process.env.WRANGLER_COMMAND, depot, coupe: process.env.ADDON_ORACLE === "coupe" });
+const renvoi = redirige({ commande: process.env.WRANGLER_COMMAND, depot, coupe: process.env.ADDON_ORACLE === "coupe" }) && await serveurPret();
 if (renvoi) {
   await writeFile(new URL("_redirects", sortie), regles());
   entetes += ENTETES_REDIRECTIONS;

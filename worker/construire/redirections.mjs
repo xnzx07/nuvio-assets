@@ -12,6 +12,22 @@ const CE_DEPOT = /github\.com[/:]xnzx07\/nuvio-assets(\.git)?\/?$/;
 
 export const redirige = ({ actif = ACTIF, coupe = false, commande, depot }) => actif && !coupe && commande !== "dev" && CE_DEPOT.test(String(depot || "").trim());
 
+/**
+ * Le serveur répond-il avec un catalogue ? Pour décider de poser les redirections au déploiement : pendant une panne,
+ * chaque envoi sur main (Workers Builds) les remettrait vers un serveur mort. Deux essais (un redémarrage dure quelques
+ * secondes) ; à tort, les catalogues restent sur le Worker jusqu'au passage suivant de la surveillance.
+ */
+export async function serveurPret({ fetchImpl = fetch, serveur = SERVEUR_ADDON, attente = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  for (let i = 0; i < 2; i++) {
+    try {
+      const r = await fetchImpl(`${serveur}/catalog/movie/accueil-top10.json`, { signal: AbortSignal.timeout(15000) });
+      if (r.ok && ((await r.json()).metas || []).length) return true;
+    } catch { /* essai suivant */ }
+    if (i === 0) await attente(5000);
+  }
+  return false;
+}
+
 export const regles = (serveur = SERVEUR_ADDON) => ["catalog", "meta"].flatMap((q) => [
   `/:cfg/${q}/* ${serveur}/:cfg/${q}/:splat 307`,
   `/${q}/* ${serveur}/${q}/:splat 307`,

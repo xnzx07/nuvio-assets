@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { decider } from "../scripts/surveiller-oracle.mjs";
-import { redirige, SERVEUR_ADDON } from "../worker/construire/redirections.mjs";
+import { redirige, serveurPret, SERVEUR_ADDON } from "../worker/construire/redirections.mjs";
 
 const page = (metas = [{ id: "tt1" }]) => Response.json({ metas });
 // reponses : ce que dit l'addon (sa redirection), puis le serveur à chaque essai.
@@ -73,4 +73,20 @@ test("deploiement_coupe_sans_redirections", () => {
   const depot = "https://github.com/xnzx07/nuvio-assets";
   assert.ok(redirige({ commande: "deploy", depot }));
   assert.ok(!redirige({ commande: "deploy", depot, coupe: true }));
+});
+
+// Un envoi sur main pendant une panne ne remet pas les redirections (17 h 37, le 2 novembre : une autre mise en ligne les
+// avait remises 84 secondes après la coupure).
+test("deploiement_sans_redirections_si_le_serveur_ne_repond_pas", async () => {
+  const attente = async () => {};
+  let appels = 0;
+  const ok = async () => { appels++; return page(); };
+  assert.equal(await serveurPret({ fetchImpl: ok, attente }), true);
+  assert.equal(appels, 1);
+  assert.equal(await serveurPret({ fetchImpl: async () => { throw new Error("x"); }, attente }), false);
+  assert.equal(await serveurPret({ fetchImpl: async () => new Response("", { status: 502 }), attente }), false);
+  assert.equal(await serveurPret({ fetchImpl: async () => page([]), attente }), false);
+  // Un redémarrage : le second essai suffit.
+  let n = 0;
+  assert.equal(await serveurPret({ fetchImpl: async () => (n++ ? page() : new Response("", { status: 502 })), attente }), true);
 });
