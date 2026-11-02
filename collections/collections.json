@@ -19,14 +19,14 @@
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
             "catalogId": "top-netflix-films",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "series",
             "catalogId": "top-netflix-series",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "tmdb",
@@ -120,14 +120,14 @@
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
             "catalogId": "top-prime-films",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "series",
             "catalogId": "top-prime-series",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "tmdb",
@@ -221,14 +221,14 @@
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
             "catalogId": "top-paramount-films",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "series",
             "catalogId": "top-paramount-series",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "tmdb",
@@ -322,14 +322,14 @@
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
             "catalogId": "top-disney-films",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "series",
             "catalogId": "top-disney-series",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "tmdb",
@@ -423,14 +423,14 @@
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
             "catalogId": "top-hbo-films",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "series",
             "catalogId": "top-hbo-series",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "tmdb",
@@ -524,14 +524,14 @@
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "movie",
             "catalogId": "top-apple-films",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "addon",
             "addonId": "com.xnzx07.catalogue-fr",
             "type": "series",
             "catalogId": "top-apple-series",
-            "genre": "Top"
+            "genre": "France"
           },
           {
             "provider": "tmdb",

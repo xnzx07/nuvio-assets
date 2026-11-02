@@ -19,19 +19,19 @@ const PLATEFORMES = [
   { service: "paramount", provider: "531", nom: "Paramount+" },
 ];
 export const TOPS = PLATEFORMES.flatMap(({ service, provider, nom }) => [
-  { id: `top-${service}-films`, type: "movie", service, provider, name: `Top films ${nom}` },
-  { id: `top-${service}-series`, type: "series", service, provider, name: `Top séries ${nom}` },
+  { id: `top-${service}-films`, type: "movie", service, provider, name: `Top ${nom}` },
+  { id: `top-${service}-series`, type: "series", service, provider, name: `Top ${nom}` },
 ]);
 
 /**
  * Catalogues du manifest : plateformes cochées, en France seulement (le classement est celui de la France). Un filtre
- * exigé (genre « Top », donné par les collections) : l'appli Nuvio sur ordinateur ignore showInHome et met sur l'accueil
+ * exigé (genre « France », donné par les collections ; Nuvio l'écrit dans l'onglet : « Top Netflix (Films) · France ») : l'appli Nuvio sur ordinateur ignore showInHome et met sur l'accueil
  * tout catalogue qui n'en exige pas.
  */
 export function topCatalogs(cfg, pageSize) {
   if (cfg.g !== "FR" || !cfg.c.includes("plateformes-streaming")) return [];
-  return TOPS.filter((t) => cfg.p.includes(t.provider)).map((t) => ({ type: t.type, id: t.id, name: t.name, showInHome: false, pageSize, genres: ["Top"],
-    extra: [{ name: "genre", isRequired: true, options: ["Top"] }, { name: "skip" }], extraRequired: ["genre"], extraSupported: ["genre", "skip"] }));
+  return TOPS.filter((t) => cfg.p.includes(t.provider)).map((t) => ({ type: t.type, id: t.id, name: t.name, showInHome: false, pageSize, genres: ["France"],
+    extra: [{ name: "genre", isRequired: true, options: ["France"] }, { name: "skip" }], extraRequired: ["genre"], extraSupported: ["genre", "skip"] }));
 }
 
 /** Une liste de l'API : les identifiants TMDB, dans son ordre, sans ce qui n'en a pas ; null si elle ne rend rien. */

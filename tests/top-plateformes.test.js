@@ -119,17 +119,17 @@ test("manifest_filtre_exige", async () => {
   assert.equal(c.type, "series");
   assert.equal(c.showInHome, false);
   assert.deepEqual(c.extraRequired, ["genre"]);
-  assert.deepEqual(c.extra[0].options, ["Top"]);
+  assert.deepEqual(c.extra[0].options, ["France"]);
 });
 
-const rangee = async (e, id, q = "") => (await (await worker.fetch(new Request(`${SOURCE}${q}/catalog/movie/${id}/genre=Top.json`), e, ctx)).json()).metas;
+const rangee = async (e, id, q = "") => (await (await worker.fetch(new Request(`${SOURCE}${q}/catalog/movie/${id}/genre=France.json`), e, ctx)).json()).metas;
 
 test("rangee_dans_l_ordre_sans_trous_ni_ajouts", async () => {
   fiches = { 3: film(3), 1: film(1), 2: film(2, { release_date: "2999-01-01" }) };   // 2 : pas encore sorti
   const e = env(duJour([3, 1, 2]));
   assert.deepEqual((await rangee(e, "top-netflix-films")).map((m) => m.name), ["Film 3", "Film 1"]);
   // Pas de page 2.
-  const suite = await (await worker.fetch(new Request(`${SOURCE}/catalog/movie/top-netflix-films/genre=Top&skip=20.json`), e, ctx)).json();
+  const suite = await (await worker.fetch(new Request(`${SOURCE}/catalog/movie/top-netflix-films/genre=France&skip=20.json`), e, ctx)).json();
   assert.deepEqual(suite.metas, []);
 });
 
@@ -158,7 +158,7 @@ test("autre_pays_rangee_vide", async () => {
 
 test("collections_sans_top_hors_de_france", async () => {
   collections = [{ id: "plateformes-streaming", title: "P", folders: [{ id: "netflix", title: "Netflix", sources: [
-    { provider: "addon", addonId: "com.xnzx07.catalogue-fr", type: "movie", catalogId: "top-netflix-films", genre: "Top" },
+    { provider: "addon", addonId: "com.xnzx07.catalogue-fr", type: "movie", catalogId: "top-netflix-films", genre: "France" },
     { provider: "tmdb", tmdbSourceType: "DISCOVER", mediaType: "MOVIE", filters: { watchRegion: "FR", withWatchProviders: "8" } }] }] }];
   const sources = async (o) => (await (await worker.fetch(new Request(`${SOURCE}/${seg(o)}/collections.json`), env(), ctx)).json())
     .find((c) => c.id === "plateformes-streaming").folders[0].sources;
