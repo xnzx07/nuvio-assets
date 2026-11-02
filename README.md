@@ -188,6 +188,7 @@ workflow « Tests ».
 | Workflow | Quand | Ce qu'il fait |
 |---|---|---|
 | Tests | à chaque push et pull request | Les trois suites de tests |
+| Surveillance du serveur Oracle | toutes les 5 minutes (GitHub peut prendre du retard) | Serveur injoignable 3 fois de suite : catalogues et fiches repassent par le Worker (déploiement sans `_redirects`), passage en rouge ; il répond 5 fois de suite : ils y retournent. Exercice à la main : `forcer` à `couper` |
 | Mettre à jour l'addon | chaque nuit, et à chaque changement de `catalogs.json`, `scripts/update_addon.py`, `scripts/build_search_words.py` ou `scripts/build_fenetres_vod.py` | Addon statique, saison en cours, vocabulaire de recherche, fenêtres des distributeurs américains (dates « Dispo vers le ») |
 | Notes IMDb | chaque soir, et à chaque changement de `scripts/build_imdb_ratings.py` | Refait `data/imdb-ratings.bin`, puis relance l'image Docker le lundi s'il a changé |
 | Générer les images des collections | à chaque changement d'`assets.json`, `scripts/make_assets.py` ou `fonts/` | Tuiles et GIF |
