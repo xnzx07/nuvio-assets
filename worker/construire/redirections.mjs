@@ -3,13 +3,14 @@
  * Cloudflare répond 307 sans lancer le Worker, hors des 100 000 requêtes par jour du compte (essai du 1er novembre 2026 :
  * 300 demandes redirigées, 0 comptée). Paramètres et caractères encodés suivent.
  * Seulement au déploiement de ce dépôt : ni wrangler dev, ni les copies, qui n'ont pas ce serveur.
- * Pour revenir en arrière (serveur en panne) : ACTIF à false, et déployer.
+ * Serveur en panne : .github/workflows/surveillance.yml redéploie tout seul sans elles (ADDON_ORACLE=coupe), puis les
+ * remet. Pour les retirer à la main, et que la surveillance n'y touche plus : ACTIF à false, et déployer.
  */
 export const ACTIF = true;
 export const SERVEUR_ADDON = "https://141-145-210-31.sslip.io";
 const CE_DEPOT = /github\.com[/:]xnzx07\/nuvio-assets(\.git)?\/?$/;
 
-export const redirige = ({ actif = ACTIF, commande, depot }) => actif && commande !== "dev" && CE_DEPOT.test(String(depot || "").trim());
+export const redirige = ({ actif = ACTIF, coupe = false, commande, depot }) => actif && !coupe && commande !== "dev" && CE_DEPOT.test(String(depot || "").trim());
 
 export const regles = (serveur = SERVEUR_ADDON) => ["catalog", "meta"].flatMap((q) => [
   `/:cfg/${q}/* ${serveur}/:cfg/${q}/:splat 307`,

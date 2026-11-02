@@ -34,7 +34,7 @@ if (await access(logo).then(() => true, () => false)) {
 // Catalogues et fiches au serveur Oracle (redirections.mjs), au déploiement de ce dépôt seulement.
 let depot = "";
 try { depot = execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch { /* pas un dépôt git : une copie */ }
-const renvoi = redirige({ commande: process.env.WRANGLER_COMMAND, depot });
+const renvoi = redirige({ commande: process.env.WRANGLER_COMMAND, depot, coupe: process.env.ADDON_ORACLE === "coupe" });
 if (renvoi) {
   await writeFile(new URL("_redirects", sortie), regles());
   entetes += ENTETES_REDIRECTIONS;
