@@ -6,10 +6,10 @@
     * plateformes, studios : vraies intros des marques, faites par scripts/make_intros.py
 - sagas/<slug>.jpg et gifs/sagas/<slug>.gif : les 8 thèmes de data/sagas.json (éventail d'affiches,
   défilé), dessinés par scripts/tuiles.py ; GIF encodé par gifski (GIFSKI=chemin, sinon dans le PATH),
-  7 Mo au plus. titles/sagas/<slug>.png : nom du thème pour l'écran ouvert.
+  7 Mo au plus, et gifs/sagas/<slug>.mp4 pour AppTV. titles/sagas/<slug>.png : nom du thème pour l'écran ouvert.
   sagas/<slug>-fond.jpg et .mp4 : fond (mur incliné des affiches des films du thème) et sa vidéo de 8 s
   (ffmpeg : FFMPEG=chemin, sinon dans le PATH), jouée une fois par Nuvio TV.
-- studios/<slug>.jpg, .gif, -fond.jpg, -fond.mp4 : les studios de data/studios.json (logo sur la couleur du
+- studios/<slug>.jpg, .gif, .mp4, -fond.jpg, -fond.mp4 : les studios de data/studios.json (logo sur la couleur du
   studio, ses 3 films les plus vus en éventail, arrivée ; fond : mur incliné de ses films).
 
 Usage : python scripts/make_assets.py [dossier_images_locales]
@@ -255,7 +255,8 @@ def main() -> None:
         tuiles.save_if_changed(tuiles.platform_card(logo, dark, brand, tiles), ROOT / "studios" / f"{slug}.jpg",
                                quality=90, optimize=True, progressive=True)
         tuiles.fit_gif([(size, None) for size in tuiles.GIF_SIZES],
-                       lambda size, _: tuiles.platform_frames(logo, dark, brand, tiles, size), ROOT / "studios" / f"{slug}.gif",
+                       lambda size, _, fps=tuiles.FPS: tuiles.platform_frames(logo, dark, brand, tiles, size, fps),
+                       ROOT / "studios" / f"{slug}.gif",
                        once=True)   # l'arrivée se joue une fois, puis la tuile reste
         mp4 = ROOT / "studios" / f"{slug}-fond.mp4"
         fond = tuiles.hero_still(studio["posters"], dark, HERO)

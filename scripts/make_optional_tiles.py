@@ -1,12 +1,12 @@
 """Tuiles des collections facultatives (data/optionnelles.json) : dessinées pour la branche tuiles-optionnelles.
 
-- <dossier>/<collection>/<tuile>.jpg, .gif, -fond.jpg, -fond.mp4, -titre.png : tuile fixe, animation (défilé
-  façon sagas ; arrivée façon plateformes pour les chaînes), fond (mur incliné), vidéo de fond, nom pour l'écran
-  ouvert. Mêmes dessins que les collections principales (tuiles.py).
+- <dossier>/<collection>/<tuile>.jpg, .gif, .mp4, -fond.jpg, -fond.mp4, -titre.png : tuile fixe, animation (défilé
+  façon sagas ; arrivée façon plateformes pour les chaînes) en GIF et en vidéo (AppTV), fond (mur incliné), vidéo de
+  fond, nom pour l'écran ouvert. Mêmes dessins que les collections principales (tuiles.py).
 - --part i/n : seulement une tuile sur n (tâches en parallèle du workflow optionnelles.yml) ; --avant <dossier> :
   images de la fabrication d'avant, reprises pour une tuile qui ne peut pas être faite (jamais de tuile grise).
-- --leger : secours si GitHub ralentit ces adresses : animation 480x270, vidéo de fond réduite à une image fixe,
-  aux mêmes adresses (rien à réimporter).
+- --leger : secours si GitHub ralentit ces adresses : animation 480x270 sans vidéo (AppTV reprend alors le GIF), vidéo
+  de fond réduite à une image fixe, aux mêmes adresses (rien à réimporter).
 
 Usage : python scripts/make_optional_tiles.py <dossier> [--part i/n] [--avant <dossier>] [--leger]
 Code de sortie : 0 tout fait ; 3 au moins une tuile reprise d'avant ; 2 une tuile sans image d'avant n'a pas pu
@@ -26,7 +26,7 @@ import tuiles  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "optionnelles.json"
-FILES = ["{}.jpg", "{}.gif", "{}-fond.jpg", "{}-fond.mp4", "{}-titre.png"]
+FILES = ["{}.jpg", "{}.gif", "{}-fond.jpg", "{}-fond.mp4", "{}-titre.png", "{}.mp4"]
 HERO = (1920, 1080)
 
 
@@ -53,15 +53,15 @@ def render(job: dict, tile: list[dict], wall: list[str], folder: Path, leger: bo
         dark, brand = (tuple(c) for c in f["colors"])
         logo, posters = channel_logo(job["title"]), [t["poster"] for t in tile[:3]]
         tuiles.platform_card(logo, dark, brand, posters).save(folder / f"{slug}.jpg", quality=90, optimize=True, progressive=True)
-        tuiles.fit_gif([(s, None) for s in sizes], lambda s, _: tuiles.platform_frames(logo, dark, brand, posters, s),
-                       folder / f"{slug}.gif", once=True)   # arrivée jouée une fois
+        tuiles.fit_gif([(s, None) for s in sizes], lambda s, _, fps=tuiles.FPS: tuiles.platform_frames(logo, dark, brand, posters, s, fps),
+                       folder / f"{slug}.gif", once=True, video=not leger)   # arrivée jouée une fois
         tint = dark
     else:
         theme = {"title": job["title"], "subtitle": "", "sagas": tile}
         tuiles.saga_card(theme).save(folder / f"{slug}.jpg", quality=90, optimize=True, progressive=True)
         top = min(8, len(tile))
         tuiles.fit_gif([(s, k) for s in sizes for k in range(top, min(top, 4) - 1, -1)],
-                       lambda s, k: tuiles.saga_frames(theme, k, s), folder / f"{slug}.gif")
+                       lambda s, k, fps=tuiles.FPS: tuiles.saga_frames(theme, k, s, fps), folder / f"{slug}.gif", video=not leger)
         tint = (0, 0, 0)
     ma.hero_title(job["title"], folder / f"{slug}-titre.png")
     still = tuiles.hero_still(wall, tint, HERO)

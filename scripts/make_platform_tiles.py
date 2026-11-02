@@ -2,7 +2,7 @@
 
 - <dossier>/plateformes/<slug>-fond.jpg et <slug>-fond.mp4 : fond (mur incliné des nouveautés de l'année, puis
   des titres populaires) et sa vidéo de 8 s, jouée une fois par Nuvio TV (ffmpeg : FFMPEG=chemin, sinon PATH).
-- <dossier>/plateformes/<slug>.jpg (1280x720) et <slug>.gif (arrivée, 720x405, 7 Mo au plus) pour chaque
+- <dossier>/plateformes/<slug>.jpg (1280x720), <slug>.gif (arrivée, 7 Mo au plus) et <slug>.mp4 (AppTV) pour chaque
   plateforme de assets.json (platform_tiles) : logo blanc sur la couleur de la marque, affiches françaises
   des 2 films et de la série les plus populaires du moment en France sur la plateforme (TMDB).
 - Le workflow range ces images sur la branche « tuiles-vivantes », réécrite en entier à chaque fois (un seul
@@ -170,7 +170,7 @@ def render(entry: list, posters: list[str], wall: list[str], folder: Path) -> No
     tuiles.platform_card(logo, tuple(dark), tuple(brand), posters).convert("RGB").save(
         folder / f"{slug}.jpg", quality=90, optimize=True, progressive=True)
     tuiles.fit_gif([(size, None) for size in tuiles.GIF_SIZES],
-                   lambda size, _: tuiles.platform_frames(logo, tuple(dark), tuple(brand), posters, size),
+                   lambda size, _, fps=tuiles.FPS: tuiles.platform_frames(logo, tuple(dark), tuple(brand), posters, size, fps),
                    folder / f"{slug}.gif", once=True)   # l'arrivée se joue une fois, puis la tuile reste
     tuiles.hero_still(wall, tuple(dark), HERO).save(folder / f"{slug}-fond.jpg", quality=88, optimize=True, progressive=True)
     tuiles.encode_mp4(tuiles.hero_frames(wall, tuple(dark), HERO), HERO, folder / f"{slug}-fond.mp4")

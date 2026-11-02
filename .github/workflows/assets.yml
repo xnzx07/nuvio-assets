@@ -26,7 +26,7 @@ jobs:
     # Pas sur les forks : ils lisent les images de ce dépôt, et un commit de leur part bloquerait « Sync fork ».
     if: github.repository == 'xnzx07/nuvio-assets'
     runs-on: ubuntu-latest
-    timeout-minutes: 90   # sagas et studios : animations et vidéos de fond en 1080p
+    timeout-minutes: 120   # sagas et studios : animations (GIF et vidéo) et vidéos de fond en 1080p
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         # main tel qu'il est au départ, pas le commit qui a lancé : une génération en attente derrière une autre

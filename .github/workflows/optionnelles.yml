@@ -31,7 +31,7 @@ jobs:
     # Pas sur les forks : ils lisent les images de ce dépôt.
     if: github.repository == 'xnzx07/nuvio-assets'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     strategy:
       fail-fast: false   # une partie en échec n'arrête pas les autres : on publie ce qui est fait
       matrix:

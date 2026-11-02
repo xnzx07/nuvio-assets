@@ -4,6 +4,7 @@ Les images TMDB sont remplacées par des aplats : affiches magenta, fonds verts,
 """
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -191,9 +192,12 @@ class Poids(unittest.TestCase):
     """Un GIF de plus de 7 Mo n'arrive pas à temps sur la TV : moins de sagas dans le défilé, puis plus petit."""
 
     def setUp(self):
-        frames = mock.patch.object(tuiles, "saga_frames", side_effect=lambda theme, steps, size: ([steps], [size]))
+        frames = mock.patch.object(tuiles, "saga_frames", side_effect=lambda theme, steps, size, fps=tuiles.FPS: ([steps], [size]))
         frames.start()
         self.addCleanup(frames.stop)
+        video = mock.patch.object(tuiles, "encode_tile_video", return_value=1)
+        self.video = video.start()
+        self.addCleanup(video.stop)
 
     def test_saga_gif_reste_sous_7_mo(self):
         def encode(frames, durations, out, once=False):
@@ -206,6 +210,20 @@ class Poids(unittest.TestCase):
             return 5_000_000 if durations[0] == tuiles.GIF_SIZES[1] else 9_000_000
         with mock.patch.object(tuiles, "encode_gif", side_effect=encode):
             self.assertEqual(tuiles.saga_gif(theme(), Path("x.gif")), (5_000_000, tuiles.GIF_SIZES[1], 8))
+
+    def test_la_video_est_au_meilleur_reglage_a_cote_du_gif(self):
+        """La limite de poids est celle du GIF : un GIF réduit à 5 sagas n'en retire pas à la vidéo."""
+        def encode(frames, durations, out, once=False):
+            return 9_000_000 if durations[0] == tuiles.GIF_SIZES[0] and frames[0] >= 6 else 5_000_000
+        with mock.patch.object(tuiles, "encode_gif", side_effect=encode):
+            tuiles.saga_gif(theme(), Path("x.gif"))
+        frames, durations, out = self.video.call_args.args
+        self.assertEqual((frames, durations, out), ([8], [tuiles.VIDEO_SIZE], Path("x.mp4")))
+
+    def test_pas_de_video_sur_demande(self):
+        with mock.patch.object(tuiles, "encode_gif", return_value=1):
+            tuiles.fit_gif([((64, 36), None)], lambda s, _, fps=tuiles.FPS: ([], []), Path("x.gif"), video=False)
+        self.video.assert_not_called()
 
     def test_saga_gif_trop_lourd_partout(self):
         with tempfile.TemporaryDirectory() as d:
@@ -306,6 +324,29 @@ class Video(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tuiles.encode_mp4(frames(), (64, 36), out)
             self.assertFalse(out.exists())
+
+    def test_video_de_la_tuile_duree_et_couleurs(self):
+        """Une image tenue 1 s dure 1 s à 60 i/s, et les couleurs sont annoncées : pas de saut de teinte avec l'image fixe."""
+        frames = [Image.new("RGB", tuiles.VIDEO_SIZE, c) for c in ((10, 10, 10), (200, 0, 0))]
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "x.mp4"
+            tuiles.encode_tile_video(frames, [1000, 1000 // 60], out)
+            probe = shutil.which("ffprobe", path=str(Path(shutil.which(os.environ.get("FFMPEG", "ffmpeg"))).parent))
+            info = subprocess.run([probe, "-v", "error", "-select_streams", "v", "-count_frames", "-show_entries",
+                                   "stream=nb_read_frames,width,height,color_space,profile,level", "-of", "default=nw=1", str(out)],
+                                  capture_output=True, text=True, check=True).stdout
+        for line in ("width=1280", "height=720", "color_space=bt709", "profile=High", "level=41", "nb_read_frames=61"):
+            self.assertIn(line, info)
+
+    def test_les_images_suivent_la_cadence(self):
+        """À 60 i/s, le mouvement dure le même temps qu'à 50 : plus d'images, pas plus de secondes."""
+        with mock.patch.object(tuiles, "defile_frame", return_value="image"):
+            frames, durations = tuiles.saga_frames(theme(), 2, (64, 36), 60)
+        self.assertEqual(len(frames), 2 * (1 + 29))
+        with mock.patch.object(tuiles, "platform_frame", return_value="image"):
+            frames, durations = tuiles.platform_frames(None, (0, 0, 0), (0, 0, 0), ["a"], (64, 36), 60)
+        self.assertEqual(len(frames), 82)
+        self.assertEqual(durations[-1], tuiles.ARRIVAL_HOLD_MS)
 
 
 @unittest.skipUnless(shutil.which(os.environ.get("GIFSKI", "gifski")), "gifski introuvable")

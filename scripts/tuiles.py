@@ -7,7 +7,8 @@
   éventail à droite ; animation « arrivée » : le logo glisse, puis les cartes tombent une à une.
 - Toutes les mesures sont des fractions de la taille de la tuile : la même tuile se dessine en 1280x720
   (image fixe) et en 720x405 ou 480x270 (animation).
-- Animations encodées par gifski (palettes optimisées image par image), 25 images/s.
+- Animations encodées par gifski (palettes optimisées image par image), 50 images/s, pour Nuvio TV ; et en vidéo
+  H.264 720p à 60 images/s à côté du GIF (<tuile>.mp4), pour AppTV, qui en déduit l'adresse depuis celle du GIF.
 """
 import math
 import os
@@ -28,6 +29,14 @@ HERO_FPS = 60            # vidéos de fond : 60 i/s, comme l'écran de la TV (pa
 GIF_SIZES = ((640, 360), (480, 270))
 GIF_MAX_BYTES = 7 * 1024 * 1024         # au-delà, Nuvio TV abandonne l'image (plus de 8 s pour arriver)
 GIFSKI_OPTS = ["--quality", "100", "--motion-quality", "90", "--lossy-quality", "90"]   # comme make_intros.py
+# Vidéo de la tuile pour AppTV : décodée par la puce de la télé, sans limite de couleurs ni de poids à tenir.
+VIDEO_SIZE, VIDEO_FPS = (1280, 720), 60
+HERO_X264 = ["-c:v", "libx264", "-preset", "medium", "-crf", "22", "-pix_fmt", "yuv420p"]
+# Niveau 4.1 et 4 images de référence : les limites des puces des petites box. Couleurs en BT.709 écrites et annoncées
+# (ffmpeg convertit en BT.601 par défaut) : sinon la tuile change de teinte quand la vidéo prend le relais de l'image.
+TILE_X264 = ["-vf", "scale=out_color_matrix=bt709:out_range=tv", "-c:v", "libx264", "-profile:v", "high", "-level", "4.1",
+             "-refs", "4", "-preset", "slow", "-crf", "20", "-pix_fmt", "yuv420p",
+             "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"]
 
 # ---------- sagas : géométrie (fractions de la largeur W ou de la hauteur H) ----------
 TEXT_X, TEXT_W = 0.050, 0.336          # zone du titre
@@ -239,15 +248,16 @@ def defile_frame(theme: dict, steps: int, offset: float, size: tuple[int, int]) 
                       theme.get("kicker", ""))
 
 
-def saga_frames(theme: dict, steps: int, size: tuple[int, int]) -> tuple[list[Image.Image], list[int]]:
+def saga_frames(theme: dict, steps: int, size: tuple[int, int], fps: int = FPS) -> tuple[list[Image.Image], list[int]]:
     """Défilé des « steps » premières sagas : repos, glissement d'une place, et ainsi de suite."""
     frames, durations = [], []
+    slide = round(SLIDE_FRAMES * fps / FPS)
     for step in range(steps):
         frames.append(defile_frame(theme, steps, step, size))
         durations.append(REST_MS)
-        for f in range(1, SLIDE_FRAMES + 1):
-            frames.append(defile_frame(theme, steps, step + smooth(f / (SLIDE_FRAMES + 1)), size))
-            durations.append(FRAME_MS)
+        for f in range(1, slide + 1):
+            frames.append(defile_frame(theme, steps, step + smooth(f / (slide + 1)), size))
+            durations.append(1000 // fps)
     return frames, durations
 
 
@@ -316,12 +326,13 @@ def platform_card(logo: Image.Image, dark: tuple, brand: tuple, posters: list[st
 
 
 def platform_frames(logo: Image.Image, dark: tuple, brand: tuple, posters: list[str],
-                    size: tuple[int, int]) -> tuple[list[Image.Image], list[int]]:
+                    size: tuple[int, int], fps: int = FPS) -> tuple[list[Image.Image], list[int]]:
     """Arrivée : le logo glisse depuis la gauche en apparaissant, puis les cartes tombent une à une."""
     W, H = size
     frames = []
-    k = 25 / FPS   # les temps ci-dessous sont comptés en images à 25 i/s
-    for f in range(ARRIVAL_FRAMES):
+    k = 25 / fps   # les temps ci-dessous sont comptés en images à 25 i/s
+    count = round(ARRIVAL_FRAMES * fps / FPS)
+    for f in range(count):
         a = smooth(f * k / 12)
         lifts = []
         for i in range(len(posters)):
@@ -329,7 +340,7 @@ def platform_frames(logo: Image.Image, dark: tuple, brand: tuple, posters: list[
             bounce = math.sin(math.pi * u) * 10 / 360 * H if u > 0.6 else 0.0
             lifts.append(-(1 - smooth(u)) * 0.89 * H - bounce)
         frames.append(platform_frame(logo, dark, brand, posters, -0.094 * W * (1 - a), a, lifts, size))
-    return frames, [FRAME_MS] * (ARRIVAL_FRAMES - 1) + [ARRIVAL_HOLD_MS]
+    return frames, [1000 // fps] * (count - 1) + [ARRIVAL_HOLD_MS]
 
 
 # ---------- fonds (heroBackdropUrl / heroVideoUrl) : mur d'affiches incliné qui glisse ----------
@@ -461,13 +472,12 @@ def hero_frames(posters: list[str], tint: tuple, size: tuple[int, int], seconds:
         yield _hero_frame(posters, tint, (1 - math.cos(2 * math.pi * i / (n - 1))) / 2, size)
 
 
-def encode_mp4(frames, size: tuple[int, int], out: Path) -> int:
-    """Vidéo H.264 lue par Nuvio TV (heroVideoUrl), muette, démarrage rapide (faststart)."""
+def encode_mp4(frames, size: tuple[int, int], out: Path, fps: int = HERO_FPS, x264: list[str] = HERO_X264) -> int:
+    """Vidéo H.264 (par défaut, le fond lu par Nuvio TV : heroVideoUrl), muette, démarrage rapide (faststart)."""
     out.parent.mkdir(parents=True, exist_ok=True)
     proc = subprocess.Popen([os.environ.get("FFMPEG", "ffmpeg"), "-y", "-loglevel", "error", "-f", "rawvideo",
-                             "-pix_fmt", "rgb24", "-s", f"{size[0]}x{size[1]}", "-r", str(HERO_FPS), "-i", "-",
-                             "-c:v", "libx264", "-preset", "medium", "-crf", "22", "-pix_fmt", "yuv420p",
-                             "-movflags", "+faststart", "-an", str(out)], stdin=subprocess.PIPE)
+                             "-pix_fmt", "rgb24", "-s", f"{size[0]}x{size[1]}", "-r", str(fps), "-i", "-",
+                             *x264, "-movflags", "+faststart", "-an", str(out)], stdin=subprocess.PIPE)
     try:
         for f in frames:
             proc.stdin.write(f.convert("RGB").tobytes())
@@ -520,13 +530,23 @@ def _hold_last_frame(out: Path) -> None:
         out.write_bytes(bytes(data))
 
 
-def fit_gif(attempts, render, out: Path, once: bool = False):
-    """Premier essai (taille, réglage) dont le GIF tient sous GIF_MAX_BYTES ; render(taille, réglage) donne
-    (images, durées). Renvoie (octets, taille, réglage) ; lève RuntimeError si rien ne tient. once : joué une fois."""
+def encode_tile_video(frames: list[Image.Image], durations: list[int], out: Path) -> int:
+    """Vidéo de la tuile (VIDEO_SIZE, VIDEO_FPS) : une image tenue plus longtemps est répétée."""
+    held = (f for f, ms in zip(frames, durations) for _ in range(max(1, round(ms * VIDEO_FPS / 1000))))
+    return encode_mp4(held, VIDEO_SIZE, out, VIDEO_FPS, TILE_X264)
+
+
+def fit_gif(attempts, render, out: Path, once: bool = False, video: bool = True):
+    """Premier essai (taille, réglage) dont le GIF tient sous GIF_MAX_BYTES ; render(taille, réglage[, i/s]) donne
+    (images, durées). Renvoie (octets, taille, réglage) ; lève RuntimeError si rien ne tient. once : joué une fois.
+    video : aussi la vidéo de la tuile à côté du GIF, toujours au meilleur réglage : la limite de poids est celle du GIF."""
     for size, setting in attempts:
         frames, durations = render(size, setting)
         n = encode_gif(frames, durations, out, once=once)
+        del frames
         if n <= GIF_MAX_BYTES:
+            if video:
+                encode_tile_video(*render(VIDEO_SIZE, attempts[0][1], VIDEO_FPS), out.with_suffix(".mp4"))
             return n, size, setting
     out.unlink(missing_ok=True)
     raise RuntimeError(f"{out.name} : plus de {GIF_MAX_BYTES // (1024 * 1024)} Mo même en petit")
@@ -536,4 +556,4 @@ def saga_gif(theme: dict, out: Path) -> tuple[int, tuple[int, int], int]:
     """Défilé du thème : 8 sagas au plus, moins si trop lourd (4 au minimum), puis en 480x270."""
     top = min(8, len(theme["sagas"]))
     attempts = [(size, steps) for size in GIF_SIZES for steps in range(top, min(top, 4) - 1, -1)]
-    return fit_gif(attempts, lambda size, steps: saga_frames(theme, steps, size), out)
+    return fit_gif(attempts, lambda size, steps, fps=FPS: saga_frames(theme, steps, size, fps), out)
