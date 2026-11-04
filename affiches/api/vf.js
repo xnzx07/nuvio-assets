@@ -37,7 +37,7 @@ export function makeVf({ fetchImpl = fetch, env = process.env } = {}) {
       const q = await (sansCle ? qualiteConnue(type, imdb, s, fetchImpl, relais) : qualityOf(type, imdb, s, fetchImpl, relais, env.RELAIS_KEY)).catch(() => null);
       // langue (« vostfr », « vo »…) : ce qu'on peut regarder sans VF, que la fiche de l'addon dit (« en VOSTFR »).
       // vff, vfq : VF sûre (TRUEFRENCH, VFF…) et la qualité de ses sources : l'addon ne demande alors pas Lumio.
-      // quebec : de la VFQ seulement, sûr qu'il n'y a pas de VF : pas de Lumio non plus (il la prend pour de la VF).
+      // quebec : une VFQ en vue, sans VFF sûre (avec vfqPossible : coupé en deux) : pas de Lumio (il la prend pour de la VF).
       // vfqPossible, vffImpossible, vffLe : le doute, et la sortie française annoncée (lib/qualite.js, avecDatesVff).
       return [id, q && typeof q.vf === "boolean" ? { vf: q.vf, sources: q.sources, ...(q.langue ? { langue: q.langue } : {}),
         ...(q.vff && q.vfq ? { vff: true, vfq: q.vfq } : {}), ...(q.quebec ? { quebec: true } : {}),

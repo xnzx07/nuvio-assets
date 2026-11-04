@@ -56,6 +56,20 @@ test("manifeste_source", async () => {
   assert.equal(m.id, "com.xnzx07.catalogue-fr");
 });
 
+// La rangée « Spécial … » seulement pendant les fêtes : entre deux, pas de « À l'affiche » sur l'accueil (2026-11-04).
+test("rangee_speciale_cachee_entre_deux_fetes", async () => {
+  const rangee = async (iso) => {
+    mock.timers.enable({ apis: ["Date"], now: Date.parse(iso) });
+    try {
+      const m = await (await at("https://nuvio-assets.xnzxflix.workers.dev/manifest.json")).json();
+      return m.catalogs.find((c) => c.id === "accueil-saison");
+    } finally { mock.timers.reset(); }
+  };
+  assert.equal(await rangee("2026-11-04T12:00:00Z"), undefined, "entre Halloween et Noël");
+  assert.equal((await rangee("2026-12-01T12:00:00Z")).name, "Spécial Noël");
+  assert.equal((await rangee("2026-10-15T12:00:00Z")).name, "Spécial Halloween");
+});
+
 test("manifeste_copie", async () => {
   const m = await (await at("https://catalogue.exemple.fr/manifest.json")).json();
   assert.equal(m.id, "com.xnzx07.catalogue-fr.perso");

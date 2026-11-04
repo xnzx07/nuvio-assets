@@ -9,7 +9,7 @@
  */
 
 const ROW_HINTS = {
-  "accueil-saison": "Change toute seule : Halloween, Noël, Saint-Valentin, Pâques, été, sinon les films à l'affiche",
+  "accueil-saison": "Change toute seule : Halloween, Noël, Saint-Valentin, Pâques, été ; cachée entre deux fêtes",
   "accueil-top10": "Les films dont tout le monde parle aujourd'hui, dans l'ordre du classement",
   "accueil-tendances-series": "Les séries dont tout le monde parle aujourd'hui, dans l'ordre du classement",
   "accueil-nouveautes-plateformes": "Arrivés depuis 3 mois sur les plateformes que tu choisis plus bas",
@@ -139,7 +139,7 @@ export function configurePage({ origin, cfg, rows, discover, providers, collecti
     rows: rows.map((d) => ({
       id: d.id,
       name: d.id === "accueil-saison" ? "Spécial saison" : d.name,
-      now: d.id === "accueil-saison" ? d.name : "",
+      now: d.id === "accueil-saison" ? (d.horsFete ? "cachée, pas de fête" : d.name) : "",
       kind: d.mix ? "Films + séries" : d.type === "series" ? "Séries" : "Films",
       type: d.type,
       hint: ROW_HINTS[d.id] || "",
@@ -223,7 +223,7 @@ ${SOIREE_HTML}
 
       <section class="act" id="s-saison">
         <header><span>Calendrier</span><h2>La rangée « Spécial »</h2></header>
-        <p class="sub">Elle change toute seule selon la période. Décoche les fêtes qui ne t'intéressent pas : en dehors des fêtes choisies, elle montre les films à l'affiche.</p>
+        <p class="sub">Elle change toute seule selon la période. Décoche les fêtes qui ne t'intéressent pas : en dehors des fêtes choisies, elle n'apparaît pas.</p>
         <div class="chips" id="seasons"></div>
       </section>
 

@@ -135,15 +135,16 @@ const filmRecent = (releases, today) => {
  * Le doute VFF ou VFQ d'un film récent, tranché par ses dates (vffPossible, TMDB lu par son identifiant IMDb). Pas pour
  * une VF sûre (vff), un film français, en abonnement sur une plateforme en France qui le double, ou sorti partout le
  * même jour.
- * - quebec : une VFQ en vue et pas de VFF possible : vf false. Ni Lumio ni StreamFusion (ils la prennent pour de la VF).
- * - vfqPossible : on ne sait pas. Seulement « FRENCH » alors que les dates disent non (Torrent9 renomme tout). vf reste
- *   true ; l'affiche est coupée en deux.
+ * - quebec + vfqPossible : une VFQ en vue, que les dates disent oui ou non : le film se regarde au moins en VFQ, vf true,
+ *   l'affiche est coupée en deux (choix de la personne le 2026-11-04 : Hope, L'île des souvenirs ; avant, Hope était
+ *   gris et L'île en couleur). quebec : ni Lumio ni StreamFusion, qui la prennent pour de la VF.
+ * - vfqPossible seul : seulement « FRENCH » alors que les dates disent non (Torrent9 renomme tout). L'affiche est coupée
+ *   en deux.
  * - vffImpossible : pas de VFF possible et pas de VFQ en vue. L'avis de Lumio ou StreamFusion est encore utile : « non »,
  *   pas de VF (Runner, en MULTi.LAT, sans français) ; « oui », le doute, car ils ne distinguent pas la VFQ (Citizen
  *   Vigilante, rien chez Torrentio). Voir avecAvisDoute.
- * Les dates disent oui : rien ne change, même avec des fichiers VFQ à côté (Evil Dead Burn : en France le 8 juillet, en
- * numérique aux États-Unis le 4 août, MULTi.VFQ en WEB et sa VFF ailleurs ; classé en doute à tort le 1er novembre 2026).
- * Et vffLe : la sortie numérique française annoncée. TMDB pas lu, sans aucune date, ou une série (imdb null) : rien ne change.
+ * Et vffLe : la sortie numérique française annoncée, si la VFF n'est pas encore possible. TMDB pas lu, sans aucune date,
+ * ou une série (imdb null) : rien ne change.
  */
 export async function avecDatesVff(env, imdb, q, fetchImpl = fetch, today = new Date().toISOString().slice(0, 10)) {
   if (!q || q.vff) return q;
@@ -158,9 +159,9 @@ export async function avecDatesVff(env, imdb, q, fetchImpl = fetch, today = new 
   if (!d || !dates || !dates.length || d.original_language === "fr" || !filmRecent(dates, today) || abonnementVf(d) || sortieMondiale(dates)) return reste;
   const possible = vffPossible(dates, d.original_language, today), le = prochaineVff(dates, today);
   const avecDate = le ? { vffLe: le } : {};
-  if (!possible && vfqDoute) {
-    const enVfAvant = reste.langue === "vf" || reste.langue === "multi";
-    return { ...reste, vf: false, langue: enVfAvant ? "vo" : reste.langue, quebec: true, ...avecDate };
+  if (vfqDoute) {
+    const enVf = reste.langue === "vf" || reste.langue === "multi";
+    return { ...reste, vf: true, langue: enVf ? reste.langue : "vf", quebec: true, vfqPossible: true, ...(possible ? {} : avecDate) };
   }
   if (possible) return reste;
   return { ...reste, vffImpossible: true, ...(reste.vf ? { vfqPossible: true } : {}), ...avecDate };

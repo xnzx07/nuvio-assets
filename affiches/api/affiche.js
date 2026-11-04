@@ -273,10 +273,11 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       const qualiteLue = lireSources ? chrono.mesure("qualite", qualiteATemps(type, facts, fetchImpl, env.QUALITE_RELAIS || relais, env.RELAIS_KEY, request.headers.get("X-Apercu") === "1" ? ATTENTE_APERCU_MS : ATTENTE_QUALITE_MS, env.STREAMFUSION !== "off")) : { enRetard: false, quality: null };
       // L'avis du jour seulement si Torrentio n'est pas sûr de la VF (vff : un fichier TRUEFRENCH, VFF…) : chaque avis
       // de l'addon peut être une demande au compte AllDebrid de la personne (Lumio, StreamFusion). Ni s'il ne voit que de
-      // la VFQ (quebec) : Lumio et StreamFusion la prennent pour de la VF (Hope, By Any Means, le 28 octobre 2026).
+      // la VFQ (quebec) : Lumio et StreamFusion la prennent pour de la VF (Hope, By Any Means, le 28 octobre 2026), et
+      // l'affiche est déjà coupée en deux (lib/qualite.js, avecDatesVff).
       const avisLu = videoAvis ? chrono.mesure("avis", Promise.resolve(qualiteLue).then(({ quality: q }) => (q && q.vff
         ? { vf: true, sources: Math.max(1, q.sources || 0), qualite: q.vfq || null }
-        : q && q.quebec ? { vf: false, sources: Math.max(1, q.sources || 0) }
+        : q && q.quebec ? null
           : avisDuJour(env.ADDON_URL || ADDON_URL, videoAvis, env.RELAIS_KEY, fetchImpl)))) : null;
       const lectures = Promise.all([
         noteImdb && facts.imdbId ? chrono.mesure("imdb", lireNoteImdb(facts.imdbId, fetchImpl, ATTENTE_NOTES_MS)) : { note: undefined, manque: false },
@@ -321,9 +322,9 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       // L'avis du jour prime sur celui de la photo de 4 h (The Dog Stars : sans VF à 4 h, en VF dans la journée).
       // Sans VF, pas de qualité : celle de Torrentio est celle d'un fichier en VFQ ou en VO (By Any Means, « 4K DV »).
       const SANS_QUALITE = { uhd: false, extra: null, fhd: false, hdr10p: false, atmos: false };
-      // De la VFQ seulement chez Torrentio (quebec) : la photo, qui a pu la prendre pour de la VF, ne le contredit pas.
+      // Une VFQ en vue chez Torrentio (quebec) : Torrentio tel quel, coupé en deux ; la photo ne le contredit pas.
       let quality = avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, avisJour.vf ? qualiteDeQ(avisJour.qualite) : SANS_QUALITE)
-        : qualiteTorrentio && qualiteTorrentio.quebec ? avecAvisVf(qualiteTorrentio, false, SANS_QUALITE)
+        : qualiteTorrentio && qualiteTorrentio.quebec ? qualiteTorrentio
           : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
       quality = avecAvisDoute(quality);
       // Récent sans VF d'après l'avis du jour : « revoir », le serveur la redessine quelques heures plus tard.

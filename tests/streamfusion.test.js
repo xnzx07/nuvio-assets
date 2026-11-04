@@ -94,6 +94,9 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
       if (u.includes("tt833")) return new Response("panne", { status: 502 });
       // Rien du tout (film encore au cinéma : Resident Evil, L'Odyssée) : un message sans lien de lecture.
       if (u.includes("tt835")) return Response.json({ streams: [{ name: "🔴 Lumio", description: "Aucune source trouvée pour ce titre", externalUrl: "https://lumio.test/configure" }] });
+      // Un fichier MULTI sans français lu dedans (The Mongoose, 4 nov. 2026) : « 🌍 🇬🇧 », pas de 🇫🇷. Pas une VF.
+      if (u.includes("tt836")) return Response.json({ streams: [
+        { name: "[AD⚡️] Lumio", description: "4K • WEB-DL • DV • HDR10 • 📶 9,9 Mb/s\n🌍 🇬🇧 • 💾 7,4 Go • 🔎 DMM\n🗂️ The.Mongoose.2026.MULTI.2160p.SREENER.WEB.DL.HDR.DV.HEVC.DDP5.1-MAXX.mkv", url: "https://lumio.test/play/m" }] });
       return Response.json({ streams: [{ name: "⚙️ Lumio", description: "Votre clé AllDebrid a expiré." }] });
     }
     if (u.startsWith("https://sf.test/c/stream/")) {
@@ -107,6 +110,7 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
   assert.deepEqual(await (await sf("movie/tt831", "cle-relais", e)).json(), { vf: true, sources: 2, qualite: { u: 1, x: "DV", p: 0, f: 1, a: 0 } });
   assert.deepEqual(await (await sf("movie/tt832", "cle-relais", e)).json(), { vf: false, sources: 68 });
   assert.deepEqual(await (await sf("movie/tt835", "cle-relais", e)).json(), { vf: false, sources: 1 });
+  assert.deepEqual(await (await sf("movie/tt836", "cle-relais", e)).json(), { vf: false, sources: 1 });
   assert.ok(!appels.some((u) => u.startsWith("https://sf.test")), "Lumio a répondu : StreamFusion pas demandé");
   assert.deepEqual(await (await sf("movie/tt833", "cle-relais", e)).json(), parSf);
   assert.deepEqual(await (await sf("series/tt834:2:1", "cle-relais", e)).json(), parSf);

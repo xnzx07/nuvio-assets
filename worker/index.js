@@ -67,7 +67,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.49.3";
+const VERSION = "5.50.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -148,7 +148,7 @@ function decorSaison(url, today) {
   return voulu && (voulu in SEASONS) ? voulu : pickSeason(today);
 }
 
-function seasonDef(today, cfg) {
+export function seasonDef(today, cfg) {
   let key = pickSeason(today);
   if (cfg && key !== "a-laffiche" && !cfg.h.includes(key)) key = "a-laffiche";
   // Horreur masquée ou mode famille : Halloween version « citrouilles », sans horreur.
@@ -160,7 +160,9 @@ function seasonDef(today, cfg) {
   const source = key === "a-laffiche"
     ? { endpoint: "/movie/now_playing", params: { region: "FR" } }
     : { discover: { sort_by: "popularity.desc", ...(s.discover || { with_keywords: s.keywords }) } };
-  return { id: "accueil-saison", type: "movie", name: s.title, home: true, ...source };
+  // Hors fête (ou fête décochée) : pas sur l'accueil (horsFete, voir homeDefs). Choix de la personne le 2026-11-04 :
+  // « À l'affiche » entre deux fêtes faisait une rangée de plus qu'elle ne voulait pas.
+  return { id: "accueil-saison", type: "movie", name: s.title, home: true, ...source, ...(key === "a-laffiche" ? { horsFete: true } : {}) };
 }
 
 /**
@@ -232,7 +234,7 @@ function customDef(x, i) {
 
 /** Rangées d'accueil de cette config, dans l'ordre choisi, avec les noms choisis. */
 function homeDefs(today, cfg) {
-  const all = [...allRows(today, cfg), ...cfg.x.map(customDef)].filter(Boolean);
+  const all = [...allRows(today, cfg), ...cfg.x.map(customDef)].filter((d) => d && !d.horsFete);
   return cfg.r
     .map((id) => all.find((d) => d.id === id))
     .filter(Boolean)
@@ -752,7 +754,7 @@ async function avisPhoto(env, kind) {
     return vfi;
   } catch (e) { return {}; }
 }
-/** L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose ? Pas pour une VF sûre, ni de la VFQ. */
+/** L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose ? Pas pour une VF sûre, ni une VFQ en vue (coupée en deux). */
 const avisUtile = (lu) => !(lu && (lu.vff || lu.quebec));
 /** Un avis appliqué, sans VFF possible d'après les dates (vffImpossible) : « oui » est le doute, « non » le lève. */
 function douteux(lu) {
@@ -878,8 +880,13 @@ async function lireVfLumio(env, cles) {
       const texte = (s) => `${s.name || ""} ${s.title || ""} ${s.description || ""}`;
       // Un message (« ⚙️ … aucune ne passe vos filtres », « 🔴 Aucune source trouvée ») n'a pas de lien de lecture.
       const messages = streams.filter((s) => !s.url && !s.infoHash);
-      const vraies = streams.filter((s) => !messages.includes(s) && !filmeEnSalle(s));
+      const fichiers = streams.filter((s) => !messages.includes(s) && !filmeEnSalle(s));
+      // Les langues lues dans le fichier sont écrites en drapeaux : sans 🇫🇷, pas de VF, même si Lumio le garde (The
+      // Mongoose, le 4 novembre 2026 : un seul fichier, MULTI, « 🌍 🇬🇧 »). Sans aucun drapeau : on le croit.
+      const sansFrancais = (s) => /🌍|[\u{1F1E6}-\u{1F1FF}]{2}/u.test(texte(s)) && !texte(s).includes("🇫🇷");
+      const vraies = fichiers.filter((s) => !sansFrancais(s));
       if (vraies.length) return [cle, { vf: true, sources: vraies.length, qualite: qualiteDesSources(vraies.map(texte)) }];
+      if (fichiers.length) return [cle, { vf: false, sources: fichiers.length }];
       // « 68 sources, mais aucune ne passe vos filtres », « Aucune source trouvée » : il a cherché, rien en VF.
       const vide = messages.find((s) => /ne passe|aucun(e)? (r[ée]sultat|source)/i.test(texte(s)));
       if (vide) return [cle, { vf: false, sources: Math.max(1, Number((/(\d+)\s+sources?/i.exec(texte(vide)) || [])[1]) || 0) }];
@@ -904,7 +911,8 @@ async function lireVfLumio(env, cles) {
  * sans avis faute de plafond }.
  */
 const AVIS_OUI_MS = 7 * 86400000, AVIS_NON_MS = 3 * 3600000, AVIS_NON_VIEUX_MS = 86400000, AVIS_NON_RECENT_MS = 7 * 86400000;
-const avisCache = (cle) => new Request(`https://avis.cache/3/${cle}`);
+// /4/ : vidée le 2026-11-04 avec la lecture des drapeaux de Lumio (The Mongoose, VF à tort) ; la mémoire commune reste.
+const avisCache = (cle) => new Request(`https://avis.cache/4/${cle}`);
 /** Un avis gardé ({ avis, t : lu à, depuis : vu sans VF depuis }) encore bon à l'instant now. */
 function avisFrais(d, now) {
   if (!d || !d.avis || typeof d.avis.vf !== "boolean" || !(d.t > 0)) return false;
