@@ -36,6 +36,11 @@ const VF = /\b(TRUEFRENCH|FRENCH|VFF|VFI|VF2|VOF)\b|\bMULTI\b.*\bVF\b|Multi Audi
 // « FRENCH.CA », « MULTi.CA » : la version du Canada, une VFQ aussi.
 const VFQ = /\b(VFQ|QU[EÉ]BEC|QU[EÉ]B[EÉ]COIS)\b|\b(FRENCH|MULTI)[ ._-]CA\b/i;
 const VF_FRANCE = /\b(TRUEFRENCH|VFF|VFI|VF2)\b/i;
+// Groupes qui écrivent la VFQ quand c'en est une (« FRENCH.CA », « MULTi.VFQ ») : leur « FRENCH » seul est donc une VFF.
+// SUPPLY : FRENCH.CA et MULTi.VFQ pour Evil Dead Burn, MULTi CA pour Primetime, FRENCH pour Beware Boiúna (en VFF,
+// confirmé le 4 novembre 2026). Pas Slay3R : son « MULTi.FRENCH » de Pressure était une VFQ.
+const GROUPE_FIABLE = /-SUPPLY(?![A-Za-z0-9])/i;
+const vffSure = (t) => VF_FRANCE.test(t) || (/\bFRENCH\b/i.test(t) && GROUPE_FIABLE.test(t) && !VFQ.test(t));
 // Doublage fait par une IA (« MULTi.AI ») : pas une VF.
 const IA = /\bMULTI[ ._-]?AI\b/i;
 const enVf = (t) => VF.test(t) && !IA.test(t) && !(VFQ.test(t) && !VF_FRANCE.test(t));
@@ -81,7 +86,7 @@ export function parseQuality(streams) {
   const tous = (streams || []).filter((s) => !filmeEnSalle(s)).map((s) => `${s.name || ""} ${s.title || ""}`);
   const uhd = tous.filter((t) => UHD.test(t));
   const extra = uhd.some((t) => DV.test(t)) ? "DV" : uhd.some((t) => HDR.test(t)) ? "HDR" : null;
-  const vff = tous.some((t) => VF_FRANCE.test(t));
+  const vff = tous.some(vffSure);
   const vf = tous.some(enVf);
   return { uhd: uhd.length > 0, extra, fhd: tous.some((t) => FHD.test(t)), hdr10p: uhd.some((t) => HDR10P.test(t)), atmos: tous.some((t) => ATMOS.test(t)),
     vf, sources: tous.length, langue: langueDe(tous), ...(vff ? { vff: true, vfq: qualiteCourte(tous.filter(enVf)) } : {}),
@@ -111,6 +116,21 @@ export function vffPossible(releases, langue, today) {
 export function prochaineVff(releases, today) {
   return (releases || []).filter((r) => r.iso_3166_1 === "FR").flatMap((r) => r.release_dates || [])
     .filter((r) => [4, 5, 6].includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter((d) => d > today).sort()[0] || null;
+}
+
+/**
+ * Sans sortie numérique française annoncée : l'estimation de la chronologie des médias, la vidéo à la demande 4 mois
+ * après la salle en France (Primetime, en salle le 23 septembre 2026 : vers le 23 janvier 2027). Seulement à venir ;
+ * sinon null.
+ */
+export function vffEstimee(releases, today) {
+  const salle = (releases || []).filter((r) => r.iso_3166_1 === "FR").flatMap((r) => r.release_dates || [])
+    .filter((r) => [2, 3].includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter(Boolean).sort()[0];
+  if (!salle) return null;
+  const d = new Date(`${salle}T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + 4);
+  const le = d.toISOString().slice(0, 10);
+  return le > today ? le : null;
 }
 
 // Sortie numérique le même jour dans au moins ce nombre de pays : une plateforme mondiale, doublée, même si TMDB ne la
@@ -158,10 +178,13 @@ export async function avecDatesVff(env, imdb, q, fetchImpl = fetch, today = new 
   const dates = d && d.release_dates && d.release_dates.results;
   if (!d || !dates || !dates.length || d.original_language === "fr" || !filmRecent(dates, today) || abonnementVf(d) || sortieMondiale(dates)) return reste;
   const possible = vffPossible(dates, d.original_language, today), le = prochaineVff(dates, today);
-  const avecDate = le ? { vffLe: le } : {};
+  const estimee = le ? null : vffEstimee(dates, today);
+  const avecDate = le ? { vffLe: le } : estimee ? { vffLe: estimee, vffVers: true } : {};
+  // Une VFQ en vue : le fichier américain porte la VFQ, la VFF n'y est pas encore, même si le doublage existe (Primetime :
+  // en salle en France avant sa sortie numérique américaine, et pourtant en VFQ seulement). La date de la VFF dessous.
   if (vfqDoute) {
     const enVf = reste.langue === "vf" || reste.langue === "multi";
-    return { ...reste, vf: true, langue: enVf ? reste.langue : "vf", quebec: true, vfqPossible: true, ...(possible ? {} : avecDate) };
+    return { ...reste, vf: true, langue: enVf ? reste.langue : "vf", quebec: true, vfqPossible: true, ...avecDate };
   }
   if (possible) return reste;
   return { ...reste, vffImpossible: true, ...(reste.vf ? { vfqPossible: true } : {}), ...avecDate };

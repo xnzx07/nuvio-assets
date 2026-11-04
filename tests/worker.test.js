@@ -1560,27 +1560,31 @@ test("avis_sans_vf_refuse_sans_la_cle", async () => {
 // fin sinon ; la fiche le dit.
 test("vfq_possible_dans_les_rangees_et_la_fiche", async () => {
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
-  const lus = { tt903: { vf: true, sources: 8, vfqPossible: true, vffLe: jour(12) }, tt904: { vf: true, sources: 5, vfqPossible: true }, tt905: { vf: true, sources: 30, vff: true, vfq: { u: 0, x: null, p: 0, f: 1, a: 0 } } };
-  const noms = { 3: "Avec date", 4: "Sans date", 5: "VF sûre" };
+  const lus = { tt903: { vf: true, sources: 8, vfqPossible: true, vffLe: jour(12) }, tt904: { vf: true, sources: 5, vfqPossible: true }, tt905: { vf: true, sources: 30, vff: true, vfq: { u: 0, x: null, p: 0, f: 1, a: 0 } },
+    // Sur Netflix en France : la VFF, même si la réponse des sources dit le doute (My Best Friend, 4 novembre 2026).
+    tt906: { vf: true, sources: 12, vfqPossible: true, vffImpossible: true } };
+  const noms = { 3: "Avec date", 4: "Sans date", 5: "VF sûre", 6: "Sur Netflix" };
   const appeler = async (chemin) => {
     oublierInfos(); store.clear();
     globalThis.fetch = async (url) => {
       const u = String(url);
       calls.push(u);
       if (u.includes("/vf.json")) return sourcesDe(lus)(u);
-      if (u.includes("/discover/movie")) return new Response(JSON.stringify({ results: [3, 4, 5].map((id) => ({ id, title: noms[id], original_language: "en", release_date: jour(-40), popularity: 10 - id })), page: 1, total_pages: 1 }));
-      const m = /\/movie\/([345])\?/.exec(u);
-      if (m) return new Response(JSON.stringify({ ...filmVod(Number(m[1]), "en", [["US", 4, jour(-5)]]), title: noms[m[1]] }));
+      if (u.includes("/discover/movie")) return new Response(JSON.stringify({ results: [3, 4, 5, 6].map((id) => ({ id, title: noms[id], original_language: "en", release_date: jour(-40), popularity: 10 - id })), page: 1, total_pages: 1 }));
+      const m = /\/movie\/([3456])\?/.exec(u);
+      if (m) return new Response(JSON.stringify({ ...filmVod(Number(m[1]), "en", [["US", 4, jour(-5)]]), title: noms[m[1]],
+        ...(m[1] === "6" ? { "watch/providers": { results: { FR: { flatrate: [{ provider_id: 8, provider_name: "Netflix" }] } } } } : {}) }));
       return new Response(JSON.stringify({ results: [] }));
     };
     return (await get(chemin)).json();
   };
   const dispo = (await appeler("/catalog/movie/accueil-vod-semaine.json")).metas.map((m) => m.name);
-  assert.deepEqual(dispo, ["VF sûre"]);
+  assert.deepEqual(dispo.sort(), ["Sur Netflix", "VF sûre"]);
   const bientot = (await appeler("/catalog/movie/accueil-vod-bientot.json")).metas;
   assert.deepEqual(bientot.map((m) => m.name), ["Avec date", "Sans date"]);
   assert.match(bientot[0].description, /VFQ possible · VFF le/);
   assert.match(bientot[1].description, /VFQ possible/);
   const fiche = (await (await get("/meta/movie/tmdb:4.json")).json()).meta;
   assert.match(fiche.description, /VFQ possible/);
+  assert.doesNotMatch((await (await get("/meta/movie/tmdb:6.json")).json()).meta.description || "", /VFQ/);
 });

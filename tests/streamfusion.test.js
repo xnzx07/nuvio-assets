@@ -97,6 +97,14 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
       // Un fichier MULTI sans français lu dedans (The Mongoose, 4 nov. 2026) : « 🌍 🇬🇧 », pas de 🇫🇷. Pas une VF.
       if (u.includes("tt836")) return Response.json({ streams: [
         { name: "[AD⚡️] Lumio", description: "4K • WEB-DL • DV • HDR10 • 📶 9,9 Mb/s\n🌍 🇬🇧 • 💾 7,4 Go • 🔎 DMM\n🗂️ The.Mongoose.2026.MULTI.2160p.SREENER.WEB.DL.HDR.DV.HEVC.DDP5.1-MAXX.mkv", url: "https://lumio.test/play/m" }] });
+      if (u.includes("tt837")) return Response.json({ streams: [
+        { name: "[AD⚡️] Lumio", description: "1080p • WEB-DL • 📶 4,4 Mb/s\n🇫🇷 🇬🇧 ✓ • 💾 3,1 Go • 🔎 V3X\n🗂️ Thief.1981.MULTi.1080p.WEB.H265-CHiLL.mkv", url: "https://lumio.test/play/t" }] });
+      if (u.includes("tt838")) return Response.json({ streams: [
+        { name: "[AD⚡️] Lumio", description: "1080p • WEB-DL\n🇫🇷 🇬🇧 ✓\n🗂️ 1917.2019.MULTi.1080p.BluRay.x264.mkv", url: "https://lumio.test/play/u" }] });
+    }
+    if (u.includes("api.themoviedb.org/3/find/tt837")) return Response.json({ movie_results: [{ release_date: "2026-07-10" }] });
+    if (u.includes("api.themoviedb.org/3/find/tt838")) return Response.json({ movie_results: [{ release_date: "2019-12-25" }] });
+    if (u.startsWith("https://lumio.test/p/stream/")) {
       return Response.json({ streams: [{ name: "⚙️ Lumio", description: "Votre clé AllDebrid a expiré." }] });
     }
     if (u.startsWith("https://sf.test/c/stream/")) {
@@ -111,6 +119,10 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
   assert.deepEqual(await (await sf("movie/tt832", "cle-relais", e)).json(), { vf: false, sources: 68 });
   assert.deepEqual(await (await sf("movie/tt835", "cle-relais", e)).json(), { vf: false, sources: 1 });
   assert.deepEqual(await (await sf("movie/tt836", "cle-relais", e)).json(), { vf: false, sources: 1 });
+  // Le seul fichier est celui d'un autre film (The Isolate Thief, 2026 : « Thief.1981 ») : écarté, pas de VF.
+  assert.deepEqual(await (await sf("movie/tt837", "cle-relais", e)).json(), { vf: false, sources: 0 });
+  // Une année dans le titre (« 1917 », sorti en 2019) : gardé.
+  assert.equal((await (await sf("movie/tt838", "cle-relais", e)).json()).vf, true);
   assert.ok(!appels.some((u) => u.startsWith("https://sf.test")), "Lumio a répondu : StreamFusion pas demandé");
   assert.deepEqual(await (await sf("movie/tt833", "cle-relais", e)).json(), parSf);
   assert.deepEqual(await (await sf("series/tt834:2:1", "cle-relais", e)).json(), parSf);

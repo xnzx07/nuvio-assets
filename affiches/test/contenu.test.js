@@ -566,4 +566,10 @@ test("contenu_vfq_possible", () => {
   const d = posterContent(faits, { quality: { ...q, vffLe: "2026-11-17" } }, "poster", undefined, today);
   assert.equal(d.statut2, "VFF LE 17 NOV.");
   assert.equal(posterContent(faits, { quality: { ...q, vfqPossible: false } }, "poster", undefined, today).moitie, undefined);
+  // Estimation (salle en France + 4 mois) : « VERS LE ».
+  assert.equal(posterContent(faits, { quality: { ...q, vffLe: "2027-01-23", vffVers: true } }, "poster", undefined, today).statut2, "VFF VERS LE 23 JANV. 2027");
+  // En abonnement sur une plateforme en France qui le double : jamais le doute (My Best Friend sur Netflix).
+  const netflix = posterContent({ ...faits, abonnementVf: true }, { quality: q }, "poster", undefined, today);
+  assert.equal(netflix.moitie, undefined);
+  assert.notEqual(netflix.statut, "VFQ POSSIBLE");
 });

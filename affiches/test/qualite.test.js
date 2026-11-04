@@ -276,7 +276,8 @@ test("avec_dates_vff", async () => {
   assert.deepEqual(await avecDatesVff(env, "tt1", q, tmdb(AU_29_OCT.byAnyMeans), "2026-10-29"),
     { uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: true, sources: 9, langue: "multi", quebec: true, vfqPossible: true });
   const { vfqDoute, ...sansDoute } = q;
-  assert.deepEqual(await avecDatesVff(env, "tt1", q, tmdb(AU_29_OCT.dogStars), "2026-10-29"), { ...sansDoute, quebec: true, vfqPossible: true }, "une VFQ en vue, les dates disent oui : moitié aussi");
+  assert.deepEqual(await avecDatesVff(env, "tt1", q, tmdb(AU_29_OCT.dogStars), "2026-10-29"), { ...sansDoute, quebec: true, vfqPossible: true, vffLe: "2026-12-26", vffVers: true },
+    "une VFQ en vue, les dates disent oui : moitié aussi, VFF vers la salle en France + 4 mois");
   assert.deepEqual(await avecDatesVff(env, "tt1", { ...q, vf: false, langue: "vo" }, tmdb(AU_29_OCT.byAnyMeans), "2026-10-29"),
     { ...sansDoute, quebec: true, vfqPossible: true, langue: "vf" }, "de la VFQ seulement : visible en VFQ, moitié");
   assert.deepEqual(await avecDatesVff(env, "tt2", q, tmdb([]), "2026-10-29"), sansDoute, "TMDB en panne");
@@ -307,7 +308,11 @@ test("vfq_possible_d_apres_les_dates", async () => {
   // Rien en français chez Torrentio : pas de doute tant que personne ne dit VF.
   assert.deepEqual(await lire(rien, usSeul), { ...rien, vffImpossible: true });
   // Une VFQ en vue, les dates disent oui : moitié quand même (Evil Dead Burn, L'île des souvenirs ; choix du 2026-11-04).
-  assert.deepEqual(await lire({ ...french, vfqDoute: true }, sorties(["FR", 3, "2026-07-08"], ["US", 4, "2026-08-04"])), { ...french, quebec: true, vfqPossible: true });
+  assert.deepEqual(await lire({ ...french, vfqDoute: true }, sorties(["FR", 3, "2026-07-08"], ["US", 4, "2026-08-04"])), { ...french, quebec: true, vfqPossible: true, vffLe: "2026-11-08", vffVers: true });
+  // Primetime : en salle en France le 23 septembre, avant le numérique américain, une VFQ en vue : VFF vers le 23 janvier.
+  assert.deepEqual(await lire({ ...french, vfqDoute: true }, sorties(["FR", 3, "2026-09-23"], ["US", 4, "2026-11-03"])), { ...french, quebec: true, vfqPossible: true, vffLe: "2027-01-23", vffVers: true });
+  // Estimation passée : pas de date.
+  assert.deepEqual(await lire({ ...french, vfqDoute: true }, sorties(["FR", 3, "2026-05-01"], ["US", 4, "2026-10-20"])), { ...french, quebec: true, vfqPossible: true });
   // Les dates disent non : moitié, avec la date de la VFF annoncée (Hope : en France après le fichier américain).
   assert.deepEqual(await lire({ ...french, vfqDoute: true }, sorties(["US", 4, "2026-10-13"], ["FR", 4, "2026-12-02"])), { ...french, quebec: true, vfqPossible: true, vffLe: "2026-12-02" });
   // La date française annoncée.
@@ -330,4 +335,16 @@ test("avis_sur_un_film_en_doute", () => {
   assert.equal(non.vf, false);
   assert.equal(non.vfqPossible, undefined);
   assert.equal(avecStreamFusion({ ...q, vfqPossible: undefined, vf: false, langue: "vo" }, { vf: true, sources: 1 }).vfqPossible, true);
+});
+
+// SUPPLY écrit la VFQ quand c'en est une : son « FRENCH » seul est une VFF (Beware Boiúna, 4 novembre 2026). Un
+// « FRENCH » d'un autre groupe (Slay3R pour Pressure, en VFQ) ou de Torrent9 reste à trancher.
+test("french_de_supply_est_une_vff", () => {
+  const vff = (titres) => !!parseQuality(titres.map((title) => ({ name: "Torrentio\n1080p", title }))).vff;
+  assert.equal(vff(["Beware Boiuna 2026 FRENCH 1080p WEB H264-SUPPLY\n👤 9 💾 7.02 GB ⚙️ EXT"]), true);
+  assert.equal(vff(["Evil.Dead.Burn.2026.FRENCH.CA.HDR.2160p.WEB.H265-SUPPLY"]), false, "FRENCH.CA : VFQ");
+  assert.equal(vff(["Primetime 2026 MULTi CA 1080p WEB H264-SUPPLY"]), false, "MULTi CA : VFQ");
+  assert.equal(vff(["Pressure.2026.MULTi.FRENCH.2160p.HDR.DV.WEB-DL.H265-Slay3R.mkv"]), false);
+  assert.equal(vff(["Méfiez-vous du Boiúna - Beware Boiuna FRENCH WEBRIP 1080p 2026\n⚙️ Torrent9"]), false);
+  assert.equal(vff(["Beware.Boiuna.2026.FRENCH.2160p.WEB.H265-SUPPLYE.mkv"]), false, "un autre nom de groupe");
 });

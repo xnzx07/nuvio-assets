@@ -41,7 +41,7 @@ export function makeVf({ fetchImpl = fetch, env = process.env } = {}) {
       // vfqPossible, vffImpossible, vffLe : le doute, et la sortie française annoncée (lib/qualite.js, avecDatesVff).
       return [id, q && typeof q.vf === "boolean" ? { vf: q.vf, sources: q.sources, ...(q.langue ? { langue: q.langue } : {}),
         ...(q.vff && q.vfq ? { vff: true, vfq: q.vfq } : {}), ...(q.quebec ? { quebec: true } : {}),
-        ...(q.vfqPossible ? { vfqPossible: true } : {}), ...(q.vffImpossible ? { vffImpossible: true } : {}), ...(q.vffLe ? { vffLe: q.vffLe } : {}) } : null];
+        ...(q.vfqPossible ? { vfqPossible: true } : {}), ...(q.vffImpossible ? { vffImpossible: true } : {}), ...(q.vffLe ? { vffLe: q.vffLe } : {}), ...(q.vffVers ? { vffVers: true } : {}) } : null];
     }));
     const trou = lus.some(([, x]) => x === null);
     // Un titre pas lu : gardé dix minutes seulement, pour réessayer bientôt ; sans la clé, pas gardé du tout.

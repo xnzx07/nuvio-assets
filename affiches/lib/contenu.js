@@ -212,11 +212,14 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
   if (r.statut.on && !libelle) libelle = libelleSuite(suite, r.statut);
   // Le doute : VFF ou VFQ, les noms et les dates ne le disent pas (lib/qualite.js, avecDatesVff). Dessous, la date de la
   // sortie numérique française annoncée : la VFF arrive avec elle.
-  const vfqPossible = !!(quality && quality.vfqPossible);
+  // En abonnement sur une plateforme en France qui le double : la VFF, jamais le doute, même d'après une réponse des
+  // sources gardée d'avant son arrivée chez TMDB (My Best Friend sur Netflix, coupé en deux le 4 novembre 2026).
+  const vfqPossible = !!(quality && quality.vfqPossible) && !facts.abonnementVf;
   if (vfqPossible && r.statut.on) {
     libelle = "VFQ POSSIBLE";
     const le = quality.vffLe;
-    libelle2 = le ? `VFF LE ${Number(le.slice(8, 10))} ${MOIS[Number(le.slice(5, 7)) - 1]}${le.slice(0, 4) === today.slice(0, 4) ? "" : " " + le.slice(0, 4)}` : null;
+    // vffVers : une estimation (salle en France + 4 mois, la chronologie des médias), pas une date annoncée.
+    libelle2 = le ? `VFF ${quality.vffVers ? "VERS LE" : "LE"} ${Number(le.slice(8, 10))} ${MOIS[Number(le.slice(5, 7)) - 1]}${le.slice(0, 4) === today.slice(0, 4) ? "" : " " + le.slice(0, 4)}` : null;
   }
   let place = r.tendance.on && rank >= 1 && rank <= 20 ? rank : null;
   // Bandeau en coin : il porte le statut ou le N° de tendance, qui ne sont alors plus écrits en haut.
