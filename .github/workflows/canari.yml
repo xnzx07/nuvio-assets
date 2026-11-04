@@ -43,13 +43,15 @@ jobs:
           PANNES: ${{ steps.verif.outputs.pannes }}
           LIEN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # L'issue de panne ouverte, s'il y en a une (titre « Panne : … », ouverte par ce workflow).
-          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --author "app/github-actions" --limit 100 --json number,title \
-                  --jq '[.[] | select(.title | startswith("Panne : "))][0].number // empty')
+          # Les issues de panne ouvertes (titre « Panne : … », ouvertes par ce workflow), la plus récente d'abord. Pour
+          # gh issue list, leur auteur s'écrit github-actions[bot] (« app/github-actions » ne trouvait rien).
+          nums=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --author "github-actions[bot]" --limit 100 --json number,title \
+                  --jq '[.[] | select(.title | startswith("Panne : ")) | .number] | map(tostring) | join(" ")')
+          num=${nums%% *}
           if [ -z "$PANNES" ]; then
-            if [ -n "$num" ]; then
-              gh issue close "$num" --repo "$GITHUB_REPOSITORY" --comment "Tout répond de nouveau ($(date -u '+%F %H:%M') UTC) : $LIEN"
-            fi
+            for n in $nums; do
+              gh issue close "$n" --repo "$GITHUB_REPOSITORY" --comment "Tout répond de nouveau ($(date -u '+%F %H:%M') UTC) : $LIEN"
+            done
             exit 0
           fi
           # Le passage d'avant (terminé) : s'il a échoué aussi, c'est le 2e échec de suite.
