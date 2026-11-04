@@ -170,6 +170,11 @@ test("canari_workflow", () => {
   // Le titre de l'issue passe par une variable, jamais recopié dans le script.
   assert.doesNotMatch(wf, /\$\{\{ steps\.verif\.outputs\.pannes \}\}"/);
   assert.match(wf, /PANNES: \$\{\{ steps\.verif\.outputs\.pannes \}\}/);
+  // Les issues ouvertes par ce workflow : leur auteur s'écrit github-actions[bot] pour gh issue list (« app/github-actions »
+  // ne trouvait rien, et aucune ne se fermait : quatre ouvertes en novembre 2026) ; toutes fermées quand tout répond.
+  assert.match(wf, /--author "github-actions\[bot\]"/);
+  assert.doesNotMatch(wf, /--author "app\/github-actions"/);
+  assert.match(wf, /for n in \$nums; do/);
 });
 
 // Depuis la bascule du 1er novembre 2026, le serveur Oracle sert les rangées. Les recalculer ici dépassait les 50 appels
