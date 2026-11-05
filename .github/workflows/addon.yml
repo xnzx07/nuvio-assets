@@ -77,6 +77,15 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: python scripts/build_sans_vf.py
+      - name: Âge des films d'après les visas du CNC (Mode famille)
+        id: cnc
+        # En échec (site du CNC ou TMDB en panne), ce qui a été relié est gardé et le fichier de la veille reste.
+        continue-on-error: true
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: |
+          pip install "scrapling[fetchers]==0.5.1"
+          python scripts/build_ages_cnc.py
       - name: Enregistrer
         run: |
           git config user.name "github-actions[bot]"
@@ -91,17 +100,19 @@ jobs:
           done
           exit 1
       - name: Bilan
-        if: steps.addon.outputs.code == '3' || steps.words.outcome == 'failure' || steps.vod.outcome == 'failure' || steps.sansvf.outcome == 'failure'
+        if: steps.addon.outputs.code == '3' || steps.words.outcome == 'failure' || steps.vod.outcome == 'failure' || steps.sansvf.outcome == 'failure' || steps.cnc.outcome == 'failure'
         env:
           CODE: ${{ steps.addon.outputs.code }}
           MOTS: ${{ steps.words.outcome }}
           VOD: ${{ steps.vod.outcome }}
           SANSVF: ${{ steps.sansvf.outcome }}
+          CNC: ${{ steps.cnc.outcome }}
         run: |
           [ "$CODE" != 3 ] || echo "::error::Des listes ont échoué : elles gardent leurs pages de la veille (voir addon/state.json)."
           [ "$MOTS" != failure ] || echo "::error::Vocabulaire de la recherche non refait : l'ancien reste."
           [ "$VOD" != failure ] || echo "::error::Fenêtres des distributeurs non refaites : data/estimations-vod.json de la veille reste."
           [ "$SANSVF" != failure ] || echo "::error::Films sans VF : panne, le reste attendra demain."
+          [ "$CNC" != failure ] || echo "::error::Âges du CNC : panne, data/ages-cnc.json de la veille reste."
           exit 1
       - name: Signaler l'échec
         if: failure()

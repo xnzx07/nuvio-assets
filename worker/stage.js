@@ -816,6 +816,7 @@ const CREDITS = [
   ["Sources", "Lumio, StreamFusion, Torrentio, WAStream"],
   ["Sous-titres", "OpenSubtitles"],
   ["Classements des plateformes", '<a href="https://www.movieofthenight.com/about/api">Streaming Availability API</a>'],
+  ["Âges du Mode famille", '<a href="https://www.cnc.fr/professionnels/visas-et-classification">CNC, visas et classification</a>'],
   ["Lettrage de l'enseigne", "Bebas Neue"],
   ["Pop-corn", "Toi"],
   ["Avec la participation de", "TMDB<small>Ce site utilise l'API TMDB mais n'est ni approuvé ni certifié par TMDB.</small>"],

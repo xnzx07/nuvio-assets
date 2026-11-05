@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.52.0";
+const VERSION = "5.53.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -406,6 +406,8 @@ async function lireInfo(env, kind, tmdbId, budget) {
     imdb: (movie ? j.imdb_id : j.external_ids && j.external_ids.imdb_id) || null,
     releases,
     age: ageDuTitre(classifs),
+    // La classification française seule (TMDB) : avec l'âge du CNC, la plus sévère des deux (ageFinal).
+    ageFr: ageDuTitre(classifs.filter(([p]) => p === "FR")),
     plateformeFr: movie && vfSurPlateforme(j["watch/providers"], j.original_language, j.keywords),
     plateformeVo: movie && plateformeFrance(j["watch/providers"]),
     abonnementVf: movie && abonnementVf(j["watch/providers"], j.original_language, j.keywords),
@@ -1287,6 +1289,8 @@ async function toMetas(env, ctx, results, kind, opts, today) {
   // VF des sources (« Dispo depuis peu », « Bientôt dispo », « Prochainement ») : un appel pour la page.
   const sources = opts.sources || (opts.lireSources && kind === "movie" ? await sourcesVf(env, ids) : new Map());
   const sansVfConnus = kind === "movie" ? await sansVfListe() : new Set();
+  // Mode famille, films : l'âge du visa du CNC (ageFinal), lu seulement dans ce mode.
+  const cnc = kind === "movie" && opts.cfg && opts.cfg.f ? await agesCnc() : null;
   return results.map((it, i) => {
     const recent = kind === "movie" && filmRecent(infos[i].releases, today);
     const lu = recent ? avecAbonnement(sources.get(ids[i]), infos[i].abonnementVf) : null;
@@ -1346,7 +1350,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       _vo: vo,
     };
     return meta;
-  }).filter((_, i) => !tropDur(infos[i].age, opts.cfg));
+  }).filter((_, i) => !tropDur(cnc ? ageFinal(infos[i], cnc[results[i].id]) : infos[i].age, opts.cfg));
 }
 
 /**
@@ -1367,6 +1371,41 @@ export function ageDuTitre(classifs) {
   }
   return null;
 }
+/**
+ * L'âge d'un film pour le Mode famille : celui du visa du CNC quand il existe (data/ages-cnc.json : la vraie
+ * classification française, que TMDB n'a que pour un film récent sur dix), ou la classification française de TMDB si
+ * elle est plus sévère ; sans visa, ageDuTitre (France, puis États-Unis, Royaume-Uni, Allemagne).
+ */
+export function ageFinal(info, ageCnc) {
+  if (!Number.isInteger(ageCnc)) return info.age;
+  return info.ageFr != null ? Math.max(ageCnc, info.ageFr) : ageCnc;
+}
+
+/**
+ * Les âges du CNC (data/ages-cnc.json, scripts/build_ages_cnc.py) : { id TMDB: âge }, {} tant qu'il n'est pas lu (le
+ * film garde son âge de TMDB). Lu seulement en Mode famille ; une lecture par heure ; échec : l'ancienne table sert.
+ */
+const AGES_CNC_URL = `${ASSETS}/data/ages-cnc.json`;
+let AGES_CNC = null;      // { films, until, promesse }
+function agesCnc() {
+  const now = Date.now();
+  if (!AGES_CNC || (!AGES_CNC.promesse && now >= AGES_CNC.until)) {
+    const etat = { films: AGES_CNC ? AGES_CNC.films : {}, until: Infinity, promesse: null };
+    etat.promesse = fetch(AGES_CNC_URL, { signal: AbortSignal.timeout(VOD_DELAI_MS), cf: { cacheTtl: 3600, cacheEverything: true } })
+      .then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      .then((d) => {
+        const lu = d && d.films && typeof d.films === "object";
+        if (lu) etat.films = d.films;
+        etat.until = Date.now() + (lu ? VOD_MS : VOD_ECHEC_MS);
+        etat.promesse = null;
+        return etat.films;
+      });
+    AGES_CNC = etat;
+  }
+  return AGES_CNC.promesse || Promise.resolve(AGES_CNC.films);
+}
+export const oublierAgesCnc = () => { AGES_CNC = null; };
+
 /**
  * Mode famille : titre classé au-dessus de l'âge choisi (cfg.f, voir AGES_FAMILLE) ? Un titre classé nulle part reste
  * (souvent un film pas encore sorti, ou une série pour enfants que personne n'a classée) : les genres l'ont déjà trié.

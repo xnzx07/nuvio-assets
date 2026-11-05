@@ -1,7 +1,7 @@
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import worker, { oublierInfos, oublierPauseYoutube, oublierAvis } from "../worker/index.js";
+import worker, { oublierInfos, oublierPauseYoutube, oublierAvis, ageFinal, oublierAgesCnc } from "../worker/index.js";
 import { fakeD1 } from "./support/d1.mjs";
 import { resetFails } from "../worker/hote.js";
 
@@ -520,6 +520,48 @@ test("mode_famille_age_sur_chaque_fiche", async () => {
   assert.deepEqual(await noms(6, "series", 1), ["Série 5"]);
   assert.deepEqual(await noms(10, "series", 1), ["Série 5", "Série 7"]);   // la France d'abord : -10 (pas TV-14)
   assert.ok(calls.some((u) => /\/tv\/\d\?.*content_ratings/.test(u)));
+});
+
+// Âge du visa du CNC (data/ages-cnc.json, scripts/build_ages_cnc.py) : la vraie classification française, avant les
+// classifications étrangères de TMDB ; la française de TMDB garde le dernier mot si elle est plus sévère.
+test("age_final_cnc_d_abord", () => {
+  assert.equal(ageFinal({ age: 17, ageFr: null }, 0), 0);        // R aux États-Unis, tous publics en France
+  assert.equal(ageFinal({ age: 12, ageFr: 12 }, 0), 12);         // TMDB France plus sévère
+  assert.equal(ageFinal({ age: null, ageFr: null }, 16), 16);    // classé nulle part chez TMDB
+  assert.equal(ageFinal({ age: 17, ageFr: null }, undefined), 17); // pas de visa : comme avant
+});
+
+test("mode_famille_age_du_cnc_sur_chaque_fiche", async () => {
+  oublierAgesCnc();
+  oublierInfos();
+  // 1 : -12 en France (TMDB), visa tous publics ; 2 : R aux États-Unis seulement, visa tous publics ; 3 : classé
+  // nulle part chez TMDB, visa -16 ; 4 : R aux États-Unis, pas de visa.
+  const dates = {
+    1: [{ iso_3166_1: "FR", release_dates: [{ type: 3, certification: "12" }] }],
+    2: [{ iso_3166_1: "US", release_dates: [{ type: 3, certification: "R" }] }],
+    3: [],
+    4: [{ iso_3166_1: "US", release_dates: [{ type: 3, certification: "R" }] }],
+  };
+  let lectures = 0;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.endsWith("/data/ages-cnc.json")) { lectures++; return Response.json({ maj: "2026-11-05", films: { 1: 0, 2: 0, 3: 16 } }); }
+    if (u.includes("/discover/movie")) return Response.json({ results: [1, 2, 3, 4].map((id) => ({ id, title: `Film ${id}`, original_language: "fr", release_date: "2010-01-01" })), page: 1, total_pages: 1 });
+    const m = /\/movie\/(\d)\?/.exec(u);
+    if (m) return Response.json({ id: Number(m[1]), imdb_id: `tt81${m[1]}`, release_dates: { results: dates[m[1]] } });
+    return Response.json({ results: [] });
+  };
+  const noms = async (f) => (await (await get(`/${seg({ f, x: [{ n: "Films", t: 0 }] })}/catalog/movie/perso-0.json`)).json()).metas.map((m) => m.name);
+  assert.deepEqual(await noms(12), ["Film 1", "Film 2"]);
+  assert.deepEqual(await noms(10), ["Film 2"]);
+  assert.deepEqual(await noms(16), ["Film 1", "Film 2", "Film 3"]);
+  assert.equal(lectures, 1);                                   // une lecture pour l'instance, pas une par page
+  calls.length = 0;
+  assert.deepEqual(await noms(false), ["Film 1", "Film 2", "Film 3", "Film 4"]);
+  oublierAgesCnc();
+  await noms(false);
+  assert.equal(lectures, 1);                                   // hors Mode famille : jamais lu
 });
 
 test("tendances_du_jour_dans_l_ordre_tmdb_meme_avec_les_films_a_venir", async () => {
