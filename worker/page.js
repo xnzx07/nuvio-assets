@@ -35,7 +35,7 @@ const PROVIDER_COLORS = {
 
 import { STAGE_HEAD, stageTop, secretsHTML, BEAM_HTML, SEATS_HTML, CREDITS_HTML } from "./stage.js";
 import { nuvioDonnees } from "./nuvio.js";
-import { POSTER_URL } from "./reglages.js";
+import { POSTER_URL, LOGO_V } from "./reglages.js";
 import { feuilles, scripts } from "./statique.js";
 import { esc } from "./outils-serveur.js";
 import { GUICHET_DEPART, guichetHTML } from "./guichet.js";
@@ -150,7 +150,7 @@ export function configurePage({ origin, cfg, rows, discover, providers, collecti
     collections, regions, genres, languages, sorts, seasons, ages,
   };
   const json = JSON.stringify(data).replace(/</g, "\\u003c");
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
 
   return `<!doctype html>
 <html lang="fr" data-saison="${esc(season || "")}">

@@ -36,7 +36,7 @@ import {
 } from "./config.js";
 import { configurePage } from "./page.js";
 import { guidePage, NUVIO_TV_APK } from "./guide.js";
-import { AFFICHES_STATIQUES, APERCU_V, apercusDe, relaisUrl } from "./reglages.js";
+import { AFFICHES_STATIQUES, APERCU_V, LOGO_V, apercusDe, relaisUrl } from "./reglages.js";
 import { surveiller, CRON_SURVEILLANCE } from "./surveillance.js";
 import { ACTIF, SERVEUR_ADDON } from "./construire/redirections.mjs";
 import { lireReglages, ecrireReglages, dossierDe, MEMOIRES, MEMOIRES_PAYSAGE } from "./lien-affiches.js";
@@ -81,9 +81,6 @@ const OBSCUR_VOTES = 100;           // recherche : en dessous, un titre trouvé 
 // Gemini, et SEARCH_BUDGET pour chercher dans TMDB : au-delà, ses appels renvoient vide.
 const SEARCH_BUDGET = 22;
 const ASSETS = "https://raw.githubusercontent.com/xnzx07/nuvio-assets/main";
-// Version du logo (logo/addon.png) : Nuvio garde les images en cache selon leur adresse, donc un nouveau
-// logo n'apparaît que si son adresse change. À augmenter à chaque nouveau logo.
-const LOGO_V = 2;
 const NOISE_TV = ["10763", "10764", "10766", "10767"]; // actualité, téléréalité, soap, talk-show
 
 const CACHE_CATALOG_S = 3 * 3600;  // une page de catalogue reste 3 h dans le cache Cloudflare

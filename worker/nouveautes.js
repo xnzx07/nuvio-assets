@@ -6,6 +6,7 @@
  */
 
 import { feuilles } from "./statique.js";
+import { LOGO_V } from "./reglages.js";
 
 export const NOUVEAUTES = [
   {
@@ -185,7 +186,7 @@ export function jourEnClair(date) {
 }
 
 export function nouveautesPage({ origin, version }) {
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
   const entrees = NOUVEAUTES.map((n) => `
   <article class="entree">
     <p class="jour"><time datetime="${n.date}">${jourEnClair(n.date)}</time></p>

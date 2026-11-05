@@ -12,6 +12,7 @@
 import { esc } from "./outils-serveur.js";
 import { STAGE_HEAD, stageTop, BEAM_HTML } from "./stage.js";
 import { feuilles, scripts } from "./statique.js";
+import { LOGO_V } from "./reglages.js";
 
 export const ETAT_GARDE_S = 300;
 const DELAI_MS = 8000;      // au-delà : en panne
@@ -157,7 +158,7 @@ export const TEXTES = {
 };
 
 export function etatPage({ origin, version, saison = "" }) {
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
   const voyant = (id, nom) => `<li class="voyant" data-id="${id}" data-etat="attente"><i class="lampe" aria-hidden="true"></i><div><b>${esc(nom)}</b><span class="etat">En test…</span><p class="texte"></p></div><small class="ms"></small></li>`;
   return `<!doctype html>
 <html lang="fr" data-saison="${esc(saison || "")}">

@@ -125,6 +125,9 @@ export const apercusDe = (env, origin) => (/^https:\/\/[^/]+/.test(env.RELAIS_UR
 // Version des aperçus d'affiches du site (/affiche/…, gardés un jour par le navigateur) : à changer quand le
 // dessin change, pour qu'aucun aperçu dessiné par l'ancienne version ne ressorte du cache.
 export const APERCU_V = "3";
+// Version du logo (logo/addon.png) : Nuvio et Discord gardent les images en cache selon leur adresse, donc
+// un nouveau logo n'apparaît que si son adresse change. À augmenter à chaque nouveau logo.
+export const LOGO_V = 2;
 // Le lien à coller dans Nuvio, Paramètres → Disposition → Custom Poster Source : les affiches maison en fichiers
 // statiques (Worker « affiches » de Cloudflare), style « maison » ; un autre style tout prêt a son propre dossier.
 export const AFFICHES_STATIQUES = "https://affiches.xnzxflix.workers.dev";

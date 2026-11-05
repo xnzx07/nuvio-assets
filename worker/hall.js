@@ -8,10 +8,11 @@ import { ICONE_APERCU, ICONE_AVANT_APRES, apercuDonnees } from "./apercu.js";
 import { feuilles, scripts, adresseStatique } from "./statique.js";
 import { esc } from "./outils-serveur.js";
 import { NOUVEAUTES, jourEnClair } from "./nouveautes.js";
+import { LOGO_V } from "./reglages.js";
 
 
 export function hallPage({ origin, season, copy = false, apercus = origin }) {
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
   const porte = (n, href, titre, texte, extra) => `
     <a class="porte" href="${esc(href)}"${extra || ""}>
       <span class="plaque-porte">Salle ${n}</span>

@@ -38,7 +38,7 @@ const LINKS = {
 import { STAGE_HEAD, stageTop, secretsHTML, BEAM_HTML, SEATS_HTML, CREDITS_HTML } from "./stage.js";
 import { ICONE_APERCU, apercuDonnees } from "./apercu.js";
 import { NUVIO_TV_VERSION } from "./nuvio.js";
-import { reglagesHTML, POSTER_URL } from "./reglages.js";
+import { reglagesHTML, POSTER_URL, LOGO_V } from "./reglages.js";
 export { POSTER_URL };
 import { APPAREILS, installUrl } from "./liens.js";
 import { feuilles, scripts } from "./statique.js";
@@ -177,7 +177,7 @@ const MESSAGE_DESKTOP = `Installe Nuvio Desktop sur cet ordinateur. Prends la de
 
 export function guidePage({ origin, season, apercus = origin }) {
   const short = origin.replace(/^https?:\/\//, "") + "/tv";
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
   const manifest = `${origin}/manifest.json`;
   const sf = LINKS.streamFusion
     ? `<li>Ouvre ${link(LINKS.streamFusion, "la page de StreamFusion Reborn")}.</li>`

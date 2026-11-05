@@ -15,6 +15,7 @@
 import { esc } from "./outils-serveur.js";
 import { STAGE_HEAD, stageTop, BEAM_HTML } from "./stage.js";
 import { feuilles, scripts } from "./statique.js";
+import { LOGO_V } from "./reglages.js";
 
 export const JEU_DEBUT = "2026-10-22";   // n° 1 (le jour de la mise en ligne)
 export const ESSAIS = 5;
@@ -220,7 +221,7 @@ export async function routeJeu(request, env, ctx, url, path, today, headers, sai
 // La page
 // ---------------------------------------------------------------------------------------------------------------
 export function jeuPage({ origin, date, n, saison = "" }) {
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
   const jourLong = new Date(date + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
   return `<!doctype html>
 <html lang="fr" data-saison="${esc(saison || "")}">

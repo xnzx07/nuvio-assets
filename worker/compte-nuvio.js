@@ -15,6 +15,7 @@ import { creerLienAffiches } from "./lien-affiches.js";
 import { DERNIERE } from "./page.js";
 import { FACULTATIVES } from "./config.js";
 import { PRINCIPAL } from "./profils.js";
+import { LOGO_V } from "./reglages.js";
 
 export const NUVIO_DECOUVERTE = "https://api.nuvio.tv/.well-known/nuvio";
 export const NUVIO_LIEN = "https://nuvio.tv/link";   // page où l'on approuve un appareil (DEVICE_LOGIN_WEB_BASE_URL)
@@ -105,7 +106,7 @@ export function fusionAccueil(distants, ordre, addon) {
 }
 
 export function compteNuvioPage({ origin }) {
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
   return `<!doctype html>
 <html lang="fr">
 <head>

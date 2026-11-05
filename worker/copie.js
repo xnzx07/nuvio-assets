@@ -5,6 +5,7 @@
  */
 
 import { feuilles } from "./statique.js";
+import { LOGO_V } from "./reglages.js";
 
 const REPO = "https://github.com/xnzx07/nuvio-assets";
 
@@ -21,7 +22,7 @@ const COMPOSE = `services:
       - ./donnees:/data`;
 
 export function copiePage({ origin }) {
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
   return `<!doctype html>
 <html lang="fr">
 <head>

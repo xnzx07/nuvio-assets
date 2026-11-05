@@ -5,11 +5,11 @@
  * On choisit : copier le lien, ou copier le contenu du fichier (une configuration JSON, par exemple).
  * Un lien d'affiches (QR code de la régie) : seulement « Copier le lien », avec l'endroit où le coller dans Nuvio.
  */
-import { AFFICHES_URL } from "./reglages.js";
+import { AFFICHES_URL, LOGO_V } from "./reglages.js";
 import { feuilles } from "./statique.js";
 
 export function lienPage({ origin }) {
-  const LOGO = origin + "/logo.png";
+  const LOGO = `${origin}/logo.png?v=${LOGO_V}`;
   return `<!doctype html>
 <html lang="fr">
 <head>
