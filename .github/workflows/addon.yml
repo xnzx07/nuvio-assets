@@ -95,6 +95,14 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: python scripts/build_scenes_generique.py
+      - name: Bandes-annonces VF (API YouTube officielle)
+        id: ba
+        # En échec (quota du jour, panne), le fichier de la veille reste ; sans le secret YOUTUBE_API_KEY : rien.
+        continue-on-error: true
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python scripts/build_bandes_annonces.py
       - name: Enregistrer
         run: |
           git config user.name "github-actions[bot]"
@@ -109,7 +117,7 @@ jobs:
           done
           exit 1
       - name: Bilan
-        if: steps.addon.outputs.code == '3' || steps.words.outcome == 'failure' || steps.vod.outcome == 'failure' || steps.sansvf.outcome == 'failure' || steps.cnc.outcome == 'failure' || steps.scenes.outcome == 'failure'
+        if: steps.addon.outputs.code == '3' || steps.words.outcome == 'failure' || steps.vod.outcome == 'failure' || steps.sansvf.outcome == 'failure' || steps.cnc.outcome == 'failure' || steps.scenes.outcome == 'failure' || steps.ba.outcome == 'failure'
         env:
           CODE: ${{ steps.addon.outputs.code }}
           MOTS: ${{ steps.words.outcome }}
@@ -117,6 +125,7 @@ jobs:
           SANSVF: ${{ steps.sansvf.outcome }}
           CNC: ${{ steps.cnc.outcome }}
           SCENES: ${{ steps.scenes.outcome }}
+          BA: ${{ steps.ba.outcome }}
         run: |
           [ "$CODE" != 3 ] || echo "::error::Des listes ont échoué : elles gardent leurs pages de la veille (voir addon/state.json)."
           [ "$MOTS" != failure ] || echo "::error::Vocabulaire de la recherche non refait : l'ancien reste."
@@ -124,6 +133,7 @@ jobs:
           [ "$SANSVF" != failure ] || echo "::error::Films sans VF : panne, le reste attendra demain."
           [ "$CNC" != failure ] || echo "::error::Âges du CNC : panne, data/ages-cnc.json de la veille reste."
           [ "$SCENES" != failure ] || echo "::error::Scènes du générique : aftercredits.com en panne, la suite demain."
+          [ "$BA" != failure ] || echo "::error::Bandes-annonces VF : YouTube en panne ou quota du jour atteint, le fichier de la veille reste."
           exit 1
       - name: Signaler l'échec
         if: failure()

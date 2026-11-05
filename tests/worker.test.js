@@ -1,7 +1,7 @@
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import worker, { oublierInfos, oublierPauseYoutube, oublierAvis, ageFinal, oublierAgesCnc, oublierFillers, creditsScene } from "../worker/index.js";
+import worker, { oublierInfos, oublierBandesAnnonces, oublierAvis, ageFinal, oublierAgesCnc, oublierFillers, creditsScene } from "../worker/index.js";
 import { fakeD1 } from "./support/d1.mjs";
 import { resetFails } from "../worker/hote.js";
 
@@ -291,12 +291,26 @@ test("route_nouveautes", async () => {
   assert.match(await res.text(), /Les nouveautés/);
 });
 
-// Bande-annonce VF trouvée : gardée 30 jours (elle ne change presque jamais ; moins de recherches sur
-// YouTube, qui peut bloquer les serveurs de Cloudflare). Pas de VF : revérifié tous les 2 jours.
-test("vf_gardee_30_jours", () => {
-  const src = readFileSync("worker/index.js", "utf8");
-  assert.match(src, /^const VF_CACHE_S = 30 \* 86400;/m);
-  assert.match(src, /^const VF_MISS_S = 2 \* 86400;/m);
+// Bande-annonce VF : celle préparée la nuit (data/bandes-annonces-vf.json, API YouTube officielle), dans la fiche et
+// dans les rangées ; plus aucune lecture d'AlloCiné, de Wikidata ni de la recherche YouTube.
+test("bande_annonce_vf_du_fichier", async () => {
+  oublierBandesAnnonces();
+  oublierInfos();
+  const sortie = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  globalThis.fetch = async (url) => {
+    const u = decodeURIComponent(String(url));
+    calls.push(u);
+    if (u.endsWith("/data/bandes-annonces-vf.json")) return Response.json({ maj: "2026-11-05", titres: { "movie:tt7401": { k: "abcdefghijk", t: "Film VF", hd: true } } });
+    if (/\/movie\/7401\?/.test(u)) return Response.json({ id: 7401, imdb_id: "tt7401", title: "Film", release_date: sortie(400),
+      videos: { results: [{ site: "YouTube", type: "Trailer", key: "vo_trailer1", iso_639_1: "en", size: 1080 }] }, "watch/providers": { results: {} } });
+    if (u.includes("/discover/movie")) return Response.json({ results: [{ id: 7401, title: "Film", release_date: sortie(400), original_language: "en" }], page: 1, total_pages: 1 });
+    return new Response("{}");
+  };
+  const m = (await (await get("/meta/movie/tmdb:7401.json")).json()).meta;
+  assert.deepEqual(m.trailers.map((t) => t.ytId), ["abcdefghijk", "vo_trailer1"]);
+  const { metas } = await (await get(`/${seg({ x: [{ n: "Films", t: 0 }] })}/catalog/movie/perso-0.json`)).json();
+  assert.equal(metas[0].trailers[0].ytId, "abcdefghijk");
+  assert.ok(!calls.some((u) => /allocine\.fr|youtube\.com\/results|query\.wikidata\.org/.test(u)));
 });
 
 // ---------- audit de sécurité ----------
@@ -1353,7 +1367,7 @@ test("rangee_anime_budget_cinemeta", async () => {
 // Fiche d'une série : épisodes et recherche de la bande-annonce VF partent juste après la fiche TMDB, sans attendre
 // Cinemeta (avant, chacun attendait le précédent).
 test("fiche_serie_lectures_en_parallele", async () => {
-  oublierPauseYoutube();
+  oublierBandesAnnonces();
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const serie = { id: 7201, name: "Série 7201", original_language: "en", first_air_date: jour(-900), number_of_seasons: 1, status: "Ended",
     external_ids: { imdb_id: "tt7201" }, seasons: [{ season_number: 1, air_date: jour(-900), episode_count: 2 }],
@@ -1369,7 +1383,7 @@ test("fiche_serie_lectures_en_parallele", async () => {
       return new Response(JSON.stringify({ "season/1": { episodes: [{ episode_number: 1, name: "Un", air_date: jour(-900) }, { episode_number: 2, name: "Deux", air_date: jour(-893) }] } }));
     }
     if (/\/tv\/7201\?/.test(u)) return new Response(JSON.stringify(serie));
-    if (u.includes("query.wikidata.org")) { avant.vf ??= !cinemetaFini; return new Response(JSON.stringify({ results: { bindings: [] } })); }
+    if (u.endsWith("/data/bandes-annonces-vf.json")) { avant.vf ??= !cinemetaFini; return Response.json({ titres: {} }); }
     return new Response("{}");
   };
   const m = (await (await get("/meta/series/tmdb:7201.json")).json()).meta;
@@ -1391,7 +1405,7 @@ test("scene_du_generique", () => {
 // Anime : les épisodes de remplissage viennent du fichier de la nuit (data/fillers.json, rangé par id TMDB), plus de la
 // page du site devinée depuis le titre français ; une série absente du fichier n'en a pas.
 test("fiche_anime_remplissage_du_fichier", async () => {
-  oublierPauseYoutube();
+  oublierBandesAnnonces();
   oublierFillers();
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const anime = (id) => ({ id, name: `Anime ${id}`, original_language: "ja", genres: [{ id: 16 }], number_of_episodes: 40,

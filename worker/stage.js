@@ -812,6 +812,7 @@ export const SEATS_HTML = `<div class="seats" aria-hidden="true"></div>`;
 const CREDITS = [
   ["Dans le rôle du lecteur", "Nuvio"],
   ["Fiches, affiches et bandes-annonces", "TMDB"],
+  ["Bandes-annonces en VF", "YouTube"],
   ["Lettrage des affiches", "Inter"],
   ["Sources", "Lumio, StreamFusion, Torrentio, WAStream"],
   ["Sous-titres", "OpenSubtitles"],
