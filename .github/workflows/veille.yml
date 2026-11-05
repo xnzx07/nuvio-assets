@@ -1,0 +1,75 @@
+name: Veille (Nuvio TV et pages de réglage)
+
+# Chaque jour : nouvelle version de Nuvio TV (l'aperçu des liens la recopie) ou des addons de sources que le guide
+# fait régler (Torrentio, StreamFusion, WAStream, Lumio) → une issue. Voir scripts/veille.mjs.
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: veille
+  cancel-in-progress: false
+
+jobs:
+  veille:
+    # Pas sur les forks : ils récupèrent data/veille.json par « Sync fork ».
+    if: github.repository == 'xnzx07/nuvio-assets'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Relever les versions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VEILLE_SORTIE: ${{ runner.temp }}/veille.json
+        run: node scripts/veille.mjs
+      - name: Ouvrir, compléter ou fermer les issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SORTIE: ${{ runner.temp }}/veille.json
+        run: |
+          ouvertes=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --author "github-actions[bot]" --limit 100 \
+                       --json number,title --jq '.[] | select(.title | startswith("Veille : ")) | "\(.number)\t\(.title)"')
+          num_de() { printf '%s\n' "$ouvertes" | awk -F'\t' -v t="$1" '$2 == t { print $1; exit }'; }
+          # Nuvio TV : une seule issue ouverte à la fois, complétée à chaque nouvelle version, fermée quand
+          # l'aperçu a rattrapé l'appli.
+          nuvio=$(printf '%s\n' "$ouvertes" | awk -F'\t' 'index($2, "Veille : Nuvio TV ") == 1 { print $1; exit }')
+          if [ "$(jq -r '.nuvio == null' "$SORTIE")" = true ]; then
+            if [ -n "$nuvio" ]; then
+              gh issue close "$nuvio" --repo "$GITHUB_REPOSITORY" --comment "L'aperçu suit de nouveau la dernière version de Nuvio TV."
+            fi
+          else
+            titre=$(jq -r '.nuvio.titre' "$SORTIE"); corps=$(jq -r '.nuvio.corps' "$SORTIE")
+            if [ -z "$nuvio" ]; then
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$titre" --body "$corps"
+            elif [ -z "$(num_de "$titre")" ]; then
+              gh issue edit "$nuvio" --repo "$GITHUB_REPOSITORY" --title "$titre"
+              gh issue comment "$nuvio" --repo "$GITHUB_REPOSITORY" --body "$corps"
+            fi
+          fi
+          # Pages de réglage : une issue par nouvelle version, jamais deux fois la même.
+          jq -c '.pages[]' "$SORTIE" | while read -r i; do
+            titre=$(jq -r '.titre' <<<"$i")
+            [ -n "$(num_de "$titre")" ] || gh issue create --repo "$GITHUB_REPOSITORY" --title "$titre" --body "$(jq -r '.corps' <<<"$i")"
+          done
+      - name: Garder les versions vues
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/veille.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Veille du $(date +%F)"
+          for essai in 1 2 3; do
+            git pull --rebase && git push && exit 0
+            git rebase --abort 2>/dev/null || true
+            [ "$essai" = 3 ] || sleep $((essai * 15))
+          done
+          exit 1

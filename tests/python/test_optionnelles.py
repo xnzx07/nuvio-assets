@@ -164,6 +164,30 @@ class Laureats(unittest.TestCase):
         """César : souvent noté sur le producteur (« nm… ») ; seuls les films (« tt… ») comptent."""
         self.assertEqual(br.winners([{"imdb": {"value": "nm0536095"}}, {"imdb": {"value": "tt9"}}], []), [("tt9", 0)])
 
+    def test_cesars_lus_sur_wikipedia(self):
+        """Page « César du meilleur film » : lauréat en gras italique, nommés en italique simple ; forme ancienne,
+        forme récente (« *[[ » collé, « de ») et ex æquo (1984, lauréats sur les lignes « ** »)."""
+        page = "\n".join([
+            "=== Années 1980 ===",
+            "* [[9e cérémonie des César|1984]] : ''ex æquo''",
+            "** '''''[[Le Bal (film, 1983)|Le Bal]]'', réalisé par [[Ettore Scola]]'''",
+            "** '''''[[À nos amours]]'', réalisé par [[Maurice Pialat]]'''",
+            "*** ''[[Tchao Pantin]]'', réalisé et produit par [[Claude Berri]]",
+            "* [[10e cérémonie des César|1985]] : '''''[[Les Ripoux]]'', réalisé et produit par [[Claude Zidi]]'''",
+            "** ''[[L'Amour à mort]]'' – réalisateur : [[Alain Resnais]]",
+            "=== Années 2020 ===",
+            "*[[51e cérémonie des César|2026]] : '''''[[L'Attachement]]'', de [[Carine Tardieu]]'''",
+            "** ''[[Nouvelle Vague (film)|Nouvelle Vague]]'', de [[Richard Linklater]]",
+            "== Statistiques ==",
+            "* '''''[[Le Dernier Métro]]''''' : 10 César",
+        ])
+        self.assertEqual(br.cesar_articles(page), [("Le Bal (film, 1983)", 1984), ("À nos amours", 1984),
+                                                   ("Les Ripoux", 1985), ("L'Attachement", 2026)])
+
+    def test_reunion_sans_doublon(self):
+        self.assertEqual(br.merge([("tt1", 1990), ("tt2", 0)], [("tt2", 2026), ("tt1", 1980)]),
+                         [("tt2", 2026), ("tt1", 1990)])
+
 
 def fake_render(job, tile, wall, folder, leger=False):
     for name in mo.FILES:
