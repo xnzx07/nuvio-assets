@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.53.0";
+const VERSION = "5.54.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1382,29 +1382,50 @@ export function ageFinal(info, ageCnc) {
 }
 
 /**
- * Les âges du CNC (data/ages-cnc.json, scripts/build_ages_cnc.py) : { id TMDB: âge }, {} tant qu'il n'est pas lu (le
- * film garde son âge de TMDB). Lu seulement en Mode famille ; une lecture par heure ; échec : l'ancienne table sert.
+ * Un fichier de données du dépôt (data/…, refait la nuit par GitHub), rangé par identifiant TMDB : champ(fichier) ou
+ * null tant qu'il n'est pas lu. Une seule lecture à la fois, gardée une heure (VOD_MS) ; échec : l'ancienne table sert,
+ * nouvel essai dans 5 minutes. lire() rend la table ; oublier() l'efface (tests).
  */
-const AGES_CNC_URL = `${ASSETS}/data/ages-cnc.json`;
-let AGES_CNC = null;      // { films, until, promesse }
-function agesCnc() {
-  const now = Date.now();
-  if (!AGES_CNC || (!AGES_CNC.promesse && now >= AGES_CNC.until)) {
-    const etat = { films: AGES_CNC ? AGES_CNC.films : {}, until: Infinity, promesse: null };
-    etat.promesse = fetch(AGES_CNC_URL, { signal: AbortSignal.timeout(VOD_DELAI_MS), cf: { cacheTtl: 3600, cacheEverything: true } })
-      .then((r) => (r.ok ? r.json() : null)).catch(() => null)
-      .then((d) => {
-        const lu = d && d.films && typeof d.films === "object";
-        if (lu) etat.films = d.films;
-        etat.until = Date.now() + (lu ? VOD_MS : VOD_ECHEC_MS);
-        etat.promesse = null;
-        return etat.films;
-      });
-    AGES_CNC = etat;
-  }
-  return AGES_CNC.promesse || Promise.resolve(AGES_CNC.films);
+function donneesDuDepot(chemin, champ) {
+  let etat = null;   // { table, until, promesse }
+  const lire = () => {
+    const now = Date.now();
+    if (!etat || (!etat.promesse && now >= etat.until)) {
+      const e = { table: etat ? etat.table : null, until: Infinity, promesse: null };
+      e.promesse = fetch(`${ASSETS}/${chemin}`, { signal: AbortSignal.timeout(VOD_DELAI_MS), cf: { cacheTtl: 3600, cacheEverything: true } })
+        .then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        .then((d) => {
+          const t = d && d[champ] && typeof d[champ] === "object" ? d[champ] : null;
+          if (t) e.table = t;
+          e.until = Date.now() + (t ? VOD_MS : VOD_ECHEC_MS);
+          e.promesse = null;
+          return e.table;
+        });
+      etat = e;
+    }
+    return etat.promesse || Promise.resolve(etat.table);
+  };
+  return { lire, oublier: () => { etat = null; } };
 }
-export const oublierAgesCnc = () => { AGES_CNC = null; };
+
+/**
+ * Les âges du CNC (data/ages-cnc.json, scripts/build_ages_cnc.py) : { id TMDB: âge }, {} tant qu'il n'est pas lu (le
+ * film garde son âge de TMDB). Lu seulement en Mode famille.
+ */
+const AGES_CNC = donneesDuDepot("data/ages-cnc.json", "films");
+const agesCnc = async () => (await AGES_CNC.lire()) || {};
+export const oublierAgesCnc = AGES_CNC.oublier;
+
+/**
+ * Les épisodes de remplissage des anime (data/fillers.json, scripts/build_fillers.py) : { id TMDB: « 26,97,136-140 » }.
+ * Lu seulement pour un anime.
+ */
+const FILLERS = donneesDuDepot("data/fillers.json", "series");
+export const oublierFillers = FILLERS.oublier;
+
+/** Les scènes du générique (data/scenes-generique.json, scripts/build_scenes_generique.py) : { id TMDB: code }. */
+const SCENES = donneesDuDepot("data/scenes-generique.json", "films");
+export const oublierScenes = SCENES.oublier;
 
 /**
  * Mode famille : titre classé au-dessus de l'âge choisi (cfg.f, voir AGES_FAMILLE) ? Un titre classé nulle part reste
@@ -2612,7 +2633,9 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
   // « pour qui » et « à savoir » (IA), puis le rappel de l'œuvre précédente (IA).
   // En premier : y aura-t-il une suite ? (série terminée, saison annoncée, film suivant de la saga)
   const follow = movie ? null : seriesFollow(d, today);
-  const extras = [follow ? follow.text : "", movie ? creditsScene(keywords) : "", sourceNote(keywords, crew)];
+  // Scène du générique : aftercredits.com d'abord (data/scenes-generique.json), sinon les mots-clés TMDB.
+  const scenes = movie ? await SCENES.lire() : null;
+  const extras = [follow ? follow.text : "", movie ? creditsScene(keywords, scenes && scenes[brut.id]) : "", sourceNote(keywords, crew)];
 
   // TMDB dit « pas terminée » sans saison annoncée : Wikipédia tranche (renouvelée ou non).
   const renewalJob = ai && follow && follow.unsure ? ask(renewalOf(env, ctx, d, follow.season, today)) : null;
@@ -2813,9 +2836,15 @@ function renewalNote(r, season) {
   return `⏸️ Saison ${season} pas encore commandée${more}.`;
 }
 
-/** Scène pendant ou après le générique, d'après les mots-clés TMDB. */
-function creditsScene(keywords) {
-  const during = keywords.includes("duringcreditsstinger"), after = keywords.includes("aftercreditsstinger");
+/**
+ * Scène pendant ou après le générique. code : la note d'aftercredits.com (data/scenes-generique.json : « p » pendant,
+ * « a » après, « pa » les deux, « s » une scène sans plus de précision, « 0 » aucune) ; sans elle, les mots-clés TMDB.
+ */
+export function creditsScene(keywords, code) {
+  if (code === "0") return "🎬 Pas de scène après le générique : tu peux partir.";
+  if (code === "s") return "🎬 Il y a une scène pendant ou après le générique.";
+  const during = code ? code.includes("p") : keywords.includes("duringcreditsstinger");
+  const after = code ? code.includes("a") : keywords.includes("aftercreditsstinger");
   if (during && after) return "🎬 Reste jusqu'au bout : il y a des scènes pendant et après le générique.";
   if (after) return "🎬 Reste après le générique : il y a une scène.";
   if (during) return "🎬 Il y a une scène pendant le générique.";
@@ -2878,8 +2907,23 @@ function bestEpisodes(episodes, today) {
     .slice(0, 3).map((e) => e.episode_number));
 }
 
-/** Numéros des épisodes de remplissage d'un anime (numérotation continue), d'après animefillerlist.com. */
+/** « 26,97,136-140 » → Set {26, 97, 136, …, 140} (5000 numéros au plus). */
+function plagesEnEnsemble(texte) {
+  const out = new Set();
+  for (const [, a, b] of String(texte || "").matchAll(/(\d+)(?:\s*-\s*(\d+))?/g)) {
+    for (let k = Number(a); k <= Number(b || a) && out.size < 5000; k++) out.add(k);
+  }
+  return out;
+}
+
+/**
+ * Numéros des épisodes de remplissage d'un anime (numérotation continue), d'après animefillerlist.com : le fichier de la
+ * nuit (data/fillers.json, séries reliées à TMDB par leur titre anglais). Une série absente du fichier n'en a pas (ou
+ * n'a pas pu être reliée) : null. Fichier illisible : l'ancienne façon, la page du site devinée depuis le titre.
+ */
 async function fillerEpisodes(d) {
+  const table = await FILLERS.lire();
+  if (table) return d.id != null && table[d.id] ? plagesEnEnsemble(table[d.id]) : null;
   const slugs = [...new Set([d.name, d.original_name].map((n) => norm(n).replace(/ /g, "-")).filter(Boolean))];
   for (const slug of slugs) {
     const html = await fetch(`https://www.animefillerlist.com/shows/${slug}`, {
@@ -2888,11 +2932,7 @@ async function fillerEpisodes(d) {
     }).then((r) => (r.ok ? r.text() : ""), () => "");
     const m = /<div class="filler">([\s\S]*?)<\/div>/.exec(html);
     if (!m) continue;
-    const out = new Set();
-    for (const [, a, b] of m[1].replace(/<[^>]+>/g, " ").matchAll(/(\d+)(?:\s*-\s*(\d+))?/g)) {
-      for (let k = Number(a); k <= Number(b || a) && out.size < 5000; k++) out.add(k);
-    }
-    return out;
+    return plagesEnEnsemble(m[1].replace(/<[^>]+>/g, " "));
   }
   return null;
 }

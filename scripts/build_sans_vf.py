@@ -7,7 +7,8 @@ un film n'entre dans la liste que si tout le dit, deux fois :
 1. Candidats : films de plus d'un an, ni français ni anglais, assez connus (VOTES_MIN), les plus populaires d'abord.
 2. Aucune plateforme en France, même en location ou à l'achat (TMDB) : sinon le film a peut-être une VF, on ne l'examine
    pas (revu dans REVOIR_DOUTE jours).
-3. L'avis de l'addon (/sans-vf/avis, worker/index.js) : Torrentio, Lumio et StreamFusion ont vu des sources et les ont
+3. Une preuve de VF de France sans débrideur (scripts/preuve_vff.py : RS Doublage, Wikipédia) : « vf » tout de suite.
+   Sinon, l'avis de l'addon (/sans-vf/avis, worker/index.js) : Torrentio, Lumio et StreamFusion ont vu des sources et les ont
    toutes écartées. « vf » : gardé tel quel pour toujours. « doute » : revu dans REVOIR_DOUTE jours. Ces demandes passent
    par le compte AllDebrid de la personne : plafond à part, 15 films par nuit (SANSVF_PLAFOND).
 4. « non » deux fois, à CONFIRMER_JOURS jours d'écart au moins (un site français en panne le jour de la première lecture
@@ -29,6 +30,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from preuve_vff import preuve_vff  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "sans-vf.json"
@@ -84,11 +88,12 @@ def a_revoir(suivi, jour):
     return confirmer + non + doute
 
 
-def noter(suivi, imdb, tmdb_id, etat, jour):
-    """L'état d'un film après son examen. Un « non » ne compte que s'il suit un autre « non »."""
+def noter(suivi, imdb, tmdb_id, etat, jour, preuve=None):
+    """L'état d'un film après son examen. Un « non » ne compte que s'il suit un autre « non ». preuve : la source qui a
+    prouvé la VF sans débrideur (scripts/preuve_vff.py)."""
     avant = suivi.get(imdb, {})
     n = avant.get("n", 0) + 1 if etat == "non" and avant.get("e") == "non" else 1 if etat == "non" else 0
-    suivi[imdb] = {"id": tmdb_id, "e": etat, "j": jour, "n": n}
+    suivi[imdb] = {"id": tmdb_id, "e": etat, "j": jour, "n": n, **({"p": preuve} if preuve else {})}
 
 
 def films_de(suivi):
@@ -120,6 +125,11 @@ def examiner(suivi, imdb, tmdb_id, fiche, jour):
     if plateforme_en_france(fiche):
         noter(suivi, imdb, tmdb_id, "plateforme", jour)
         return True
+    # Une VF de France prouvée ailleurs (RS Doublage, Wikipédia) : « vf » pour toujours, sans appel au débrideur.
+    preuve = preuve_vff(fiche)
+    if preuve:
+        noter(suivi, imdb, tmdb_id, "vf", jour, preuve)
+        return True
     avis = avis_addon(imdb)
     if avis.get("plafond"):
         return False
@@ -128,7 +138,8 @@ def examiner(suivi, imdb, tmdb_id, fiche, jour):
 
 
 def fiche_de(tmdb_id):
-    return tmdb(f"/movie/{tmdb_id}", append_to_response="external_ids,watch/providers")
+    # En français : RS Doublage range les films par leur titre français (preuve_vff).
+    return tmdb(f"/movie/{tmdb_id}", language="fr-FR", append_to_response="external_ids,watch/providers,credits")
 
 
 def passer(suivi, jour):

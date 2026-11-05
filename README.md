@@ -215,7 +215,9 @@ de l'hébergeur, celui qui contient cette clé.
 Données et images : [TMDB](https://www.themoviedb.org) (ce produit utilise l'API TMDB sans être approuvé ni
 certifié par TMDB). Notes : fichiers publics d'[IMDb](https://developer.imdb.com/non-commercial-datasets/).
 Épisodes de remplissage : [animefillerlist.com](https://www.animefillerlist.com).
+Scènes pendant et après le générique : [aftercredits.com](https://aftercredits.com).
 Âges du Mode famille : visas et classification du [CNC](https://www.cnc.fr/professionnels/visas-et-classification)
 (fichier ouvert sur [data.gouv.fr](https://www.data.gouv.fr/datasets/liste-des-visas-dexploitations-cinematographiques-delivres-de-1945-a-2025), Licence Ouverte).
 Palmarès des César : [Wikipédia](https://fr.wikipedia.org/wiki/C%C3%A9sar_du_meilleur_film) (CC BY-SA).
+Preuves de VF de France des vieux films : [RS Doublage](https://www.rsdoublage.com) et Wikipédia (comédiens de doublage).
 Police : Bebas Neue, licence SIL OFL (`fonts/OFL.txt`).

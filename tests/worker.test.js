@@ -1,7 +1,7 @@
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import worker, { oublierInfos, oublierPauseYoutube, oublierAvis, ageFinal, oublierAgesCnc } from "../worker/index.js";
+import worker, { oublierInfos, oublierPauseYoutube, oublierAvis, ageFinal, oublierAgesCnc, oublierFillers, creditsScene } from "../worker/index.js";
 import { fakeD1 } from "./support/d1.mjs";
 import { resetFails } from "../worker/hote.js";
 
@@ -1375,6 +1375,41 @@ test("fiche_serie_lectures_en_parallele", async () => {
   const m = (await (await get("/meta/series/tmdb:7201.json")).json()).meta;
   assert.deepEqual(m.videos.map((v) => v.title), ["Un", "Deux"]);
   assert.deepEqual(avant, { episodes: true, vf: true });
+});
+
+// Scène du générique : la note d'aftercredits.com (data/scenes-generique.json) passe avant les mots-clés TMDB, et peut
+// dire qu'il n'y en a pas.
+test("scene_du_generique", () => {
+  assert.equal(creditsScene(["aftercreditsstinger"]), "🎬 Reste après le générique : il y a une scène.");
+  assert.equal(creditsScene([], "pa"), "🎬 Reste jusqu'au bout : il y a des scènes pendant et après le générique.");
+  assert.equal(creditsScene(["aftercreditsstinger"], "p"), "🎬 Il y a une scène pendant le générique.");
+  assert.equal(creditsScene(["aftercreditsstinger"], "0"), "🎬 Pas de scène après le générique : tu peux partir.");
+  assert.equal(creditsScene([], "s"), "🎬 Il y a une scène pendant ou après le générique.");
+  assert.equal(creditsScene([]), "");
+});
+
+// Anime : les épisodes de remplissage viennent du fichier de la nuit (data/fillers.json, rangé par id TMDB), plus de la
+// page du site devinée depuis le titre français ; une série absente du fichier n'en a pas.
+test("fiche_anime_remplissage_du_fichier", async () => {
+  oublierPauseYoutube();
+  oublierFillers();
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const anime = (id) => ({ id, name: `Anime ${id}`, original_language: "ja", genres: [{ id: 16 }], number_of_episodes: 40,
+    first_air_date: jour(-900), number_of_seasons: 1, status: "Ended", external_ids: {},
+    seasons: [{ season_number: 1, air_date: jour(-900), episode_count: 4 }], videos: { results: [] }, "watch/providers": { results: {} } });
+  globalThis.fetch = async (url) => {
+    const u = decodeURIComponent(String(url));
+    calls.push(u);
+    if (u.endsWith("/data/fillers.json")) return Response.json({ maj: "2026-11-05", series: { 7301: "2-3" } });
+    const m = /\/tv\/(730\d)\?/.exec(u);
+    if (m && u.includes("season/1")) return Response.json({ "season/1": { episodes: [1, 2, 3, 4].map((n) => ({ episode_number: n, name: `É${n}`, air_date: jour(-900 + n) })) } });
+    if (m) return Response.json(anime(Number(m[1])));
+    return new Response("{}");
+  };
+  const titres = async (id) => (await (await get(`/meta/series/tmdb:${id}.json`)).json()).meta.videos.map((v) => v.title);
+  assert.deepEqual(await titres(7301), ["É1", "É2 (remplissage)", "É3 (remplissage)", "É4"]);
+  assert.deepEqual(await titres(7302), ["É1", "É2", "É3", "É4"]);
+  assert.ok(!calls.some((u) => u.includes("animefillerlist.com")), "plus de page devinée quand le fichier est lu");
 });
 
 // Filtres généraux (ici l'horreur masquée et une année minimale) : la rangée garde le classement du jour et ses N°,
