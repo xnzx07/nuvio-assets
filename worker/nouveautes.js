@@ -9,6 +9,15 @@ import { feuilles } from "./statique.js";
 
 export const NOUVEAUTES = [
   {
+    date: "2026-11-05",
+    titre: "Un profil pour chacun, et le Mode famille par âge",
+    points: [
+      "Nouvelle barre « Mes profils » en haut de la salle 2 : un lien par personne (un enfant, ton conjoint…), chacun son accueil. Un profil enfant part de la programmation Famille, avec l'âge choisi. Il faut d'abord un lien fixe.",
+      "« Tout envoyer dans Nuvio » envoie chaque profil au profil Nuvio du même nom. Dans Nuvio, le profil ne doit pas « utiliser les addons du profil principal ».",
+      "Mode famille : choisis l'âge du plus jeune (moins de 10 ans, 10, 12 ou 16 ans et +). Un titre classé plus haut sort des rangées, d'après sa classification française (sinon américaine, anglaise ou allemande). Avant, les films n'étaient pas filtrés par âge.",
+    ],
+  },
+  {
     date: "2026-11-01",
     titre: "« SANS VF » pour les vieux films qui n'en ont pas",
     points: [

@@ -19,6 +19,7 @@ import { VERIFS_CSS, VERIFS_JS } from "./guide-verifs.js";
 import { GUICHET_CSS, GUICHET_JS } from "./guichet.js";
 import { SOIREE_CSS, SOIREE_JS } from "./soiree.js";
 import { GALERIE_CSS, GALERIE_JS } from "./galerie.js";
+import { PROFILS_CSS, PROFILS_JS } from "./profils.js";
 
 // Construits au premier besoin : les pages importent ce fichier, et lui importe leurs styles et leurs scripts.
 let fichiers = null;
@@ -34,6 +35,8 @@ const FICHIERS = () => fichiers || (fichiers = {
   "salle2-guichet.css": GUICHET_CSS, "salle2-guichet.js": GUICHET_JS,
   "salle2-soiree.css": SOIREE_CSS, "salle2-soiree.js": SOIREE_JS,
   "salle2-galerie.css": GALERIE_CSS, "salle2-galerie.js": GALERIE_JS,
+  // Mes profils : un lien fixe par membre de la famille (profils.js).
+  "salle2-profils.css": PROFILS_CSS, "salle2-profils.js": PROFILS_JS,
   "guide.css": GUIDE_CSS, "guide-reclames.css": GUIDE_RECLAMES_CSS, "guide-fin.css": GUIDE_FIN_CSS,
   "guide.js": GUIDE_JS, "guide-fin.js": GUIDE_FIN_JS,
   "guide-verifs.css": VERIFS_CSS, "guide-verifs.js": VERIFS_JS,

@@ -122,9 +122,9 @@ export async function noteLecture(env, id, request) {
 /**
  * POST /lien-fixe            { c }          → { id, modif }  (nouveau lien)
  * POST /lien-fixe/<id>       { c, modif }   → { ok: true, t }  (même lien, nouveaux réglages ; t : heure d'enregistrement)
- * POST /lien-fixe/<id>/lire  { modif }      → { k, al, vu, t, maintenant }  (clé Gemini et jeton d'alerte, voir plus
+ * POST /lien-fixe/<id>/lire  { modif }      → { k, al, pf, n, vu, t, maintenant }  (clé Gemini, jeton d'alerte, profils, voir plus
  *                                             bas ; vu : dernière lecture par Nuvio, t : dernier enregistrement, en ms)
- * `valid(seg)` dit si les réglages sont lisibles (decodeConfig) ; `secrets(seg)` en tire { k, al }.
+ * `valid(seg)` dit si les réglages sont lisibles (decodeConfig) ; `secrets(seg)` en tire { k, al, pf, n }.
  */
 export async function fixedRoute(request, env, path, valid, secrets) {
   const reply = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
@@ -187,7 +187,8 @@ async function lireSecrets(env, id, modif, secrets, reply) {
     if (!same(r.e, await sha("modif:" + modif))) return reply({ error: "Ce navigateur n'a pas la clé pour modifier ce lien." }, 403);
     const s = secrets(await open(id, r.c)) || {};
     // maintenant : l'heure du site, pour compter « il y a 3 min » même si l'horloge de l'appareil dérive.
-    return reply({ k: s.k || "", al: s.al || "", vu: Number(r.vu) || 0, t: Number(r.t) || 0, maintenant: Date.now() });
+    // pf : les profils d'un lien principal (leurs liens et clés) ; n : le nom du lien, celui du profil dans la barre.
+    return reply({ k: s.k || "", al: s.al || "", pf: Array.isArray(s.pf) ? s.pf : [], n: s.n || "", vu: Number(r.vu) || 0, t: Number(r.t) || 0, maintenant: Date.now() });
   } catch (e) {
     if (noTable(e)) return reply({ error: "Lien fixe inconnu." }, 404);
     console.warn("lien fixe :", String(e));

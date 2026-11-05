@@ -31,7 +31,8 @@
 import DEFS from "../catalogs.json";
 import {
   PROVIDERS, COLLECTIONS, REGIONS, GENRES, LANGUAGES, SORTS, SEASON_KEYS, MAX_CUSTOM,
-  decodeConfig, defaults, langOf, contentKey, hasGlobalFilters,
+  decodeConfig, defaults, langOf, contentKey, hasGlobalFilters, AGES_FAMILLE, classifsFamille,
+  // AGES_FAMILLE : passé à la page de réglages.
 } from "./config.js";
 import { configurePage } from "./page.js";
 import { guidePage, NUVIO_TV_APK } from "./guide.js";
@@ -67,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.51.0";
+const VERSION = "5.52.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -370,7 +371,8 @@ async function lireInfo(env, kind, tmdbId, budget) {
     // Plateformes (films) : en France = VF disponible, même avant la sortie numérique américaine (enVfChezSoi).
     // Séries : les plateformes aussi (une nouvelle série sur une plateforme en France qui la double : en VF).
     // Mots-clés (films) : un spectacle de stand-up n'est jamais doublé (abonnementVf).
-    append_to_response: movie ? "release_dates,images,videos,watch/providers,keywords" : "external_ids,images,videos,watch/providers",
+    // Classifications (séries : content_ratings ; films : dans release_dates) : l'âge du mode famille (ageDuTitre).
+    append_to_response: movie ? "release_dates,images,videos,watch/providers,keywords" : "external_ids,images,videos,watch/providers,content_ratings",
   });
   // Sans réponse (limite d'appels de Cloudflare ou de TMDB…) : le titre s'affiche quand même, sans ces infos, et la
   // page est marquée incomplète (rate). Un titre retiré de TMDB (404) n'y changera rien : pas compté.
@@ -398,11 +400,15 @@ async function lireInfo(env, kind, tmdbId, budget) {
     const decoupage = cine && decoupageCinemeta(j.seasons, cine);
     if (decoupage) j = ficheRecomptee(j, decoupage);
   }
+  const classifs = movie
+    ? ((j.release_dates && j.release_dates.results) || []).flatMap((r) => (r.release_dates || []).map((x) => [r.iso_3166_1, x.certification]))
+    : ((j.content_ratings && j.content_ratings.results) || []).map((r) => [r.iso_3166_1, r.rating]);
   return {
     lu: true,
     provisoire,
     imdb: (movie ? j.imdb_id : j.external_ids && j.external_ids.imdb_id) || null,
     releases,
+    age: ageDuTitre(classifs),
     plateformeFr: movie && vfSurPlateforme(j["watch/providers"], j.original_language, j.keywords),
     plateformeVo: movie && plateformeFrance(j["watch/providers"]),
     abonnementVf: movie && abonnementVf(j["watch/providers"], j.original_language, j.keywords),
@@ -1265,7 +1271,8 @@ const GENRE_NAMES = {
 
 /**
  * Une fiche par résultat, sans en retirer aucun : la pagination reste exacte
- * (20 résultats TMDB = 20 fiches, donc « skip » tombe toujours sur la bonne page).
+ * (20 résultats TMDB = 20 fiches, donc « skip » tombe toujours sur la bonne page). Seule exception : en mode famille,
+ * les titres classés au-dessus de l'âge choisi (tropDur) ; pageOf arrondit au-dessus, une page plus courte suit bien.
  * Sans identifiant IMDb, on se rabat sur « tmdb:<id> », que la fiche (/meta) sait ouvrir.
  */
 async function toMetas(env, ctx, results, kind, opts, today) {
@@ -1342,8 +1349,32 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       _vo: vo,
     };
     return meta;
-  });
+  }).filter((_, i) => !tropDur(infos[i].age, opts.cfg));
 }
+
+/**
+ * Âge à partir duquel un titre se regarde, d'après ses classifications [[pays, classification], …] : la française
+ * d'abord, sinon l'américaine, l'anglaise ou l'allemande (bien plus souvent remplies chez TMDB pour un film récent ou une
+ * série). La plus sévère d'un même pays (sortie en salle -12, à la télé -10 : 12). null : classé nulle part.
+ */
+const AGES_CLASSIF = {
+  FR: { U: 0, TP: 0, 10: 10, 12: 12, 16: 16, 18: 18 },
+  US: { G: 0, PG: 10, "PG-13": 13, R: 17, "NC-17": 18, "TV-Y": 0, "TV-G": 0, "TV-Y7": 6, "TV-PG": 10, "TV-14": 14, "TV-MA": 17 },
+  GB: { U: 0, PG: 10, "12A": 12, 12: 12, 15: 15, 18: 18, R18: 18 },
+  DE: { 0: 0, 6: 6, 12: 12, 16: 16, 18: 18 },
+};
+export function ageDuTitre(classifs) {
+  for (const pays of ["FR", "US", "GB", "DE"]) {
+    const ages = classifs.filter(([p]) => p === pays).map(([, c]) => AGES_CLASSIF[pays][String(c || "").trim()]).filter((a) => a !== undefined);
+    if (ages.length) return Math.max(...ages);
+  }
+  return null;
+}
+/**
+ * Mode famille : titre classé au-dessus de l'âge choisi (cfg.f, voir AGES_FAMILLE) ? Un titre classé nulle part reste
+ * (souvent un film pas encore sorti, ou une série pour enfants que personne n'a classée) : les genres l'ont déjà trié.
+ */
+const tropDur = (age, cfg) => Boolean(cfg && cfg.f && age != null && age > cfg.f);
 
 /** Une fiche sans les champs internes de toMetas (« _digital »…), telle qu'envoyée à Nuvio. */
 const sansInternes = ({ _digital, _guess, _vf, _vfLu, _vfq, _vffLe, _dejaVf, _vo, ...m }) => m;
@@ -1360,9 +1391,11 @@ function discoverParams(def, kind, today, opts) {
   if (kind === "series") NOISE_TV.filter((g) => !wanted.includes(g)).forEach((g) => excluded.add(g));
   const col = kind === "series" ? 2 : 1;
   for (const name of cfg.e) { const g = GENRES.find(([n]) => n === name); if (g && g[col]) excluded.add(String(g[col])); }
+  // Mode famille : les genres ici (pas d'horreur ; séries pour la famille, les enfants ou en dessin animé), l'âge plus bas
+  // (classifFamille) et sur chaque fiche (tropDur).
   if (cfg.f) {
     if (kind === "series") { p.with_genres = p.with_genres ? p.with_genres : "10751|10762|16"; ["80", "10768", "9648"].forEach((g) => excluded.add(g)); }
-    else { p.certification_country = "FR"; p["certification.lte"] = "10"; excluded.add("27"); }
+    else excluded.add("27");
   }
   if (excluded.size) p.without_genres = [...excluded].join("|");
   if (p.watch_region) p.watch_region = opts.region;
@@ -1389,9 +1422,26 @@ function discoverParams(def, kind, today, opts) {
     const yearKey = kind === "series" ? "first_air_date_year" : "primary_release_year";
     if (p[yearKey] && Number(p[yearKey]) < cfg.a) p[yearKey] = cfg.a;   // année demandée trop ancienne : liste vide
   }
+  if (cfg.f) classifFamille(p, kind, today, cfg);
   return p;
 }
 const maxDate = (a, b) => (!a || b > a ? b : a);
+
+/**
+ * Mode famille, films : seulement ceux classés en France à l'âge choisi ou en dessous (AGES_FAMILLE), demandé à TMDB,
+ * ce qui garde des pages pleines. Mais pas pour une rangée de films récents ou à venir : TMDB n'a la classification
+ * française que d'un film en salle sur dix (Prochainement : 27 sur 2 261) ; la fiche de chacun décide (tropDur). Pas pour
+ * les séries non plus (4 séries famille de l'année sur 147). Avant, les films demandaient « certification.lte=10 »,
+ * classification qui n'existe pas au cinéma : TMDB ne filtrait rien (The Dark Knight passait).
+ */
+function classifFamille(p, kind, today, cfg) {
+  const gte = p["primary_release_date.gte"] || (p.primary_release_year ? `${p.primary_release_year}-01-01` : "");
+  if (kind === "series" || (gte && gte >= addDays(today, -730))) { sansClassif(p); return; }
+  p.certification_country = "FR";
+  p.certification = classifsFamille(cfg.f, "movie");
+}
+/** Sans la classification demandée à TMDB (rangée de films récents ou à venir, voir classifFamille). */
+const sansClassif = (p) => { delete p.certification; delete p.certification_country; return p; };
 
 /**
  * Un titre d'une liste TMDB (Tendances du jour) passe-t-il les filtres généraux (genres masqués, note minimale, année
@@ -1776,7 +1826,7 @@ async function fetchUpcomingPage(env, ctx, kind, page, today, opts) {
   if (page > 1) return [];
   let found;
   if (opts.filtered) {
-    const params = discoverParams({ discover: { sort_by: "popularity.desc", "vote_count.gte": 0 } }, kind, today, opts);
+    const params = sansClassif(discoverParams({ discover: { sort_by: "popularity.desc", "vote_count.gte": 0 } }, kind, today, opts));
     params["primary_release_date.gte"] = maxDate(params["primary_release_date.gte"], addDays(today, 1));
     found = (await tmdb(env, "/discover/movie", params, opts.lang)).results || [];
   } else {
@@ -1825,7 +1875,8 @@ async function rangeeVf(env, ctx, def, kind, today, opts) {
 async function candidatsVf(env, def, kind, today, opts) {
   const future = def.digital[0] > 0;
   // Filtres de la config (genres masqués, note mini, famille…) appliqués comme ailleurs.
-  const base = discoverParams(def, kind, today, opts);
+  // Films de l'année : l'âge du mode famille sur chaque fiche (voir classifFamille).
+  const base = sansClassif(discoverParams(def, kind, today, opts));
   base["primary_release_date.gte"] = maxDate(base["primary_release_date.gte"], addDays(today, -365));
   const [court, long] = bornesVod(await estimationsVod());
   const numeriques = [], autres = [];
@@ -3142,7 +3193,7 @@ const app = {
 
     if (path === "/lien-fixe" || path.startsWith("/lien-fixe/")) {
       return fixedRoute(request, env, path, (seg) => !!decodeConfig(seg, rows, DEFS.discover),
-        (seg) => { const c = decodeConfig(seg, rows, DEFS.discover); return c && { k: c.k, al: c.al }; });
+        (seg) => { const c = decodeConfig(seg, rows, DEFS.discover); return c && { k: c.k, al: c.al, pf: c.pf, n: c.n }; });
     }
 
     // La racine ouvre la salle 1 (le guide) ; la programmation (salle 2) est sur /configure,
@@ -3156,11 +3207,12 @@ const app = {
         folders: displayOrder(c, ((files.find((f) => f.id === c.id) || {}).folders || []).map((f, i) => ({ id: f.id, title: f.title, cover: f.coverImageUrl || "", i }))),
       }));
       const page = html(configurePage({
-        // Lien fixe : ni la clé Gemini ni le jeton d'alerte dans la page, que voit quiconque a le lien. La page
+        // Lien fixe : ni la clé Gemini, ni le jeton d'alerte, ni les profils (leurs clés de modification) dans la page, que voit quiconque a le lien. La page
         // qui a la clé de modification les redemande (POST /lien-fixe/<id>/lire, voir fixe.js).
-        origin: url.origin, cfg: fixedId ? { ...cfg, k: "", al: "" } : cfg, rows, discover: DEFS.discover, providers: PROVIDERS, collections: cols,
+        origin: url.origin, cfg: fixedId ? { ...cfg, k: "", al: "", pf: [] } : cfg, rows, discover: DEFS.discover, providers: PROVIDERS, collections: cols,
         defaults: defaults(rows, DEFS.discover), regions: REGIONS, genres: GENRES, languages: LANGUAGES,
-        sorts: SORTS, seasons: SEASON_KEYS, maxCustom: MAX_CUSTOM, season: decorSaison(url, today), copy: isCopy(url),
+        sorts: SORTS, seasons: SEASON_KEYS, ages: AGES_FAMILLE.map(([age, nom]) => [age, nom]),
+        maxCustom: MAX_CUSTOM, season: decorSaison(url, today), copy: isCopy(url),
         fixed: fixedId, fixedOk: fixedAvailable(env), apercus: apercusDe(env, url.origin),
       }));
       // Lien fixe : ses réglages changent sans que l'adresse change, la page n'est jamais resservie d'un cache.

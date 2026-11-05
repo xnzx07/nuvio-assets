@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import { fusionCollections, fusionAddons, avecAffiches, avecAffichesAppli, compteNuvioPage } from "../worker/compte-nuvio.js";
+import { fusionCollections, fusionAddons, avecAffiches, avecAffichesAppli, compteNuvioPage, associerProfils } from "../worker/compte-nuvio.js";
 
 test("fusion_garde_les_collections_perso", () => {
   // Nuvio remplace toute sa liste par celle du compte : celles de la personne restent, les nôtres sont remplacées.
@@ -114,4 +114,16 @@ test("envoi_des_affiches_aux_trois_appareils", () => {
   assert.match(html, /p_platform: "tv"/);
   assert.ok(html.includes('["desktop", "le PC"]') && html.includes('["mobile", "le téléphone"]'));
   assert.match(html, /const avecAffichesAppli = function avecAffichesAppli/);
+});
+
+// Mes profils → profils Nuvio : même nom d'abord (accents et majuscules oubliés), le principal au profil 1 sinon.
+test("profils_associes_par_leur_nom", () => {
+  const nos = [{ i: "fMoi", n: "Catalogue FR" }, { i: "fLeo", n: "Léo" }, { i: "fEmma", n: "Emma" }];
+  const nuvio = [{ profile_index: 1, name: "Enzo" }, { profile_index: 2, name: "leo " }, { profile_index: 3, name: "Invité" }];
+  assert.deepEqual(associerProfils(nuvio, nos), ["fMoi", "fLeo", ""]);
+  // Le principal porte le nom d'un autre profil Nuvio : il y va, et le profil 1 ne reçoit rien d'office.
+  assert.deepEqual(associerProfils([{ profile_index: 1, name: "Papa" }, { profile_index: 2, name: "Catalogue FR" }], nos), ["", "fMoi"]);
+  // Deux profils Nuvio du même nom : un seul reçoit le lien.
+  assert.deepEqual(associerProfils([{ profile_index: 2, name: "Emma" }, { profile_index: 3, name: "Emma" }], nos), ["fEmma", ""]);
+  assert.deepEqual(associerProfils([], nos), []);
 });

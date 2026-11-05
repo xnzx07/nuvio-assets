@@ -41,6 +41,7 @@ import { esc } from "./outils-serveur.js";
 import { GUICHET_DEPART, guichetHTML } from "./guichet.js";
 import { SOIREE_HTML } from "./soiree.js";
 import { GALERIE_BOUTON, GALERIE_HTML } from "./galerie.js";
+import { PROFILS_HTML } from "./profils.js";
 
 // Retour sur /configure (adresse tapée, favori, « Salle 2 » du hall) : la dernière programmation de cet appareil
 // se rouvre d'elle-même (gardée par update(), sans la clé Gemini, qui est rangée à part). Pas dans le guide, qui
@@ -130,8 +131,8 @@ hoteRefresh();
 `;
 
 
-export function configurePage({ origin, cfg, rows, discover, providers, collections, defaults, regions, genres, languages, sorts, seasons, maxCustom, season, copy = false, fixed = "", fixedOk = false, apercus = origin }) {
-  const plain = (c) => ({ n: c.n, r: c.r, p: c.p, d: c.d, c: c.c, o: c.o, x: c.x, g: c.g, e: c.e, m: c.m, a: c.a, f: c.f, h: c.h, t: c.t, to: c.to || {}, ac: c.ac || [], u: c.u, ca: c.ca, k: c.k, al: c.al });
+export function configurePage({ origin, cfg, rows, discover, providers, collections, defaults, regions, genres, languages, sorts, seasons, ages = [], maxCustom, season, copy = false, fixed = "", fixedOk = false, apercus = origin }) {
+  const plain = (c) => ({ n: c.n, r: c.r, p: c.p, d: c.d, c: c.c, o: c.o, x: c.x, g: c.g, e: c.e, m: c.m, a: c.a, f: c.f, h: c.h, t: c.t, to: c.to || {}, ac: c.ac || [], u: c.u, ca: c.ca, k: c.k, al: c.al, pf: c.pf || [] });
   const data = {
     origin, maxCustom, fixed, fixedOk,
     cfg: plain(cfg),
@@ -146,7 +147,7 @@ export function configurePage({ origin, cfg, rows, discover, providers, collecti
     })),
     discover: discover.map((d) => ({ id: d.id, name: d.name, type: d.type })),
     providers: providers.map((p) => ({ id: p.id, name: p.name, tile: Boolean(p.folder), color: PROVIDER_COLORS[p.id] || "#888" })),
-    collections, regions, genres, languages, sorts, seasons,
+    collections, regions, genres, languages, sorts, seasons, ages,
   };
   const json = JSON.stringify(data).replace(/</g, "\\u003c");
   const LOGO = origin + "/logo.png";
@@ -164,7 +165,7 @@ ${STAGE_HEAD}
 <meta property="og:title" content="Compose ta programmation Nuvio">
 <meta property="og:image" content="${LOGO}">
 <link rel="icon" href="${LOGO}">
-${feuilles("polices.css", "salle2.css", "scene.css", "nuvio.css", "salle2-fin.css", "salle2-guichet.css", "salle2-soiree.css", "salle2-galerie.css")}
+${feuilles("polices.css", "salle2.css", "scene.css", "nuvio.css", "salle2-fin.css", "salle2-guichet.css", "salle2-soiree.css", "salle2-galerie.css", "salle2-profils.css")}
 </head>
 <body>
   <div class="valance" aria-hidden="true"></div>
@@ -185,6 +186,7 @@ ${feuilles("polices.css", "salle2.css", "scene.css", "nuvio.css", "salle2-fin.cs
         <a href="#s-plateformes">Plateformes</a><a href="#s-filtres">Filtres</a><a href="#s-ia">IA</a><a href="#s-decouvrir">Découvrir</a><a href="#s-collections">Collections</a><a href="#s-affiches">Affiches</a>${copy ? '<a href="#s-hote">Hébergeur</a>' : ""}<a href="#s-mode">Installer</a>
       </nav>
 ${GUICHET_DEPART}
+${PROFILS_HTML}
 
       <section class="act" id="s-nom">
         <header><span>Affiche</span><h2>Le nom de ton addon</h2></header>
@@ -244,7 +246,11 @@ ${SOIREE_HTML}
           <div class="field"><span>Note minimale partout</span><div class="range"><input type="range" id="g-vote" min="0" max="8" step="0.5" aria-label="Note minimale partout"><output id="g-vote-out"></output></div></div>
           <label class="field"><span>Rien de sorti avant</span><select id="g-year"></select></label>
         </div>
-        <label class="switch"><input type="checkbox" id="g-family"><span><b>Mode famille</b><small>Films tous publics ou -10 ans seulement, pas d'horreur, séries pour la famille et les enfants.</small></span></label>
+        <div class="field famille">
+          <span id="g-family-titre">Mode famille : l'âge du plus jeune</span>
+          <div class="seg" id="g-family" role="group" aria-labelledby="g-family-titre"></div>
+          <small class="famille-dit" id="g-family-dit"></small>
+        </div>
         <label class="switch"><input type="checkbox" id="g-unreleased"><span><b>Tendances et Découvrir : seulement ce qu'on peut déjà regarder</b><small>TMDB y met aussi les films encore au cinéma ou pas encore sortis. Ils passent dans « Bientôt dispo » et « Les plus attendus ». Dans Découvrir (Populaires, Nouveautés, films de cette année et de l'an dernier) : seulement les films déjà dispo dans ton pays, en abonnement, location ou achat.</small></span></label>
       </section>
 
@@ -452,7 +458,7 @@ ${scripts("nuvio.js")}
 <script>
 const D = ${json};
 </script>
-${scripts("outils.js", "salle2.js", "salle2-guichet.js", "salle2-soiree.js", "salle2-galerie.js")}
+${scripts("outils.js", "salle2.js", "salle2-guichet.js", "salle2-soiree.js", "salle2-galerie.js", "salle2-profils.js")}
 ${copy ? scripts("salle2-hote.js") : ""}
 ${scripts("scene.js")}
 </body>
@@ -754,6 +760,7 @@ aside.long .stage:not(.big) { position: sticky; top: var(--stage-top, 18px); }
 .seg button { font: 700 .88rem var(--body); padding: 9px 14px; border: 0; background: var(--velvet); color: var(--dim); cursor: pointer; border-right: 1px solid var(--seat); }
 .seg button:last-child { border-right: 0; }
 .seg button[aria-pressed="true"] { background: var(--cream); color: var(--ink); }
+.famille-dit { font-size: .85rem; line-height: 1.45; color: var(--dim); }
 /* Listes déroulantes : flèche dorée ; le menu ouvert prend les couleurs de la salle
    dans les navigateurs qui savent le personnaliser (sinon, menu du système). */
 select { cursor: pointer; appearance: none; padding-right: 38px; transition: border-color .2s ease;
@@ -1218,11 +1225,14 @@ function compact(st) {
   if (st.e.length) o.e = idx(st.e, D.genres.map(g => g[0]));
   if (st.m) o.m = st.m;
   if (st.a) o.a = st.a;
-  if (st.f) o.f = 1;
+  // Mode famille : 1 pour « 10 ans et + » (le mode famille d'avant, mêmes liens), sinon l'âge.
+  if (st.f) o.f = st.f === true || st.f === 10 ? 1 : st.f;
   if (st.u) o.u = 1;
   if (st.ca) o.ca = 1;
   if (st.k) o.k = st.k;
   if (st.al) o.al = st.al;
+  // Profils (lien principal) : jamais dans une adresse montrée ou partagée (vu, sansCle, shared les retirent).
+  if (st.pf && st.pf.length) o.pf = st.pf;
   if (!same(st.h, df.h)) o.h = mask(st.h, D.seasons.map(s => s[0]));
   const t = {};
   const to = {};
@@ -2250,16 +2260,16 @@ function update() {
   // navigateur ressortirait ses anciennes rangées de son cache). Sans le nom, la clé Gemini ni le jeton
   // d'alerte : ils ne changent pas les rangées (le nom de l'addon n'est pas à l'écran, la recherche de
   // l'aperçu passe par l'adresse de base), et l'écran ne recharge pas tout à chaque lettre tapée.
-  const vu = compact({ ...state, n: D.defaults.n, k: "", al: "" });
+  const vu = compact({ ...state, n: D.defaults.n, k: "", al: "", pf: [] });
   currentBase = D.origin + (Object.keys(vu).length ? "/" + enc(vu) : "");
   // L'adresse de la page suit les réglages : on peut revenir, recharger ou partager sans rien perdre.
   configureUrl = base + "/configure";
   // La clé Gemini reste hors de la barre d'adresse (historique, capture d'écran, lien recopié) : rechargée,
   // la page la reprend sur cet appareil (cleGarde). Dans le guide (cadre, adresse invisible), la page garde
   // la clé : le guide relit cette adresse pour le lien d'addon à installer.
-  const sansCle = compact({ ...state, k: "" });
+  const sansCle = compact({ ...state, k: "", pf: [] });
   pageUrl = garde ? configureUrl : D.origin + (Object.keys(sansCle).length ? "/" + enc(sansCle) : "") + "/configure";
-  const shared = compact({ ...state, k: "", al: "" });
+  const shared = compact({ ...state, k: "", al: "", pf: [] });
   shareUrl = D.origin + (Object.keys(shared).length ? "/" + enc(shared) : "") + "/configure";
   const affichee = document.documentElement.classList.contains("dans-guide") ? configureUrl : pageUrl;
   try { if (location.protocol.startsWith("http") && location.href !== affichee) history.replaceState(null, "", affichee); } catch (e) {}
@@ -2493,7 +2503,7 @@ function renderAll() {
   // Téléréalité : déjà masquée partout, sauf dans les rangées sur mesure qui la choisissent.
   D.genres.filter(([name]) => name !== "Téléréalité").forEach(([name]) => chip($("excl"), "excl-" + name, name, state.e.includes(name), on => toggle("e", name, on, D.genres.map(g => g[0]))));
   $("g-vote").value = state.m; $("g-vote-out").textContent = fmtVote(state.m); paintRange($("g-vote"));
-  $("g-year").value = String(state.a); $("g-family").checked = state.f;
+  $("g-year").value = String(state.a); renderFamille();
   $("g-unreleased").checked = !state.u;
   $("g-coll-accueil").checked = state.ca;
   renderCollections();
@@ -2505,7 +2515,16 @@ D.languages.forEach(([code, label]) => $("b-lang").append(el("option", { value: 
 [0, 1960, 1970, 1980, 1990, 2000, 2010, 2015, 2020].forEach(y => $("g-year").append(el("option", { value: String(y), text: y ? String(y) : "Aucune limite" })));
 $("g-vote").addEventListener("input", () => { state.m = Number($("g-vote").value); $("g-vote-out").textContent = fmtVote(state.m); update(); });
 $("g-year").addEventListener("change", () => { state.a = Number($("g-year").value); update(); });
-$("g-family").addEventListener("change", () => { state.f = $("g-family").checked; update(); });
+// Mode famille : « Non », puis l'âge du plus jeune (D.ages). true (brouillon d'avant) = 10 ans et +.
+function renderFamille() {
+  if (state.f === true) state.f = 10;
+  const choix = [[false, "Non"], ...D.ages];
+  seg($("g-family"), choix.map(c => c[1]), Math.max(0, choix.findIndex(c => c[0] === state.f)), (i) => { state.f = choix[i][0]; renderFamille(); update(); });
+  const f = state.f;
+  $("g-family-dit").textContent = !f ? "Tout le catalogue."
+    : (f === 6 ? "Tous publics seulement" : "Tous publics et jusqu'aux « -" + f + " ans »")
+      + ", pas d'horreur, séries pour la famille, les enfants ou en dessin animé. Un titre qui n'est classé nulle part (souvent pas encore sorti) reste.";
+}
 $("g-unreleased").addEventListener("change", () => { state.u = !$("g-unreleased").checked; update(); });
 $("g-coll-accueil").addEventListener("change", () => { state.ca = $("g-coll-accueil").checked; update(); });
 
@@ -2592,7 +2611,7 @@ function proposeAnnuler(texte, avant, ordreAvant, retour) {
 }
 $("reset").addEventListener("click", () => {
   const avant = clone(state), ordreAvant = [...order];
-  Object.assign(state, clone(D.defaults), { k: state.k, al: state.al });
+  Object.assign(state, clone(D.defaults), { k: state.k, al: state.al, pf: state.pf });
   $("builder").hidden = true; renderAll();
   proposeAnnuler("Programmation d'origine remise.", avant, ordreAvant);
 });
@@ -2754,14 +2773,17 @@ function lireSecrets() {
       if (!r.ok) throw new Error(j.error || "");
       recuNote(j);
       // Ce que le site a enregistré : les réglages du début de la page, avec la clé et le jeton.
-      const depart = compact({ ...(etatDepart || state), k: j.k || "", al: j.al || "" });
+      const depart = compact({ ...(etatDepart || state), k: j.k || "", al: j.al || "", pf: j.pf || [] });
       segDepart = dernierEnvoye = Object.keys(depart).length ? enc(depart) : "";
       // Tapés pendant la lecture : on garde ceux de l'utilisateur.
       if (!state.k) state.k = j.k || "";
       if (!state.al) state.al = j.al || "";
+      if (!(state.pf && state.pf.length)) state.pf = j.pf || [];
       if (state.k) cleGarde(state.k);
       $("ai-key").value = state.k; aiKeyHint();
       if (typeof hoteRender === "function" && hote) hoteRender();
+      // La barre des profils (salle2-profils.js) : les profils de ce lien, ou ceux du lien principal.
+      if (typeof profilsLus === "function") profilsLus(j);
       secretsLus = true; etatFixe = ""; fixeErreur("");
       state.n = $("name").value.trim() || D.defaults.n;
       const c = compact(state);
@@ -2789,6 +2811,8 @@ $("fixe-creer").addEventListener("click", async (e) => {
     fixe = { id: j.id, modif: j.modif }; segDepart = dernierEnvoye = seg; etatFixe = "ok";
     recu = { vu: 0, t: Date.now(), decalage: 0 };   // tout neuf : Nuvio ne l'a pas encore lu
     update(); effet("popcorn", btn); bruit("punch"); recuPlanifie();
+    // La barre des profils : ce lien tout neuf peut maintenant en avoir.
+    if (typeof profilsLus === "function") profilsLus({});
     effet("toast", "Ton lien fixe est prêt : installe-le une fois, ensuite « Actualiser les addons » dans Nuvio suffit.");
   } catch (err) {
     fixeErreur(err && err.message && !/fetch|network/i.test(err.message) ? err.message : "Création impossible : vérifie ta connexion.");

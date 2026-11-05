@@ -75,6 +75,21 @@ export const GENRES = [
   ["Téléréalité", null, 10764],
 ];
 
+/**
+ * Mode famille : l'âge du plus jeune devant l'écran (f), son nom sur la page, et les classifications françaises
+ * admises, telles que TMDB les écrit. Un titre passe s'il est classé à cet âge ou en dessous (« -10 » : à partir de
+ * 10 ans). Au cinéma, la France n'a que TP, -12, -16 et -18 ; à la télé, TP, -10, -12, -16 et -18. Une liste exacte
+ * plutôt que « certification.lte » : celle-ci laisse passer les « NR » (non classés). 1 dans les liens d'avant = 10.
+ */
+export const AGES_FAMILLE = [
+  [6, "Moins de 10 ans", { movie: "TP", series: "TP" }],
+  [10, "10 ans et +", { movie: "TP", series: "TP|10" }],
+  [12, "12 ans et +", { movie: "TP|12", series: "TP|10|12" }],
+  [16, "16 ans et +", { movie: "TP|12|16", series: "TP|10|12|16" }],
+];
+/** Les classifications admises pour ce mode famille et ce type ("movie" ou "series") ; "" sans mode famille. */
+export const classifsFamille = (f, kind) => ((AGES_FAMILLE.find(([age]) => age === f) || [])[2] || {})[kind] || "";
+
 /** Langues d'origine proposées pour les rangées sur mesure. */
 export const LANGUAGES = [
   ["", "Toutes"], ["fr", "Français"], ["en", "Anglais"], ["ko", "Coréen"], ["ja", "Japonais"],
@@ -114,7 +129,7 @@ export function defaults(rows, discover) {
     e: [],            // genres masqués partout (noms)
     m: 0,             // note minimale partout
     a: 0,             // année minimale partout (0 = aucune limite)
-    f: false,         // mode famille
+    f: false,         // mode famille : false, ou l'âge choisi (6 tous publics, 10, 12, 16 ; voir AGES_FAMILLE)
     h: SEASON_KEYS.map(([k]) => k),   // fêtes suivies
     t: {},            // tuiles masquées par collection : { idCollection: [positions] }
     to: {},           // ordre des tuiles par collection : { idCollection: [positions dans l'ordre voulu] }
@@ -123,8 +138,18 @@ export function defaults(rows, discover) {
     ac: [],           // place des collections sur l'accueil : [{ id, n: rangées avant elle }] (les autres après les rangées)
     k: "",            // clé Gemini personnelle (IA avec le quota de l'utilisateur)
     al: "",           // jeton d'alerte : lien de l'hébergeur d'une copie (rangée « Mise à jour »)
+    pf: [],           // profils (lien fixe principal seulement) : [{ i: lien fixe, m: sa clé de modification }]
   };
 }
+
+/** Profils d'un lien principal, au plus (le principal en plus). */
+export const MAX_PROFILS = 8;
+const FIXE_ID = /^f[0-9A-Za-z]{16}$/, FIXE_MODIF = /^[0-9A-Za-z]{22}$/;
+/** Les profils lus d'un lien : chacun une fois, lien fixe et clé bien formés, MAX_PROFILS au plus. */
+const profilsOf = (v) => (Array.isArray(v) ? v : [])
+  .filter((p) => p && typeof p === "object" && FIXE_ID.test(p.i) && FIXE_MODIF.test(p.m))
+  .filter((p, n, tous) => tous.findIndex((q) => q.i === p.i) === n)
+  .slice(0, MAX_PROFILS).map((p) => ({ i: p.i, m: p.m }));
 
 function b64urlDecode(s) {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
@@ -186,7 +211,8 @@ function oldTiles(t, to) {
  *   n nom · r rangées (positions ou « p0 », « p1 »… pour les rangées sur mesure)
  *   p plateformes · d Découvrir (masque) · c collections (masque) · o noms personnalisés
  *   x rangées sur mesure · g pays · e genres masqués · m note mini · a année mini
- *   f mode famille · h fêtes (masque) · t tuiles masquées par collection
+ *   f mode famille : 1 (ou true, les liens d'avant) = moins de 10 ans, sinon l'âge (6 tous publics, 12, 16)
+ *   h fêtes (masque) · t tuiles masquées par collection
  *   to ordre des tuiles par collection (positions dans le fichier ; les autres suivent dans l'ordre habituel)
  *   tv 1 = positions des tuiles d'après le passage de Marvel, Warner et DC aux Studios (voir oldTiles)
  *   tv 2 = de plus, Sagas rangées en 8 thèmes (les positions de sagas d'avant sont oubliées)
@@ -195,6 +221,8 @@ function oldTiles(t, to) {
  *      les autres viennent après toutes les rangées (Plateformes, épinglée, reste en tête)
  *   k clé Gemini personnelle (l'IA tourne avec le quota de l'utilisateur ; hors clé de cache)
  *   al jeton d'alerte de l'hébergeur d'une copie (voir hote.js ; hors clé de cache)
+ *   pf profils du lien principal : [{ i: lien fixe, m: clé de modification }] (les autres membres de la famille, un
+ *      lien chacun) ; secret comme k et al : jamais dans la page d'un lien fixe, relu avec sa clé (voir fixe.js)
  * Toute valeur abîmée est ignorée : une adresse ne peut jamais casser l'addon.
  */
 export function decodeConfig(segment, rows, discover) {
@@ -257,12 +285,13 @@ export function decodeConfig(segment, rows, discover) {
     e: fromList(raw.e, genreNames) ?? base.e,
     m: Math.min(9, Math.max(0, Number(raw.m) || 0)),
     a: int(raw.a, 0, 2100) || 0,
-    f: raw.f === 1 || raw.f === true,
+    f: raw.f === 1 || raw.f === true ? 10 : AGES_FAMILLE.some(([age]) => age === raw.f) ? raw.f : false,
     h: fromMask(raw.h, SEASON_KEYS.map(([k]) => k)) ?? base.h,
     u: raw.u === 1 || raw.u === true,
     ca: raw.ca === 1 || raw.ca === true,
     k: geminiKeyOf(raw.k),
     al: typeof raw.al === "string" && /^[a-f0-9]{24}$/.test(raw.al) ? raw.al : "",
+    pf: profilsOf(raw.pf),
     custom: true,
   };
 }

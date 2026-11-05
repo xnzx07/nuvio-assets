@@ -468,6 +468,60 @@ test("rangee_sur_mesure_tele_realite", async () => {
   assert.ok(discover().every((u) => u.searchParams.get("without_genres").split("|").includes("10764")));
 });
 
+// Mode famille par âge (2026-11-05). Avant, les films demandaient « certification.lte=10 », classification qui n'existe pas
+// au cinéma en France : TMDB ne filtrait rien (The Dark Knight passait).
+test("mode_famille_age_demande_a_tmdb", async () => {
+  const classif = async (cfg, path = "/catalog/movie/perso-0.json") => {
+    calls.length = 0;
+    await get(`/${seg({ x: [{ n: "Films", t: 0 }, { n: "Séries", t: 1 }], ...cfg })}${path}`);
+    const u = calls.map((x) => new URL(x)).find((x) => /\/discover\/(movie|tv)$/.test(x.pathname));
+    return u && [u.searchParams.get("certification_country"), u.searchParams.get("certification")];
+  };
+  assert.deepEqual(await classif({ f: 1 }), ["FR", "TP"]);         // les liens d'avant : 10 ans et +
+  assert.deepEqual(await classif({ f: 6 }), ["FR", "TP"]);
+  assert.deepEqual(await classif({ f: 12 }), ["FR", "TP|12"]);
+  assert.deepEqual(await classif({ f: 16 }), ["FR", "TP|12|16"]);
+  assert.deepEqual(await classif({}), [null, null]);
+  assert.deepEqual(await classif({ f: 99 }), [null, null]);         // âge inconnu : pas de mode famille
+  // Séries, films de l'année : TMDB n'a presque jamais leur classification française, chaque fiche décide.
+  assert.deepEqual(await classif({ f: 12 }, "/catalog/series/perso-1.json"), [null, null]);
+  assert.deepEqual(await classif({ f: 12, x: [{ n: "Récents", t: 0, y: [new Date().getFullYear(), 0] }] }), [null, null]);
+});
+
+test("mode_famille_age_sur_chaque_fiche", async () => {
+  const { decodeConfig } = await import("../worker/config.js");
+  assert.equal(decodeConfig(seg({ f: true }), [], []).f, 10);
+  assert.equal(decodeConfig(seg({ f: 16 }), [], []).f, 16);
+  assert.equal(decodeConfig(seg({ f: 0 }), [], []).f, false);
+  // 1 : -12 en France ; 2 : R aux États-Unis, rien en France ; 3 : classé nulle part ; 4 : -12 en salle, -10 à la télé.
+  const dates = {
+    1: [{ iso_3166_1: "FR", release_dates: [{ type: 3, certification: "12" }] }],
+    2: [{ iso_3166_1: "US", release_dates: [{ type: 3, certification: "R" }] }, { iso_3166_1: "FR", release_dates: [{ type: 3, certification: "" }] }],
+    3: [],
+    4: [{ iso_3166_1: "FR", release_dates: [{ type: 3, certification: "12" }, { type: 6, certification: "10" }] }],
+  };
+  const notes = { 5: [{ iso_3166_1: "FR", rating: "TP" }], 6: [{ iso_3166_1: "US", rating: "TV-MA" }], 7: [{ iso_3166_1: "FR", rating: "10" }, { iso_3166_1: "US", rating: "TV-14" }] };
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.includes("/discover/movie")) return Response.json({ results: [1, 2, 3, 4].map((id) => ({ id, title: `Film ${id}`, original_language: "fr", release_date: "2010-01-01" })), page: 1, total_pages: 1 });
+    if (u.includes("/discover/tv")) return Response.json({ results: [5, 6, 7].map((id) => ({ id, name: `Série ${id}`, original_language: "fr", first_air_date: "2010-01-01", genre_ids: [16] })), page: 1, total_pages: 1 });
+    const m = /\/movie\/(\d)\?/.exec(u);
+    if (m) return Response.json({ id: Number(m[1]), imdb_id: `tt80${m[1]}`, release_dates: { results: dates[m[1]] } });
+    const s = /\/tv\/(\d)\?/.exec(u);
+    if (s) return Response.json({ id: Number(s[1]), external_ids: {}, content_ratings: { results: notes[s[1]] } });
+    return Response.json({ results: [] });
+  };
+  const noms = async (f, type, n) => (await (await get(`/${seg({ f, x: [{ n: "Films", t: 0 }, { n: "Séries", t: 1 }] })}/catalog/${type}/perso-${n}.json`)).json()).metas.map((m) => m.name);
+  assert.deepEqual(await noms(12, "movie", 0), ["Film 1", "Film 3", "Film 4"]);
+  assert.deepEqual(await noms(10, "movie", 0), ["Film 3"]);
+  assert.deepEqual(await noms(16, "movie", 0), ["Film 1", "Film 3", "Film 4"]);   // R = 17 ans
+  assert.deepEqual(await noms(false, "movie", 0), ["Film 1", "Film 2", "Film 3", "Film 4"]);
+  assert.deepEqual(await noms(6, "series", 1), ["Série 5"]);
+  assert.deepEqual(await noms(10, "series", 1), ["Série 5", "Série 7"]);   // la France d'abord : -10 (pas TV-14)
+  assert.ok(calls.some((u) => /\/tv\/\d\?.*content_ratings/.test(u)));
+});
+
 test("tendances_du_jour_dans_l_ordre_tmdb_meme_avec_les_films_a_venir", async () => {
   const serie = (id) => ({ id, name: `Série ${id}`, first_air_date: "2099-01-01" });
   globalThis.fetch = async (url) => {

@@ -20,7 +20,7 @@ const page = (copy = false) => enLigne(configurePage({ copy,
 // Le QR « Continuer sur le téléphone », lui, sert à ses propres appareils : il emporte la clé (avec un avertissement).
 test("partage_sans_cle", () => {
   const html = page();
-  assert.match(html, /const shared = compact\(\{ \.\.\.state, k: "", al: "" \}\);\s*shareUrl = D\.origin \+ .*enc\(shared\)/);
+  assert.match(html, /const shared = compact\(\{ \.\.\.state, k: "", al: "", pf: \[\] \}\);\s*shareUrl = D\.origin \+ .*enc\(shared\)/);
   // Offrir : partage et copie avec l'adresse sans clé.
   assert.match(html, /url: shareUrl \}/);
   assert.match(html, /writeText\(shareUrl\)/);
@@ -39,7 +39,7 @@ test("partage_sans_cle", () => {
 // La clé Gemini n'est plus dans la barre d'adresse : rangée sur l'appareil, reprise au rechargement.
 test("cle_hors_de_la_barre_d_adresse", () => {
   const html = page();
-  assert.match(html, /const sansCle = compact\(\{ \.\.\.state, k: "" \}\);/);
+  assert.match(html, /const sansCle = compact\(\{ \.\.\.state, k: "", pf: \[\] \}\);/);
   assert.match(html, /history\.replaceState\(null, "", affichee\)/);
   assert.doesNotMatch(html, /replaceState\(null, "", configureUrl\)/);
   assert.match(html, /if \(!fixe\) \{ if \(state\.k\) cleGarde\(state\.k\); else state\.k = cleLue\(\); \}/);
@@ -78,7 +78,7 @@ test("adresse_de_la_page_relue_par_le_serveur", () => {
   Object.assign(st, {
     n: "Ma salle à moi ✨", r: ["perso-0", "c", "a"], p: [PROVIDERS[0].id, PROVIDERS[2].id], d: ["d2"], c: [COLLECTIONS[1].id],
     o: { a: "Mes films", "perso-0": "Peur" }, x: [{ n: "Frissons", t: 1, g: [2, 5], w: [0], l: LANGUAGES[1][0], y: [2000, 2020], v: 7, s: 2 }],
-    g: REGIONS[1].id, e: [GENRES[3][0]], m: 7, a: 1990, f: true, h: [SEASON_KEYS[0][0]], t: { [COLLECTIONS[0].id]: [1, 3] },
+    g: REGIONS[1].id, e: [GENRES[3][0]], m: 7, a: 1990, f: 12, h: [SEASON_KEYS[0][0]], t: { [COLLECTIONS[0].id]: [1, 3] },
     to: { [COLLECTIONS[0].id]: [3, 0, 1] }, ac: [{ id: COLLECTIONS[3].id, n: 2 }, { id: COLLECTIONS[1].id, n: 0 }], u: true, ca: true, k: KEY, al: "a".repeat(24),
   });
   assert.deepEqual(lire(st), st);
@@ -120,7 +120,7 @@ test("bandeau_du_hall", () => {
 
 // Le billet partagé n'emporte pas non plus le jeton d'alerte de l'hébergeur.
 test("partage_sans_jeton_alerte", () => {
-  assert.match(page(true), /const shared = compact\(\{ \.\.\.state, k: "", al: "" \}\);/);
+  assert.match(page(true), /const shared = compact\(\{ \.\.\.state, k: "", al: "", pf: \[\] \}\);/);
 });
 
 // L'espace hébergeur explique quoi faire sans mot de passe, et quand GitHub ne répond pas.
@@ -153,7 +153,7 @@ test("salle_2_mene_a_la_page_copie_seulement_sur_la_source", () => {
 // « Revenir à la programmation d'origine » garde la clé Gemini et le jeton d'alerte, et se rattrape (« Annuler »).
 test("remise_d_origine_garde_la_cle_et_s_annule", () => {
   const html = page();
-  assert.match(html, /Object\.assign\(state, clone\(D\.defaults\), \{ k: state\.k, al: state\.al \}\);/);
+  assert.match(html, /Object\.assign\(state, clone\(D\.defaults\), \{ k: state\.k, al: state\.al, pf: state\.pf \}\);/);
   assert.match(html, /id="annule-btn">Annuler<\/button>/);
   assert.match(html, /Object\.assign\(state, avant\); renderAll\(\);/);
   assert.match(html, /setTimeout\(annuleFin, 10000\)/);
@@ -334,4 +334,18 @@ test("ordre_des_plateformes_sur_le_site", () => {
   f.togglePlateforme("8", false);
   assert.deepEqual(state.p, ["147", "119"]);
   assert.match(html, /Ordre de l'accueil/);
+});
+
+// Mes profils (profils.js) : le script de la barre se lit, et la page l'appelle quand les secrets du lien sont relus.
+test("profils_script_et_branchement", async () => {
+  const { PROFILS_JS, PROFILS_HTML } = await import("../worker/profils.js");
+  const { SALLE2_JS } = await import("../worker/page.js");
+  assert.doesNotThrow(() => new Function(PROFILS_JS));
+  assert.match(PROFILS_HTML, /id="profil-dialog"/);
+  assert.match(SALLE2_JS, /profilsLus\(j\)/);
+  // Jamais les clés des profils dans une adresse montrée, partagée ou lue par l'aperçu.
+  for (const quoi of ['const vu = compact({ ...state, n: D.defaults.n, k: "", al: "", pf: [] })', 'const sansCle = compact({ ...state, k: "", pf: [] })', 'const shared = compact({ ...state, k: "", al: "", pf: [] })']) {
+    assert.ok(SALLE2_JS.includes(quoi), quoi);
+  }
+
 });

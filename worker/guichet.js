@@ -70,7 +70,7 @@ export function creerProgrammations() {
         "accueil-top10",
         sur("Séries pour les enfants", 1, { genres: ["Enfants"] }),
         "accueil-nouveautes-plateformes", "accueil-vod-semaine",
-      ], f: true, e: ["Horreur"] }),
+      ], f: 10, e: ["Horreur"] }),
     },
     binge: {
       nom: "Binge", accroche: "Des séries, encore des séries, juste un épisode de plus",
@@ -122,7 +122,7 @@ export function creerProgrammations() {
     rangees.push(...fin);
     return programme(D, {
       rangees, p: choisies.length ? choisies.map((x) => x.id) : null,
-      d: quoi === "films" ? "movie" : quoi === "series" ? "series" : null, f: famille, e: famille ? ["Horreur"] : [],
+      d: quoi === "films" ? "movie" : quoi === "series" ? "series" : null, f: famille ? 10 : false, e: famille ? ["Horreur"] : [],
     });
   }
 
@@ -342,7 +342,7 @@ export const GUICHET_JS = "var __name = function (f) { return f; };\nconst PROG 
 
   function applique(nouveau, texte) {
     const avant = clone(state), ordreAvant = [...order];
-    Object.assign(state, nouveau, { n: state.n, g: state.g, k: state.k, al: state.al });
+    Object.assign(state, nouveau, { n: state.n, g: state.g, k: state.k, al: state.al, pf: state.pf });
     $("builder").hidden = true;
     ferme();
     renderAll();

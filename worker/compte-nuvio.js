@@ -14,6 +14,7 @@ import { feuilles, scripts } from "./statique.js";
 import { creerLienAffiches } from "./lien-affiches.js";
 import { DERNIERE } from "./page.js";
 import { FACULTATIVES } from "./config.js";
+import { PRINCIPAL } from "./profils.js";
 
 export const NUVIO_DECOUVERTE = "https://api.nuvio.tv/.well-known/nuvio";
 export const NUVIO_LIEN = "https://nuvio.tv/link";   // page où l'on approuve un appareil (DEVICE_LOGIN_WEB_BASE_URL)
@@ -30,6 +31,24 @@ export function fusionAddons(distants, lien, origine) {
   const liste = tries.filter((a, j) => j === i || !deCeSite(a.url)).map((a) => (deCeSite(a.url) ? { ...a, url: lien, enabled: true } : a));
   if (i < 0) liste.unshift({ url: lien, enabled: true });
   return liste.map((a, n) => ({ url: a.url, sort_order: n, enabled: a.enabled !== false, ...(a.name ? { name: a.name } : {}) }));
+}
+
+/**
+ * Mes profils (profils.js) → profils Nuvio : pour chaque profil Nuvio (dans l'ordre reçu), l'identifiant du lien à lui
+ * envoyer, ou "" (rien). Même nom d'abord (sans tenir compte des majuscules ni des accents), chaque lien une fois ; le
+ * profil principal de Nuvio (profile_index 1) resté sans nom en commun prend le lien principal (nos[0]), s'il est libre.
+ */
+export function associerProfils(nuvio, nos) {
+  const net = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+  const pris = new Set();
+  const choix = (Array.isArray(nuvio) ? nuvio : []).map((p) => {
+    const t = (nos || []).find((x) => !pris.has(x.i) && net(x.n) && net(x.n) === net(p.name));
+    if (t) pris.add(t.i);
+    return t ? t.i : "";
+  });
+  const un = (nuvio || []).findIndex((p) => p.profile_index === 1);
+  if (un >= 0 && !choix[un] && nos && nos[0] && !pris.has(nos[0].i)) choix[un] = nos[0].i;
+  return choix;
 }
 
 /**
@@ -200,6 +219,13 @@ details.liens .dedans { display: grid; gap: 12px; padding: 0 14px 14px; }
 #bilan li.ko { color: #ffd2c8; border-color: rgba(229,65,58,.5); }
 #bilan li.ko::before { content: "!"; background: var(--red); color: #fff; }
 .pied { margin: 8px 0 0; text-align: center; font-size: .9rem; color: var(--dim); }
+/* Mes profils : une ligne par profil Nuvio, la programmation qu'il reçoit. */
+.profils-lignes { display: grid; gap: 8px; }
+.profil-ligne { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 6px 12px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--velvet-2); border: 1px solid var(--seat); }
+.profil-ligne label { font-weight: 800; overflow-wrap: anywhere; }
+.profil-ligne .alerte { grid-column: 1 / -1; margin: 0; font-size: .85rem; color: #ffd2c8; }
+.profil-ligne .alerte[hidden] { display: none; }
+@media (max-width: 480px) { .profil-ligne { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .attente::before { animation: none; } button, .bouton, .switch input, .switch input::after { transition: none; } }
 </style>
 </head>
@@ -243,10 +269,15 @@ details.liens .dedans { display: grid; gap: 12px; padding: 0 14px 14px; }
       <button type="button" class="discret" id="deconnecter">Déconnecter</button>
     </div>
     <p class="qui" id="qui"><b>Compte Nuvio connecté</b></p>
-    <div class="champ">
+    <div class="champ" id="profil-seul">
       <label for="profil">Profil Nuvio</label>
       <select id="profil"></select>
     </div>
+    <fieldset class="champ" id="profils-envoi" hidden>
+      <legend>Tes profils</legend>
+      <p class="aide">Chaque profil Nuvio reçoit la programmation choisie (même nom d'abord).</p>
+      <div id="profils-lignes" class="profils-lignes"></div>
+    </fieldset>
     <fieldset>
       <legend class="visually-hidden">Ce qui part dans ton compte</legend>
       <label class="switch"><input type="checkbox" id="e-addon" checked><span><b>L'addon</b><small>Tes autres addons restent ; le nôtre prend ton lien.</small></span></label>
@@ -257,7 +288,7 @@ details.liens .dedans { display: grid; gap: 12px; padding: 0 14px 14px; }
     <details class="liens" id="liens">
       <summary>Tes liens <small id="liens-etat">repris de ton billet</small></summary>
       <div class="dedans">
-        <div class="champ">
+        <div class="champ" id="champ-lien">
           <label for="lien">Ton lien d'addon</label>
           <input id="lien" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="${origin}/…/manifest.json">
           <p class="aide">Celui de ton billet, repris de ta dernière programmation en salle 2 sur cet appareil : l'addon et les collections suivront ses réglages (pays, genres, tuiles).</p>
@@ -374,11 +405,60 @@ var __name = function (f) { return f; };
   const courriel = () => {
     try { return JSON.parse(atob(memo.acces.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || ""; } catch (e) { return ""; }
   };
+  // Mes profils (salle 2, profils.js) : le lien principal que garde ce navigateur, et ses autres profils avec leurs noms.
+  // Lus pendant la connexion. Moins de deux : le choix d'un seul profil Nuvio, comme avant.
+  const associer = ${associerProfils.toString()};
+  const lienFixeLu = async (i, m) => {
+    const r = await fetch(location.origin + "/lien-fixe/" + i + "/lire", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modif: m }) });
+    if (!r.ok) throw new Error("réponse " + r.status);
+    return r.json();
+  };
+  const nosProfils = (async () => {
+    let cles = {}; try { cles = JSON.parse(lu("liens-fixes") || "{}") || {}; } catch (e) {}
+    const p = lu(${JSON.stringify(PRINCIPAL)}), m = p && cles[p];
+    if (!m) return [];
+    try {
+      const j = await lienFixeLu(p, m);
+      const autres = Array.isArray(j.pf) ? j.pf : [];
+      if (!autres.length) return [];
+      const noms = await Promise.all(autres.map((x) => lienFixeLu(x.i, x.m).then((r) => r.n || "", () => "")));
+      return [{ i: p, n: j.n || "Principal" }, ...autres.map((x, k) => ({ i: x.i, n: noms[k] || "Profil " + (k + 2) }))];
+    } catch (e) { return []; }
+  })();
+  let nos = [];
+  // Le profil 1 de Nuvio reçoit-il cette programmation ? (un profil qui partage ses addons la verrait.)
+  const principalChoisi = () => { const s = document.querySelector('#profils-lignes select[data-index="1"]'); return s ? s.value : ""; };
+  const alertes = () => document.querySelectorAll("#profils-lignes select").forEach((s) => {
+    $(s.id + "-alerte").hidden = !(s.dataset.partage && s.value && s.value !== principalChoisi());
+  });
+  const dessineLignes = (rangs) => {
+    const choix = associer(rangs, nos), box = $("profils-lignes"); box.textContent = "";
+    rangs.forEach((pr, k) => {
+      const id = "pn-" + pr.profile_index, ligne = document.createElement("div"); ligne.className = "profil-ligne";
+      const lab = document.createElement("label"); lab.htmlFor = id; lab.textContent = pr.name || ("Profil " + pr.profile_index);
+      const sel = document.createElement("select"); sel.id = id; sel.dataset.index = pr.profile_index;
+      // Un profil qui prend les addons du profil principal : ses addons sont rangés sous le profil 1 (AddonSyncService).
+      sel.dataset.partage = pr.profile_index !== 1 && pr.uses_primary_addons ? "1" : "";
+      for (const [v, t] of [...nos.map((x) => [x.i, x.n]), ["", "Ne rien envoyer"]]) {
+        const o = document.createElement("option"); o.value = v; o.textContent = t; if (v === choix[k]) o.selected = true; sel.append(o);
+      }
+      const alerte = document.createElement("p"); alerte.className = "alerte"; alerte.id = id + "-alerte";
+      alerte.textContent = "Dans Nuvio, ce profil utilise les addons du profil principal : il verrait la programmation du principal. Ouvre ce profil dans Nuvio, désactive « utiliser les addons du profil principal », puis reviens ici.";
+      sel.setAttribute("aria-describedby", alerte.id);
+      sel.addEventListener("change", alertes);
+      ligne.append(lab, sel, alerte); box.append(ligne);
+    });
+    alertes();
+  };
   const profils = async () => {
     const liste = await rpc("sync_pull_profiles").catch(() => null);
     const sel = $("profil"); sel.textContent = "";
-    const rangs = Array.isArray(liste) && liste.length ? liste : [{ profile_index: 1, name: "Profil principal" }];
-    for (const pr of rangs.sort((a, b) => a.profile_index - b.profile_index)) {
+    const rangs = (Array.isArray(liste) && liste.length ? liste : [{ profile_index: 1, name: "Profil principal" }]).sort((a, b) => a.profile_index - b.profile_index);
+    nos = await nosProfils;
+    const multi = nos.length > 1;
+    $("profil-seul").hidden = multi; $("profils-envoi").hidden = !multi; $("champ-lien").hidden = multi;
+    if (multi) { dessineLignes(rangs); $("liens-etat").textContent = "un lien par profil, repris de tes profils"; $("liens-etat").className = ""; }
+    for (const pr of rangs) {
       const o = document.createElement("option"); o.value = pr.profile_index; o.textContent = pr.name || ("Profil " + pr.profile_index);
       // Un profil qui prend les addons du profil principal : ses addons sont rangés sous le profil 1 (AddonSyncService).
       o.dataset.addons = pr.profile_index !== 1 && pr.uses_primary_addons ? "1" : String(pr.profile_index);
@@ -483,23 +563,45 @@ var __name = function (f) { return f; };
 
   $("envoyer").addEventListener("click", async () => {
     const b = $("envoyer"); b.disabled = true; b.textContent = "Envoi en cours…"; etat(""); $("bilan").textContent = ""; $("p3").className = "en-cours";
-    let base = "";
     const fini = () => { b.disabled = false; b.textContent = "Envoyer dans Nuvio"; };
-    try { base = baseDu($("lien").value); } catch (e) { etat("Envoi impossible : " + e.message, true); $("liens").open = true; $("lien").focus({ preventScroll: true }); $("p3").className = ""; fini(); return; }
-    const opt = $("profil").selectedOptions[0];
-    memo.lien = $("lien").value.trim(); memo.affiches = $("affiches").value.trim(); memo.profil = +$("profil").value;
+    // Où envoyer : chaque profil Nuvio et sa programmation (Mes profils), sinon le lien et le profil choisis.
+    let cibles;
+    if (!$("profils-envoi").hidden) {
+      cibles = [...document.querySelectorAll("#profils-lignes select")].filter((s) => s.value).map((s) => ({
+        base: location.origin + "/" + s.value, profil: +s.dataset.index, addons: +s.dataset.index, prog: s.value,
+        partage: !!s.dataset.partage, nom: $(s.id).previousElementSibling.textContent,
+      }));
+      if (!cibles.length) { etat("Choisis la programmation d'au moins un profil.", true); $("p3").className = ""; fini(); return; }
+    } else {
+      let base = "";
+      try { base = baseDu($("lien").value); } catch (e) { etat("Envoi impossible : " + e.message, true); $("liens").open = true; $("lien").focus({ preventScroll: true }); $("p3").className = ""; fini(); return; }
+      const opt = $("profil").selectedOptions[0];
+      memo.lien = $("lien").value.trim(); memo.profil = +$("profil").value;
+      cibles = [{ base, profil: memo.profil, addons: +((opt && opt.dataset.addons) || memo.profil), nom: "" }];
+    }
+    memo.affiches = $("affiches").value.trim();
     if (!memo.client) memo.client = "site-" + hasard();
     garder(memo);
-    const parties = [
-      ["e-addon", "L'addon", () => envoiAddon(base, +((opt && opt.dataset.addons) || memo.profil))],
-      ["e-coll", "Les collections", () => envoiCollections(base, memo.profil)],
-      ["e-acc", "L'ordre de l'accueil", () => envoiAccueil(base, memo.profil)],
-      ["e-aff", "Les affiches", () => envoiAffiches(memo.affiches, memo.profil)],
-    ];
     let rates = 0, faits = 0;
-    for (const [id, nom, f] of parties) {
-      if (!$(id).checked) continue;
-      try { bilan(await f(), true); faits++; } catch (e) { bilan(nom + " : " + e.message, false); rates++; }
+    for (const c of cibles) {
+      const avant = c.nom ? c.nom + " · " : "";
+      const parties = [
+        ["e-addon", "L'addon", async () => {
+          // Profil qui prend les addons du principal : son addon est celui du principal, on n'y touche pas.
+          if (c.partage) {
+            if (c.prog === principalChoisi()) return "L'addon : le même que le profil principal";
+            throw new Error("ce profil utilise les addons du profil principal dans Nuvio : désactive-le dans ses réglages Nuvio, puis renvoie.");
+          }
+          return envoiAddon(c.base, c.addons);
+        }],
+        ["e-coll", "Les collections", () => envoiCollections(c.base, c.profil)],
+        ["e-acc", "L'ordre de l'accueil", () => envoiAccueil(c.base, c.profil)],
+        ["e-aff", "Les affiches", () => envoiAffiches(memo.affiches, c.profil)],
+      ];
+      for (const [id, nom, f] of parties) {
+        if (!$(id).checked) continue;
+        try { bilan(avant + await f(), true); faits++; } catch (e) { bilan(avant + nom + " : " + e.message, false); rates++; }
+      }
     }
     if (!faits && !rates) etat("Coche au moins une case.", true);
     else if (rates) etat(faits ? "Envoyé en partie : voir ci-dessous." : "Envoi impossible : voir ci-dessous.", true);

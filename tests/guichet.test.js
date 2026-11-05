@@ -51,7 +51,7 @@ test("programmation_en_3_questions", () => {
     const st = PROG.depuisReponses(D, { quoi, famille, plateformes });
     const nom = JSON.stringify({ quoi, famille, plateformes });
     verifie(st, nom);
-    assert.equal(st.f, famille, nom);
+    assert.equal(st.f, famille ? 10 : false, nom);
     // Aucun abonnement coché : toutes les plateformes, comme d'origine ; sinon exactement celles-là.
     assert.deepEqual(st.p, plateformes.length ? ids.filter((id) => plateformes.includes(id)) : D.defaults.p, nom);
     assert.ok(st.x.filter((x) => x.n.startsWith("Le meilleur de")).length <= 3, nom);
@@ -69,7 +69,7 @@ test("guichet_dans_la_page", () => {
   assert.equal(js, GUICHET_JS);
   assert.doesNotThrow(() => new Function(js));
   // La programmation choisie garde le nom, le pays, la clé Gemini et le jeton d'alerte ; « Annuler » la défait.
-  assert.match(js, /Object\.assign\(state, nouveau, \{ n: state\.n, g: state\.g, k: state\.k, al: state\.al \}\)/);
+  assert.match(js, /Object\.assign\(state, nouveau, \{ n: state\.n, g: state\.g, k: state\.k, al: state\.al, pf: state\.pf \}\)/);
   assert.match(js, /proposeAnnuler\(/);
   // Proposé de lui-même seulement à la première visite : jamais sur un lien fixe, une page avec réglages ou dans le guide.
   assert.match(js, /!D\.fixed && !hashDepart && !document\.documentElement\.classList\.contains\("dans-guide"\)/);

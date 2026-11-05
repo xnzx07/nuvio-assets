@@ -182,7 +182,7 @@ test("lien_fixe_page_sans_cle_gemini", async () => {
   assert.equal(lire.headers.get("Cache-Control"), "no-store");
   // Avec, l'heure de la dernière lecture par Nuvio et du dernier enregistrement (« Ta TV l'a reçu », recu.test.js).
   const { vu, t, maintenant, ...secrets } = await lire.json();
-  assert.deepEqual(secrets, { k, al });
+  assert.deepEqual(secrets, { k, al, pf: [], n: "Salon" });
   assert.ok(typeof vu === "number" && typeof t === "number" && maintenant > 0);
   // Sans la bonne clé de modification, sans Origin, ou pour un lien inconnu : rien.
   const refus = await post(`/lien-fixe/${id}/lire`, { modif: "x".repeat(22) });
@@ -207,4 +207,29 @@ test("lien_fixe_manifest_jamais_garde", async () => {
   assert.equal((await at(`/${id}/manifest.json`)).headers.get("Cache-Control"), "no-cache, max-age=0, must-revalidate");
   assert.equal((await at(`/${seg({ n: "X" })}/manifest.json`)).headers.get("Cache-Control"), "public, max-age=300");
   assert.equal((await at(`/manifest.json`)).headers.get("Cache-Control"), "public, max-age=300");
+});
+
+// Mes profils (profils.js) : le lien principal garde les liens et les clés de ses autres profils, secrets comme la clé
+// Gemini : jamais dans sa page, relus seulement avec sa clé de modification.
+test("lien_fixe_profils_secrets", async () => {
+  const enfant = await (await post("/lien-fixe", { c: seg({ n: "Léo", f: 10 }) })).json();
+  const pf = [{ i: enfant.id, m: enfant.modif }];
+  const principal = await (await post("/lien-fixe", { c: seg({ n: "Moi", pf }) })).json();
+  const html = await (await at(`/${principal.id}/configure`)).text();
+  assert.ok(!html.includes(enfant.id) && !html.includes(enfant.modif));
+  const lu = await (await post(`/lien-fixe/${principal.id}/lire`, { modif: principal.modif })).json();
+  assert.deepEqual([lu.pf, lu.n], [pf, "Moi"]);
+  // Le nom de chaque profil : celui de son lien.
+  assert.equal((await (await post(`/lien-fixe/${enfant.id}/lire`, { modif: enfant.modif })).json()).n, "Léo");
+  // Les profils ne changent rien aux rangées du principal.
+  assert.equal((await (await at(`/${principal.id}/manifest.json`)).json()).name, "Moi");
+});
+
+test("profils_mal_formes_ignores", async () => {
+  const { decodeConfig, MAX_PROFILS } = await import("../worker/config.js");
+  const bon = (n) => ({ i: "f" + String(n).padStart(16, "0"), m: "A".repeat(22) });
+  const cfg = (pf) => decodeConfig(seg({ pf }), [], []).pf;
+  assert.deepEqual(cfg([bon(1), bon(1), { i: "x", m: "A".repeat(22) }, { i: bon(2).i, m: "court" }, "texte", null]), [bon(1)]);
+  assert.equal(cfg(Array.from({ length: 20 }, (_, n) => bon(n))).length, MAX_PROFILS);
+  assert.deepEqual(cfg("pas une liste"), []);
 });
