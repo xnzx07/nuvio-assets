@@ -47,7 +47,11 @@ const COURT = { "Cache-Control": "public, max-age=3600", "Vercel-CDN-Cache-Contr
  * Au CDN, la première demande après l'expiration reçoit encore l'ancienne pendant qu'on la redessine (une heure au plus).
  * jusqua (secondes, facultatif) : une autre échéance (prochain épisode d'une série avec sa barre d'avancement…).
  */
-function cacheDe({ enRetard, place, statut, minuit, jusqua }) {
+// Affiche « à revoir » (récente, sans VF d'après l'avis du jour) : une heure au plus chez le Worker, le CDN et Nuvio,
+// qui la redemandent alors redessinée (Heart of the Beast restait grise environ 4 heures après l'arrivée de la VF).
+const REVOIR_S = 3600;
+function cacheDe({ enRetard, place, statut, minuit, jusqua, revoir }) {
+  if (revoir) jusqua = jusqua ? Math.min(jusqua, REVOIR_S) : REVOIR_S;
   const base = enRetard ? COURT : OK_CACHE;
   if (!place && !statut && !jusqua) return base;
   const s = Math.min(...(place || statut ? [statut && minuit ? Math.min(secondesAvantBascule(), secondesAvantMinuitParis()) : secondesAvantBascule()] : []), ...(jusqua ? [jusqua] : []));
@@ -362,7 +366,7 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       const jusqua = avance && finSaison ? Math.min(avance, finSaison) : avance || finSaison;
       // L'affiche de demain, avec les mêmes données : seule la date change. Différente : elle expire à minuit.
       const minuit = !!suitLeCalendrier && contentKey(posterContent(facts, { imdbRating, rank: place, quality, notes, saga, saison }, shape, reglages, lendemain(aujourdhui))) !== contentKey(content);
-      const cache = cacheDe({ enRetard, place, statut: suitLeCalendrier, minuit, jusqua });
+      const cache = cacheDe({ enRetard, place, statut: suitLeCalendrier, minuit, jusqua, revoir: aRevoir });
       // X-Affiche-Etat : « retard » quand une donnée manquait (badge qualité en route…) ; la régie redemande alors
       // l'affiche un peu plus tard, et le relais de l'addon ne la garde pas.
       // X-Affiche-Sortie : de quoi comprendre une affiche grise ou un statut (« pas sorti » vient des dates, des sources

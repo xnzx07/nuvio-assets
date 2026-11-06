@@ -873,6 +873,33 @@ test("avis_du_jour_de_l_addon_prime", async () => {
   assert.deepEqual([sur.vf, sur.etat, sur.cles], ["true", "complete", []]);
 });
 
+// Affiche « à revoir » (récente, sans VF d'après l'avis du jour) : une heure au plus en cache (Worker, CDN, Nuvio), et
+// l'avis « pas de VF » redemandé à l'addon une heure plus tard (Heart of the Beast : VF pour l'addon à 23 h, affiche
+// restée grise environ 4 heures). Un avis « VF » reste gardé plus longtemps.
+test("affiche_a_revoir_une_heure", async () => {
+  const e = { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test", AVIS_DU_JOUR: "on" };
+  let avis = { vf: false, sources: 12 }, demandes = 0;
+  const base = internet({ detail: avecSorties([4, jour(-20)]), torrentio: () => json({ streams: [{ name: "Torrentio\n1080p", title: "Film.2026.1080p.WEB" }] }) });
+  const f = async (url, opts = {}) => {
+    if (String(url) === "https://addon.test/sf/movie/tt15239678.json") { demandes++; return json(avis); }
+    return base(url, opts);
+  };
+  const handler = makeHandler({ fetchImpl: f, env: e });
+  const res = await handler(req("type=movie&shape=poster&id=tt15239678"));
+  assert.equal(res.headers.get("X-Affiche-Etat"), "revoir");
+  assert.ok(Number(/max-age=(\d+)/.exec(res.headers.get("Cache-Control"))[1]) <= 3600, res.headers.get("Cache-Control"));
+  assert.ok(Number(/max-age=(\d+)/.exec(res.headers.get("Vercel-CDN-Cache-Control"))[1]) <= 3600);
+  // Une heure plus tard : l'avis est redemandé, et la VF arrivée entre-temps fait l'affiche en couleur.
+  avis = { vf: true, sources: 9 };
+  const maintenant = Date.now();
+  mock.method(Date, "now", () => maintenant + 3601000);
+  try {
+    const apres = await makeHandler({ fetchImpl: f, env: e })(req("type=movie&shape=landscape&id=tt15239678"));
+    assert.equal(apres.headers.get("X-Affiche-Etat"), "complete");
+    assert.equal(demandes, 2);
+  } finally { Date.now.mock.restore(); }
+});
+
 // Aucune affiche sans texte (Brice de Nice) : le fond sans texte, vérifié lui aussi, recadré en portrait (w1280) avec
 // notre logo, au lieu de l'affiche officielle sans logo ni ligne du bas.
 test("sans_affiche_sans_texte_le_fond_recadre", async () => {

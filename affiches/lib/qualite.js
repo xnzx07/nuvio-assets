@@ -289,10 +289,12 @@ export const qualiteDeQ = (q) => (q && typeof q === "object"
  * L'avis VF du jour de l'addon pour une vidéo récente (« movie/tt… », « series/tt…:S:1 ») : /sf/…, avec RELAIS_KEY
  * (Lumio, qui lit la langue dans le fichier, sinon StreamFusion ; gardé par l'addon : « pas de VF » 3 heures). Le même
  * que celui des rangées et des fiches. { vf, sources, qualite? }, ou null (pas d'avis : plafond, panne). Gardé ici
- * 3 heures, autant qu'un « pas de VF » chez l'addon : le redemander plus tôt n'apporterait rien et coûterait un appel.
+ * 3 heures ; « pas de VF » une heure seulement : les fiches et les rangées mettent à jour l'avis commun de l'addon
+ * entre-temps (Heart of the Beast : VF pour l'addon à 23 h, affiche encore grise une heure plus tard). Le redemander ne
+ * coûte qu'une requête à l'addon, qui le relit dans sa mémoire commune sans appeler le débrideur.
  */
 let avisMemo = new Map();
-const AVIS_MEMO_MS = 3 * 3600000;
+const AVIS_MEMO_MS = 3 * 3600000, AVIS_MEMO_NON_MS = 3600000;
 export function avisDuJour(addon, video, cle, fetchImpl = fetch) {
   const hit = avisMemo.get(video);
   if (hit && Date.now() < hit.until) return hit.promesse;
@@ -304,8 +306,10 @@ export function avisDuJour(addon, video, cle, fetchImpl = fetch) {
       return d && typeof d.vf === "boolean" ? d : null;
     } catch { return null; }
   })();
+  const memo = { promesse, until: Date.now() + AVIS_MEMO_MS };
+  promesse.then((d) => { if (d && d.vf === false) memo.until = Math.min(memo.until, Date.now() + AVIS_MEMO_NON_MS); });
   avisMemo.delete(video);
-  avisMemo.set(video, { promesse, until: Date.now() + AVIS_MEMO_MS });
+  avisMemo.set(video, memo);
   while (avisMemo.size > MAX_MEMO) avisMemo.delete(avisMemo.keys().next().value);
   return promesse;
 }

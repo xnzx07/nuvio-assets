@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.55.0";
+const VERSION = "5.55.1";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -657,10 +657,15 @@ function releaseDates(releases, types, countries) {
  *     la première sortie numérique (vidéo, télé) où que ce soit, sinon la première salle + 45 jours.
  * La même fonction que dispoChezSoi dans affiches/lib/statut.js : la fiche et l'affiche disent le même jour.
  */
-export function dispoChezSoi(releases, langue, vod = null) {
+export function dispoChezSoi(releases, langue, vod = null, plateformeVf = false) {
   if (langue !== "fr") {
     const numerique = releaseDates(releases, [4], ["US"])[0];
     if (numerique) return { date: numerique, vers: false };
+    // Déjà sur une plateforme d'abonnement en France qui le double (abonnementVf) sans sortie numérique américaine :
+    // sa sortie numérique française est le jour d'arrivée chez soi. The Mongoose (Prime Video, le 4 novembre) était
+    // estimé « salle américaine + délai », en décembre, et manquait à « Dispo depuis peu ».
+    const francaise = plateformeVf ? releaseDates(releases, [4], ["FR"])[0] : "";
+    if (francaise) return { date: francaise, vers: false };
     const salle = releaseDates(releases, [2, 3], ["US"])[0];
     if (salle) return { date: addDays(salle, fenetreVod(vod)), vers: true };
   }
@@ -1295,7 +1300,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
     const recent = kind === "movie" && filmRecent(infos[i].releases, today);
     const lu = recent ? avecAbonnement(sources.get(ids[i]), infos[i].abonnementVf) : null;
     // En VF chez soi aujourd'hui : la date américaine passée, ou les sources (voir enVfChezSoi), comme les affiches.
-    const chezSoi = kind === "movie" ? dispoChezSoi(infos[i].releases, it.original_language, infos[i].vod) : { date: "", vers: false };
+    const chezSoi = kind === "movie" ? dispoChezSoi(infos[i].releases, it.original_language, infos[i].vod, infos[i].abonnementVf) : { date: "", vers: false };
     const vf = kind === "movie" && enVfChezSoi(infos[i].releases, it.original_language, today, lu, infos[i].plateformeFr, infos[i].vod);
     // « Pas encore en VF » : le fichier est sorti (date passée), ses sources n'ont pas la VF. Avant la date, la date.
     const vo = sansVf(lu) && !(chezSoi.date > today);

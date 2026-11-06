@@ -1507,6 +1507,28 @@ test("dispo_depuis_peu_estimation_passee_et_vf_confirmee", async () => {
   assert.deepEqual(await lancer(false), []);
 });
 
+// Film américain sur une plateforme d'abonnement française qui le double, sans sortie numérique aux États-Unis (The
+// Mongoose : en salle là-bas, sur Prime Video ici le 4 novembre) : sa sortie numérique française est son jour d'arrivée
+// chez soi, il est « Dispo depuis peu ». Sans la plateforme, la date française ne compte pas.
+test("dispo_depuis_peu_plateforme_francaise", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const lancer = async (plateforme) => {
+    oublierInfos(); store.clear();
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.includes("/vf.json")) return sourcesDe({})(u);
+      if (u.includes("/discover/movie")) return Response.json({ results: [{ id: 7, title: "Mongoose", original_language: "en", release_date: jour(-7), popularity: 9 }], page: 1, total_pages: 1 });
+      if (/\/movie\/7\?/.test(u)) return Response.json({ ...filmVod(7, "en", [["US", 3, jour(-7)], ["FR", 4, jour(-2)]]),
+        "watch/providers": { results: plateforme ? { FR: { flatrate: [{ provider_id: 119, provider_name: "Amazon Prime Video" }] } } : {} } });
+      return Response.json({ results: [] });
+    };
+    return (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), { ...env, LIENS: fakeD1() }, ctx)).json()).metas.map((m) => m.name);
+  };
+  assert.deepEqual(await lancer(true), ["Mongoose"]);
+  assert.deepEqual(await lancer(false), []);
+});
+
 // Les sorties en salle ne prennent pas la place des sorties numériques de la fenêtre : 28 candidats au plus, et des
 // films encore au cinéma, plus populaires, en chassaient L'Île des Souvenirs et Tenzing (en VF, sortis cette semaine).
 test("dispo_depuis_peu_sorties_numeriques_d_abord", async () => {
