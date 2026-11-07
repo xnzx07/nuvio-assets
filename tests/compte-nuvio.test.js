@@ -127,3 +127,41 @@ test("profils_associes_par_leur_nom", () => {
   assert.deepEqual(associerProfils([{ profile_index: 2, name: "Emma" }, { profile_index: 3, name: "Emma" }], nos), ["fEmma", ""]);
   assert.deepEqual(associerProfils([], nos), []);
 });
+
+test("export_des_vus_par_profil", async () => {
+  const { lignesVus, versCsv } = await import("../worker/compte-nuvio.js");
+  const t = Date.UTC(2026, 10, 1, 12, 0);
+  const lignes = lignesVus([
+    { profil: { profile_index: 1, name: "Moi" },
+      vus: [
+        { content_id: "tt0133093", content_type: "movie", title: "Matrix", watched_at: t },
+        { content_id: "tt0903747", content_type: "series", title: "Breaking Bad", season: 1, episode: 2, watched_at: t + 60000 },
+      ],
+      enCours: [
+        { content_id: "tt0903747", content_type: "series", season: 1, episode: 2, position: 100, duration: 200, last_watched: t },   // déjà vu : sauté
+        { content_id: "tt0903747", content_type: "series", season: 1, episode: 3, position: 50, duration: 200, last_watched: t + 120000 },
+      ] },
+    { profil: { profile_index: 2, name: "" }, vus: [{ content_id: "tmdb:1", content_type: "movie", title: "A; \"b\"", watched_at: Math.round(t / 1000) }], enCours: null },
+  ]);
+  assert.deepEqual(lignes.map((l) => [l.profil, l.statut, l.titre, l.saison, l.episode, l.avancement]), [
+    ["Moi", "En cours", "Breaking Bad", 1, 3, "25 %"],
+    ["Moi", "Vu", "Breaking Bad", 1, 2, ""],
+    ["Moi", "Vu", "Matrix", "", "", ""],
+    ["Profil 2", "Vu", "A; \"b\"", "", "", ""],
+  ]);
+  assert.equal(lignes[2].type, "Film");
+  assert.equal(lignes[2].imdb, "https://www.imdb.com/title/tt0133093/");
+  assert.equal(lignes[3].imdb, "");
+  assert.match(lignes[3].date, /^2026-11-0[12] \d\d:\d\d$/);   // secondes reconnues
+  const csv = versCsv(lignes);
+  assert.ok(csv.startsWith("\uFEFFProfil;Statut;Type;Titre;"));
+  assert.ok(csv.includes(';"A; ""b""";'));
+  assert.equal(csv.split("\r\n").length, 6);
+  assert.deepEqual(lignesVus([]), []);
+});
+
+test("page_compte_nuvio_a_l_export", () => {
+  const html = compteNuvioPage({ origin: O });
+  for (const id of ["b-export", "export-csv", "export-json", "export-etat"]) assert.ok(html.includes('id="' + id + '"'), id);
+  assert.ok(html.includes("sync_pull_watched_items") && html.includes("sync_pull_watch_progress"));
+});

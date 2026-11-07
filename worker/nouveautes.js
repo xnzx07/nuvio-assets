@@ -11,6 +11,13 @@ import { LOGO_V } from "./reglages.js";
 export const NOUVEAUTES = [
   {
     date: "2026-11-07",
+    titre: "Exporter tout ce que tu as regardé",
+    points: [
+      "Page « Tout envoyer dans Nuvio » : une fois ton compte Nuvio connecté, le bloc « Ce que tu as regardé » télécharge les films et épisodes vus et en cours de chacun de tes profils, en fichier Excel ou JSON. Rien n'est modifié dans ton compte.",
+    ],
+  },
+  {
+    date: "2026-11-07",
     titre: "Tuiles fixes au choix, et une collection Animés",
     points: [
       "Collections : deux nouveaux interrupteurs. « Vidéo de fond des tuiles » : décoche-le si, sur Nuvio TV avec « Arrière-plan en plein écran », les tuiles disparaissent quelques secondes quand tu t'arrêtes dessus. « Tuiles animées » : décoche-le pour des tuiles toujours fixes. Réimporte ensuite les collections.",

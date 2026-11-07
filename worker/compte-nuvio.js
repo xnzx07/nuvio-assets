@@ -7,7 +7,7 @@
  * web (CORS ouvert). Fonctions appelées, celles de l'appli NuvioTV (AuthManager, CollectionSyncService,
  * AddonSyncService, ProfileSettingsSyncService) : start_device_login_session, poll_tv_login_session,
  * tv-logins-exchange, sync_pull_profiles, sync_pull/push_collections, table addons et sync_push_addons,
- * sync_pull/push_profile_settings_blob, sync_pull/push_home_catalog_settings (HomeCatalogSettingsSyncService). Porte non officielle : une mise à jour de Nuvio peut la changer, les liens
+ * sync_pull/push_profile_settings_blob, sync_pull/push_home_catalog_settings (HomeCatalogSettingsSyncService), et en lecture seule pour l'export sync_pull_watched_items et sync_pull_watch_progress (WatchedItemsSyncService, WatchProgressSyncService). Porte non officielle : une mise à jour de Nuvio peut la changer, les liens
  * à coller restent.
  */
 import { feuilles, scripts } from "./statique.js";
@@ -103,6 +103,52 @@ export function fusionAccueil(distants, ordre, addon) {
     ...avant.filter((it) => !nosCles.has(cle(it))),
   ].map((it, order) => ({ addon_id: it.addon_id || "", type: it.type || "", catalog_id: it.catalog_id || "", enabled: it.enabled !== false,
     order, custom_title: it.custom_title || "", is_collection: !!it.is_collection, collection_id: it.collection_id || "" }));
+}
+
+/**
+ * Ce que chaque profil a regardé, en lignes pour l'export : les titres marqués vus (sync_pull_watched_items), puis
+ * ceux en cours (sync_pull_watch_progress) qui ne sont pas déjà vus. Formats de NuvioTV (SupabaseModels.kt) :
+ * vus { content_id, content_type, title, season, episode, watched_at }, en cours { content_id, content_type,
+ * season, episode, position, duration, last_watched }. Dates en millisecondes (en secondes si trop petites).
+ * Tri : profil, puis le plus récent d'abord.
+ */
+export function lignesVus(parProfil) {
+  const ms = (v) => { const n = Number(v) || 0; return n && n < 1e11 ? n * 1000 : n; };
+  const deux = (n) => String(n).padStart(2, "0");
+  const date = (v) => { if (!ms(v)) return ""; const d = new Date(ms(v));
+    return d.getFullYear() + "-" + deux(d.getMonth() + 1) + "-" + deux(d.getDate()) + " " + deux(d.getHours()) + ":" + deux(d.getMinutes()); };
+  const genre = (t) => t === "movie" ? "Film" : t === "series" || t === "tv" ? "Série" : (t || "");
+  const cle = (x) => [x.content_id, x.season == null ? "" : x.season, x.episode == null ? "" : x.episode].join("|");
+  const imdb = (id) => /^tt[0-9]+$/.test(String(id || "").split(":")[0]) ? "https://www.imdb.com/title/" + String(id).split(":")[0] + "/" : "";
+  const lignes = [];
+  for (const { profil, vus, enCours } of parProfil || []) {
+    const nom = (profil && profil.name) || ("Profil " + ((profil && profil.profile_index) || 1));
+    const titres = new Map(), deja = new Set(), a = [];
+    for (const v of Array.isArray(vus) ? vus : []) {
+      if (!v || !v.content_id) continue;
+      if (v.title && !titres.has(v.content_id)) titres.set(v.content_id, v.title);
+      deja.add(cle(v));
+      a.push({ t: ms(v.watched_at), profil: nom, statut: "Vu", type: genre(v.content_type), titre: v.title || "", saison: v.season == null ? "" : v.season,
+        episode: v.episode == null ? "" : v.episode, date: date(v.watched_at), avancement: "", id: v.content_id, imdb: imdb(v.content_id) });
+    }
+    for (const p of Array.isArray(enCours) ? enCours : []) {
+      if (!p || !p.content_id || deja.has(cle(p))) continue;
+      const pc = p.duration > 0 ? Math.min(100, Math.round((p.position / p.duration) * 100)) + " %" : "";
+      a.push({ t: ms(p.last_watched), profil: nom, statut: "En cours", type: genre(p.content_type), titre: titres.get(p.content_id) || "", saison: p.season == null ? "" : p.season,
+        episode: p.episode == null ? "" : p.episode, date: date(p.last_watched), avancement: pc, id: p.content_id, imdb: imdb(p.content_id) });
+    }
+    a.sort((x, y) => y.t - x.t);
+    for (const { t, ...l } of a) lignes.push(l);
+  }
+  return lignes;
+}
+
+/** Les lignes en CSV pour Excel en français : « ; » entre les colonnes, BOM pour les accents, fins de ligne CRLF. */
+export function versCsv(lignes) {
+  const tete = [["profil", "Profil"], ["statut", "Statut"], ["type", "Type"], ["titre", "Titre"], ["saison", "Saison"], ["episode", "Épisode"],
+    ["date", "Date"], ["avancement", "Avancement"], ["id", "Identifiant"], ["imdb", "IMDb"]];
+  const champ = (v) => { const s = v == null ? "" : String(v); return /[;"\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  return "﻿" + [tete.map((c) => c[1]), ...(lignes || []).map((l) => tete.map((c) => l[c[0]]))].map((r) => r.map(champ).join(";")).join("\r\n") + "\r\n";
 }
 
 export function compteNuvioPage({ origin }) {
@@ -227,6 +273,11 @@ details.liens .dedans { display: grid; gap: 12px; padding: 0 14px 14px; }
 .profil-ligne .alerte { grid-column: 1 / -1; margin: 0; font-size: .85rem; color: #ffd2c8; }
 .profil-ligne .alerte[hidden] { display: none; }
 @media (max-width: 480px) { .profil-ligne { grid-template-columns: 1fr; } }
+/* L'export : deux boutons côte à côte, l'un sous l'autre sur un petit écran. */
+.deux { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 420px) { .deux { grid-template-columns: 1fr; } }
+#export-etat:empty { display: none; }
+#export-etat.ko { color: #ffd2c8; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { .attente::before { animation: none; } button, .bouton, .switch input, .switch input::after { transition: none; } }
 </style>
 </head>
@@ -306,6 +357,16 @@ details.liens .dedans { display: grid; gap: 12px; padding: 0 14px 14px; }
 
   <div class="etat" id="etat" role="status"></div>
   <ul id="bilan" aria-live="polite"></ul>
+
+  <section class="bloc" id="b-export" aria-labelledby="t-export" hidden>
+    <h2 id="t-export" tabindex="-1">Ce que tu as regardé</h2>
+    <p class="aide">Tous les films et épisodes marqués vus, et ceux en cours, de chaque profil de ton compte Nuvio, dans un fichier. Un profil relié à Trakt ou Simkl pour sa progression n'a rien dans le compte Nuvio : son historique est chez Trakt ou Simkl.</p>
+    <div class="deux">
+      <button type="button" class="principal" id="export-csv">Télécharger (Excel)</button>
+      <button type="button" id="export-json">Télécharger (JSON)</button>
+    </div>
+    <p class="aide" id="export-etat" role="status"></p>
+  </section>
   <p class="pied"><a href="${origin}/guide">Retour au guide</a> · <a href="${origin}/configure">Ta programmation (salle 2)</a></p>
 </main>
 ${scripts("outils.js")}
@@ -396,7 +457,7 @@ var __name = function (f) { return f; };
   // Une étape à la fois ; le fil du haut suit, et le focus va au titre quand c'est un clic qui fait avancer.
   let minuteur = null;
   const montrer = (quoi, focus) => {
-    $("b-connexion").hidden = quoi !== "connexion"; $("b-code").hidden = quoi !== "code"; $("b-compte").hidden = quoi !== "compte";
+    $("b-connexion").hidden = quoi !== "connexion"; $("b-code").hidden = quoi !== "code"; $("b-compte").hidden = quoi !== "compte"; $("b-export").hidden = quoi !== "compte";
     const dedans = quoi === "compte";
     $("p1").className = dedans ? "fait" : "en-cours"; $("p2").className = dedans ? "en-cours" : ""; $("p3").className = "";
     if (quoi !== "code") { clearInterval(minuteur); clearTimeout(attente); }
@@ -426,7 +487,7 @@ var __name = function (f) { return f; };
       return [{ i: p, n: j.n || "Principal" }, ...autres.map((x, k) => ({ i: x.i, n: noms[k] || "Profil " + (k + 2) }))];
     } catch (e) { return []; }
   })();
-  let nos = [];
+  let nos = [], profilsNuvio = [];
   // Le profil 1 de Nuvio reçoit-il cette programmation ? (un profil qui partage ses addons la verrait.)
   const principalChoisi = () => { const s = document.querySelector('#profils-lignes select[data-index="1"]'); return s ? s.value : ""; };
   const alertes = () => document.querySelectorAll("#profils-lignes select").forEach((s) => {
@@ -455,6 +516,7 @@ var __name = function (f) { return f; };
     const liste = await rpc("sync_pull_profiles").catch(() => null);
     const sel = $("profil"); sel.textContent = "";
     const rangs = (Array.isArray(liste) && liste.length ? liste : [{ profile_index: 1, name: "Profil principal" }]).sort((a, b) => a.profile_index - b.profile_index);
+    profilsNuvio = rangs;
     nos = await nosProfils;
     const multi = nos.length > 1;
     $("profil-seul").hidden = multi; $("profils-envoi").hidden = !multi; $("champ-lien").hidden = multi;
@@ -617,6 +679,49 @@ var __name = function (f) { return f; };
     fini();
     voir($("etat").textContent ? $("etat") : $("bilan"), "start");
   });
+
+  // L'export de ce que chaque profil a regardé : lu dans le compte, rangé dans un fichier, rien n'est écrit.
+  const lignesVus = ${lignesVus.toString()};
+  const versCsv = ${versCsv.toString()};
+  const lireVus = async () => {
+    const parProfil = [];
+    for (const profil of profilsNuvio.length ? profilsNuvio : [{ profile_index: 1, name: "Profil principal" }]) {
+      $("export-etat").textContent = "Lecture de « " + (profil.name || "Profil " + profil.profile_index) + " »…";
+      const vus = [];
+      // Par pages de 900, comme l'appli (WatchedItemsSyncService) ; 50 pages au plus.
+      for (let page = 1; page <= 50; page++) {
+        const r = await rpc("sync_pull_watched_items", { p_profile_id: profil.profile_index, p_page: page, p_page_size: 900 });
+        const l = Array.isArray(r) ? r : [];
+        vus.push(...l);
+        if (l.length < 900) break;
+      }
+      const enCours = await rpc("sync_pull_watch_progress", { p_profile_id: profil.profile_index }).catch(() => []);
+      parProfil.push({ profil, vus, enCours: Array.isArray(enCours) ? enCours : [] });
+    }
+    return parProfil;
+  };
+  const telecharger = (contenu, type, ext) => {
+    const d = new Date(), j = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const u = URL.createObjectURL(new Blob([contenu], { type })), a = document.createElement("a");
+    a.href = u; a.download = "nuvio-deja-vus-" + j + "." + ext; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 10000);
+  };
+  const exporter = async (format) => {
+    const boutons = [$("export-csv"), $("export-json")]; boutons.forEach((b) => { b.disabled = true; });
+    const e = $("export-etat"); e.className = "aide";
+    try {
+      const parProfil = await lireVus();
+      const lignes = lignesVus(parProfil);
+      if (!lignes.length) { e.className = "aide ko"; e.textContent = "Rien dans ton compte Nuvio : aucun titre marqué vu ni en cours (ou tes profils suivent leur progression avec Trakt ou Simkl)."; return; }
+      if (format === "csv") telecharger(versCsv(lignes), "text/csv;charset=utf-8", "csv");
+      else telecharger(JSON.stringify({ exporte_le: new Date().toISOString(), profils: parProfil.map((p) => ({ profil: p.profil.name || "", index: p.profil.profile_index, vus: p.vus, en_cours: p.enCours })) }, null, 2), "application/json", "json");
+      const vus = lignes.filter((l) => l.statut === "Vu").length;
+      e.textContent = "Fichier téléchargé : " + vus + " vu" + (vus > 1 ? "s" : "") + ", " + (lignes.length - vus) + " en cours, " + parProfil.length + " profil" + (parProfil.length > 1 ? "s" : "") + ".";
+    } catch (err) { e.className = "aide ko"; e.textContent = "Export impossible : " + err.message; }
+    finally { boutons.forEach((b) => { b.disabled = false; }); }
+  };
+  $("export-csv").addEventListener("click", () => exporter("csv"));
+  $("export-json").addEventListener("click", () => exporter("json"));
 
   $("deconnecter").addEventListener("click", async () => {
     if (memo.acces) await appel("/auth/v1/logout", {}, memo.acces).catch(() => {});
