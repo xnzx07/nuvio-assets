@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.55.1";
+const VERSION = "5.56.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1346,6 +1346,8 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       _vf: vf,
       // En VF d'après les sources (pas seulement d'après la date) : « Dispo depuis peu » accepte alors une date estimée.
       _vfLu: !!(lu && lu.vf),
+      // VFF prouvée par les noms des sources (TRUEFRENCH, VFF, VF2…) : déjà regardable en VF, même avant la date officielle.
+      _vffSur: !!(lu && lu.vf && lu.vff),
       // Le doute VFF ou VFQ : pas dans « Dispo depuis peu », dans « Bientôt dispo » à la date française annoncée.
       _vfq: !!(lu && lu.vfqPossible),
       _vffLe: lu && lu.vfqPossible ? lu.vffLe || "" : "",
@@ -1439,7 +1441,7 @@ export const oublierScenes = SCENES.oublier;
 const tropDur = (age, cfg) => Boolean(cfg && cfg.f && age != null && age > cfg.f);
 
 /** Une fiche sans les champs internes de toMetas (« _digital »…), telle qu'envoyée à Nuvio. */
-const sansInternes = ({ _digital, _guess, _vf, _vfLu, _vfq, _vffLe, _dejaVf, _vo, ...m }) => m;
+const sansInternes = ({ _digital, _guess, _vf, _vfLu, _vffSur, _vfq, _vffLe, _dejaVf, _vo, ...m }) => m;
 
 /** Paramètres TMDB d'une recherche « discover », avec les règles de qualité communes
  *  et les réglages de la config (pays, genres masqués, note et année minimales, famille). */
@@ -2007,7 +2009,10 @@ function trierRangeeVf(def, today, metas) {
   const from = addDays(today, def.digital[0]), to = addDays(today, def.digital[1]);
   // « Dispo depuis peu » : une date estimée passée compte si les sources confirment la VF (la fiche TMDB, gardée un jour,
   // peut ne pas encore avoir la sortie numérique : Verity le 27 octobre).
-  const when = (m) => (future && m._vffLe) || m._digital || (future || m._vfLu ? m._guess : "");
+  // Et une VFF prouvée par ses sources avant la date annoncée (Heart of the Beast : TRUEFRENCH et VF2 le 5 novembre, date
+  // officielle le 10) : dispo depuis aujourd'hui.
+  const when = (m) => (future && m._vffLe) || (!future && m._vffSur && m._digital > today ? today : m._digital)
+    || (future || m._vfLu ? m._guess : "");
   // « Bientôt dispo » : à la fin, ceux dont on ne sait pas quand la VF viendra (pas encore en VF, doute sans date française).
   const sansDate = (m) => m._vo || (m._vfq && !m._vffLe);
   return metas

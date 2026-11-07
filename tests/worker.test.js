@@ -1529,6 +1529,26 @@ test("dispo_depuis_peu_plateforme_francaise", async () => {
   assert.deepEqual(await lancer(false), []);
 });
 
+// VFF prouvée par les noms des sources (TRUEFRENCH, VF2) avant la date officielle de sortie numérique (Heart of the
+// Beast : fichiers le 5 novembre, date le 10) : déjà « Dispo depuis peu ». Une VF sans preuve forte attend la date.
+test("dispo_depuis_peu_vff_prouvee_avant_la_date", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const lancer = async (avis) => {
+    oublierInfos(); store.clear();
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.includes("/vf.json")) return sourcesDe({ tt908: avis })(u);
+      if (u.includes("/discover/movie")) return Response.json({ results: [{ id: 8, title: "Beast", original_language: "en", release_date: jour(-40), popularity: 9 }], page: 1, total_pages: 1 });
+      if (/\/movie\/8\?/.test(u)) return Response.json(filmVod(8, "en", [["US", 3, jour(-40)], ["US", 4, jour(4)]]));
+      return Response.json({ results: [] });
+    };
+    return (await (await worker.fetch(new Request("https://x/catalog/movie/accueil-vod-semaine.json"), { ...env, LIENS: fakeD1() }, ctx)).json()).metas.map((m) => m.name);
+  };
+  assert.deepEqual(await lancer({ vf: true, sources: 30, vff: true, vfq: { u: 1, x: null, p: 0, f: 1, a: 0 } }), ["Beast"]);
+  assert.deepEqual(await lancer({ vf: true, sources: 30 }), []);
+});
+
 // Les sorties en salle ne prennent pas la place des sorties numériques de la fenêtre : 28 candidats au plus, et des
 // films encore au cinéma, plus populaires, en chassaient L'Île des Souvenirs et Tenzing (en VF, sortis cette semaine).
 test("dispo_depuis_peu_sorties_numeriques_d_abord", async () => {
