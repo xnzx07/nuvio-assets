@@ -74,10 +74,20 @@ export function dispoChezSoi(releases, langue, vod = null) {
     const numerique = releaseDates(releases, [4], ["US"])[0];
     if (numerique) return { date: numerique, vers: false };
     const salle = releaseDates(releases, [2, 3], ["US"])[0];
+    // Date déjà annoncée par le studio (dvdsreleasedates.com, dans la table de la nuit) : sûre, plus une estimation.
+    const annonce = vod && vod.film && /^\d{4}-\d{2}-\d{2}$/.test(vod.film.annonce || "") ? vod.film.annonce : "";
+    if (salle && annonce) return { date: annonce, vers: false };
     if (salle) return { date: ajoute(salle, fenetreVod(vod)), vers: true };
   }
   const connu = releaseDates(releases, [4, 5, 6])[0];
   if (connu) return { date: connu, vers: false };
+  // Film en français : la vidéo à la demande 4 mois après la salle en France (chronologie des médias), comme l'addon.
+  const salleFr = langue === "fr" ? releaseDates(releases, [2, 3], ["FR"])[0] : "";
+  if (salleFr) {
+    const d = new Date(`${salleFr}T12:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + 4);
+    return { date: d.toISOString().slice(0, 10), vers: true };
+  }
   const salle = releaseDates(releases, [2, 3])[0];
   return salle ? { date: ajoute(salle, SALLE_JOURS), vers: true } : { date: "", vers: false };
 }

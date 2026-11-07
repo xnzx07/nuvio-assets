@@ -66,8 +66,12 @@ test("estimation_d_apres_le_distributeur", () => {
   assert.deepEqual(dispoChezSoi(salle, "en", estimationDe(tableVod({ films: {} }), "tt901")), { date: jour(35), vers: true });
   // Une sortie numérique américaine annoncée l'emporte toujours sur l'estimation.
   assert.deepEqual(dispoChezSoi([pays("US", [3, jour(-10)], [4, jour(5)])], "en", vod), { date: jour(5), vers: false });
-  // Film français : ses propres dates, la table n'y change rien.
-  assert.deepEqual(dispoChezSoi([pays("FR", [3, jour(-20)])], "fr", vod), { date: jour(25), vers: true });
+  // Film français : ses propres dates, la table n'y change rien ; la VOD 4 mois après la salle en France.
+  const plusMois = (n, m) => { const d = new Date(`${n}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + m); return d.toISOString().slice(0, 10); };
+  assert.deepEqual(dispoChezSoi([pays("FR", [3, jour(-20)])], "fr", vod), { date: plusMois(jour(-20), 4), vers: true });
+  // Date annoncée par le studio (dvdsreleasedates.com) : sûre, à la place de l'estimation.
+  assert.deepEqual(dispoChezSoi(salle, "en", { film: { jours: 60, annonce: jour(41) }, mediane: 32 }), { date: jour(41), vers: false });
+  assert.deepEqual(dispoChezSoi(salle, "en", { film: { jours: 60, annonce: "bientôt" }, mediane: 32 }), { date: jour(50), vers: true });
   // Table abîmée : ignorée.
   assert.equal(tableVod({ mediane: 32 }), null);
   assert.equal(tableVod({ films: {}, mediane: -3 }).mediane, null);

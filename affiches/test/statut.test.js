@@ -34,12 +34,16 @@ test("dispo_chez_soi : le calendrier américain", async () => {
   // Film français : ses dates, pas les américaines.
   assert.deepEqual(dispoChezSoi([pays("FR", [3, jours(-20)], [4, jours(10)]), pays("US", [3, jours(30)])], "fr"), { date: jours(10), vers: false });
   assert.deepEqual(dispoChezSoi([pays("FR", [3, jours(-20)]), pays("US", [4, jours(60)])], "fr"), { date: jours(60), vers: false });
-  assert.deepEqual(dispoChezSoi([pays("FR", [3, jours(-20)])], "fr"), { date: jours(25), vers: true });
+  // Sans date numérique : la VOD 4 mois après la salle en France (chronologie des médias).
+  const plusMois = (n, m) => { const d = new Date(`${n}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + m); return d.toISOString().slice(0, 10); };
+  assert.deepEqual(dispoChezSoi([pays("FR", [3, jours(-20)])], "fr"), { date: plusMois(jours(-20), 4), vers: true });
   // Film étranger jamais sorti aux États-Unis (une avant-première n'est pas une sortie) : sa première sortie numérique
   // où que ce soit, sinon sa première salle + 45 jours.
   assert.deepEqual(dispoChezSoi([pays("KR", [3, jours(-30)], [4, jours(12)]), pays("US", [1, jours(-60)])], "ko"), { date: jours(12), vers: false });
   assert.deepEqual(dispoChezSoi([pays("KR", [3, jours(-30)]), pays("FR", [3, jours(30)])], "ko"), { date: jours(15), vers: true });
   assert.deepEqual(dispoChezSoi([], "en"), { date: "", vers: false });
+  // Date annoncée par le studio (dvdsreleasedates.com, table de la nuit) : « Dispo le … », pas une estimation.
+  assert.deepEqual(dispoChezSoi([pays("US", [3, jours(-10)])], "en", { film: { jours: 45, annonce: jours(24) }, mediane: 32 }), { date: jours(24), vers: false });
 });
 
 // L'Odyssée : en salle en France, sources en VO seulement, sortie numérique américaine dans 26 jours → « AU CINÉMA »
@@ -70,7 +74,9 @@ test("sources après la date américaine → elles décident", () => {
 test("film français : ses dates", () => {
   const f = film([pays("FR", [3, jours(-20)], [4, jours(10)]), pays("US", [3, jours(-5)])], "", "fr");
   assert.deepEqual(etatSortie(f, AUJ), { sorti: false, statut: "salle", quand: { quoi: "dispo", date: jours(10), vers: false } });
-  assert.deepEqual(etatSortie(film([pays("FR", [3, jours(-50)])], "", "fr"), AUJ), { sorti: true, statut: "nouveau" });
+  // 50 jours après la salle, pas encore en VOD (4 mois) ; 130 jours après, si.
+  assert.equal(etatSortie(film([pays("FR", [3, jours(-50)])], "", "fr"), AUJ).sorti, false);
+  assert.deepEqual(etatSortie(film([pays("FR", [3, jours(-130)])], "", "fr"), AUJ), { sorti: true, statut: "nouveau" });
 });
 
 // Pas encore sorti nulle part : « SORT LE » (sa première sortie), sauf s'il sort directement chez soi ce jour-là.

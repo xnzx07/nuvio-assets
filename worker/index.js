@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.56.0";
+const VERSION = "5.57.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -667,13 +667,22 @@ export function dispoChezSoi(releases, langue, vod = null, plateformeVf = false)
     const francaise = plateformeVf ? releaseDates(releases, [4], ["FR"])[0] : "";
     if (francaise) return { date: francaise, vers: false };
     const salle = releaseDates(releases, [2, 3], ["US"])[0];
+    // Date déjà annoncée par le studio (dvdsreleasedates.com, dans la table de la nuit) : sûre, plus une estimation.
+    const annonce = vod && vod.film && /^\d{4}-\d{2}-\d{2}$/.test(vod.film.annonce || "") ? vod.film.annonce : "";
+    if (salle && annonce) return { date: annonce, vers: false };
     if (salle) return { date: addDays(salle, fenetreVod(vod)), vers: true };
   }
   const connu = releaseDates(releases, [4, 5, 6])[0];
   if (connu) return { date: connu, vers: false };
+  // Film en français : la chronologie des médias, la vidéo à la demande 4 mois après la salle en France (avant, salle +
+  // 45 jours : Les Misérables, Moulin, Karma « Dispo vers le 28 nov. » au lieu de février).
+  const salleFr = langue === "fr" ? releaseDates(releases, [2, 3], ["FR"])[0] : "";
+  if (salleFr) return { date: addMonths(salleFr, VOD_FR_MOIS), vers: true };
   const salle = releaseDates(releases, [2, 3])[0];
   return salle ? { date: addDays(salle, SALLE_JOURS), vers: true } : { date: "", vers: false };
 }
+const VOD_FR_MOIS = 4;
+const addMonths = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
 
 /**
  * Sur une plateforme (abonnement, gratuit, pub, location, achat) en France (watch/providers TMDB). La France seule :

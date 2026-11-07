@@ -39,6 +39,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from dates_numeriques import date_annoncee  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -422,6 +425,16 @@ def main() -> None:
         e = estimer(f["salle"], dist(f), fenetres, mesures, toutes, TODAY)
         if e:
             films[f["imdb"]] = e
+    # Les dates déjà annoncées par les studios que TMDB n'a pas encore (dvdsreleasedates.com) : « Dispo le … », plus une
+    # estimation. L'estimation (jours) reste à côté, pour les lecteurs qui ne connaissent pas « annonce ».
+    annoncees = 0
+    for f in a_estimer:
+        if f["imdb"] in films:
+            d = date_annoncee(f["titre"], f["imdb"])
+            if d and d >= f["salle"]:
+                films[f["imdb"]]["annonce"] = d
+                annoncees += 1
+    print(f"{annoncees} dates de sortie numérique annoncées (dvdsreleasedates.com)")
     nouveau = {"maj": TODAY.isoformat(), "mediane": generale, "mesures": len(appris), "fenetres": fenetres,
                "films": films}
     ancien = None
