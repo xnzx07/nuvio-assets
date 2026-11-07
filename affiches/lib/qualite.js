@@ -106,10 +106,14 @@ export function vffPossible(releases, langue, today) {
     .filter((r) => types.includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter(Boolean).sort();
   const frNumerique = dates([4, 5, 6], "FR")[0];
   if (frNumerique && frNumerique <= today) return true;
+  // Sortie en salle en France avant le fichier américain : ne suffit plus (2026-11-06). Le fichier du store américain
+  // porte souvent la VFQ même quand une VFF existe pour les salles (Primetime, Your Mother Your Mother Your Mother : en
+  // salle en France avant, VFQ seulement). Sans preuve dans les noms (TRUEFRENCH, VFF… : vff, comme Verity et The Dog
+  // Stars), la VFF n'est sûre qu'avec la sortie numérique française ; avant, c'est le doute (affiche coupée en deux).
+  // Pas de sortie numérique américaine du tout : les sources ne viennent pas d'un store américain.
   const fr = dates([2, 3, 4, 5, 6], "FR")[0];
   if (!fr || fr > today) return false;
-  const us = dates([4], "US")[0];
-  return !us || fr <= us;
+  return !dates([4], "US")[0];
 }
 
 /** La prochaine sortie numérique en France, annoncée (AAAA-MM-JJ) : la VFF arrive avec elle. Sinon null. */

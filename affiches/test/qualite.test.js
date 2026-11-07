@@ -256,8 +256,11 @@ const AU_29_OCT = {
 };
 test("vff_possible_d_apres_les_dates", () => {
   const jour = "2026-10-29";
-  assert.equal(vffPossible(AU_29_OCT.verity, "en", jour), true, "en France avant le fichier américain");
-  assert.equal(vffPossible(AU_29_OCT.dogStars, "en", jour), true);
+  // En France avant le fichier américain : plus suffisant (Your Mother Your Mother Your Mother, Primetime : VFQ seulement).
+  // Verity et The Dog Stars restent en VF par leurs noms (TRUEFRENCH, VFF : vff), pas par leurs dates.
+  assert.equal(vffPossible(AU_29_OCT.verity, "en", jour), false, "en France avant le fichier américain : doute");
+  assert.equal(vffPossible(AU_29_OCT.dogStars, "en", jour), false);
+  assert.equal(vffPossible([sortie("FR", ["2026-09-01", 3])], "en", jour), true, "pas de fichier américain");
   assert.equal(vffPossible(AU_29_OCT.hope, "ko", jour), false, "en France après le fichier américain : VFQ");
   assert.equal(vffPossible(AU_29_OCT.byAnyMeans, "en", jour), false, "jamais en France");
   assert.equal(vffPossible(AU_29_OCT.coyote, "en", jour), true, "sortie numérique en France");
