@@ -17,7 +17,7 @@ import make_optional_tiles as mo  # noqa: E402
 ROOT = SCRIPTS.parent
 BRANCH = "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles"
 IDS = ["decennies", "monde", "realisateurs", "acteurs", "recompenses", "univers", "chaines", "enfants", "cultes",
-       "adaptations", "temps", "animes-genres", "documentaires", "sport"]
+       "adaptations", "temps", "animes-genres", "documentaires", "sport", "animes"]
 
 
 def item(id, votes, poster="/p.jpg", backdrop="/b.jpg"):
@@ -25,7 +25,7 @@ def item(id, votes, poster="/p.jpg", backdrop="/b.jpg"):
 
 
 class Definitions(unittest.TestCase):
-    def test_quatorze_collections(self):
+    def test_quinze_collections(self):
         self.assertEqual([c["id"] for c in bo.COLLECTIONS], IDS)
         folders = [f["id"] for c in bo.COLLECTIONS for f in c["folders"]]
         self.assertEqual(len(folders), len(set(folders)))

@@ -8018,5 +8018,182 @@
         "titleLogoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/sport/sport-arts-martiaux-titre.png"
       }
     ]
+  },
+  {
+    "id": "animes",
+    "title": "Anim\u00e9s",
+    "pinToTop": false,
+    "focusGlowEnabled": true,
+    "viewMode": "TABBED_GRID",
+    "showAllTab": false,
+    "folders": [
+      {
+        "id": "animes-decouvrir",
+        "title": "\u00c0 d\u00e9couvrir",
+        "tileShape": "LANDSCAPE",
+        "hideTitle": true,
+        "focusGifEnabled": true,
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "P\u00e9pites r\u00e9centes",
+            "mediaType": "TV",
+            "sortBy": "first_air_date.desc",
+            "filters": {
+              "voteAverageGte": 7.5,
+              "voteCountGte": 30,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Films \u00e0 d\u00e9couvrir",
+            "mediaType": "MOVIE",
+            "sortBy": "primary_release_date.desc",
+            "filters": {
+              "voteAverageGte": 7.2,
+              "voteCountGte": 50,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Classiques",
+            "mediaType": "TV",
+            "sortBy": "vote_average.desc",
+            "filters": {
+              "releaseDateLte": "2009-12-31",
+              "voteCountGte": 100,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          }
+        ],
+        "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-decouvrir.jpg",
+        "focusGifUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-decouvrir.gif",
+        "heroBackdropUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-decouvrir-fond.jpg",
+        "heroVideoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-decouvrir-fond.mp4",
+        "titleLogoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-decouvrir-titre.png"
+      },
+      {
+        "id": "animes-nouveautes",
+        "title": "Nouveaut\u00e9s",
+        "tileShape": "LANDSCAPE",
+        "hideTitle": true,
+        "focusGifEnabled": true,
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Nouvelles s\u00e9ries",
+            "mediaType": "TV",
+            "sortBy": "first_air_date.desc",
+            "filters": {
+              "voteCountGte": 10,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Nouveaux films",
+            "mediaType": "MOVIE",
+            "sortBy": "primary_release_date.desc",
+            "filters": {
+              "voteCountGte": 10,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          }
+        ],
+        "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-nouveautes.jpg",
+        "focusGifUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-nouveautes.gif",
+        "heroBackdropUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-nouveautes-fond.jpg",
+        "heroVideoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-nouveautes-fond.mp4",
+        "titleLogoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-nouveautes-titre.png"
+      },
+      {
+        "id": "animes-populaires",
+        "title": "Populaires",
+        "tileShape": "LANDSCAPE",
+        "hideTitle": true,
+        "focusGifEnabled": true,
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "S\u00e9ries populaires",
+            "mediaType": "TV",
+            "sortBy": "popularity.desc",
+            "filters": {
+              "voteCountGte": 30,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Films populaires",
+            "mediaType": "MOVIE",
+            "sortBy": "popularity.desc",
+            "filters": {
+              "voteCountGte": 50,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          }
+        ],
+        "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-populaires.jpg",
+        "focusGifUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-populaires.gif",
+        "heroBackdropUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-populaires-fond.jpg",
+        "heroVideoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-populaires-fond.mp4",
+        "titleLogoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-populaires-titre.png"
+      },
+      {
+        "id": "animes-top",
+        "title": "Les mieux not\u00e9s",
+        "tileShape": "LANDSCAPE",
+        "hideTitle": true,
+        "focusGifEnabled": true,
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "S\u00e9ries",
+            "mediaType": "TV",
+            "sortBy": "vote_average.desc",
+            "filters": {
+              "voteCountGte": 500,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          },
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "title": "Films",
+            "mediaType": "MOVIE",
+            "sortBy": "vote_average.desc",
+            "filters": {
+              "voteCountGte": 500,
+              "withGenres": "16",
+              "withOriginalLanguage": "ja"
+            }
+          }
+        ],
+        "coverImageUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-top.jpg",
+        "focusGifUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-top.gif",
+        "heroBackdropUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-top-fond.jpg",
+        "heroVideoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-top-fond.mp4",
+        "titleLogoUrl": "https://raw.githubusercontent.com/xnzx07/nuvio-assets/tuiles-optionnelles/animes/animes-top-titre.png"
+      }
+    ]
   }
 ]

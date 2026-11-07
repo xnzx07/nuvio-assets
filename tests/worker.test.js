@@ -656,6 +656,19 @@ test("collections_comme_l_accueil", async () => {
   assert.deepEqual(await modes({ c: ["genres", "sagas"], ca: 1 }), ["FOLLOW_LAYOUT", "FOLLOW_LAYOUT"]);
 });
 
+// Vidéo de fond et GIF au choix : retirés du lien des collections, l'image fixe reste.
+test("collections_sans_video_ni_gif", async () => {
+  const folders = [{ id: "a", title: "A", coverImageUrl: "a.jpg", focusGifEnabled: true, focusGifUrl: "a.gif", heroVideoUrl: "a.mp4" }];
+  globalThis.fetch = async (url) => new Response(String(url).endsWith("/collections/collections.json")
+    ? JSON.stringify([{ id: "genres", title: "Genres", folders }]) : "{}", { headers: { "Content-Type": "application/json" } });
+  const tuile = async (cfg) => (await (await get(`/${seg(cfg)}/collections.json`)).json())[0].folders[0];
+  assert.deepEqual(await tuile({}), folders[0]);
+  const { heroVideoUrl, ...sansVideo } = folders[0];
+  assert.deepEqual(await tuile({ sv: 1 }), sansVideo);
+  assert.deepEqual(await tuile({ sg: 1 }), { ...folders[0], focusGifEnabled: false });
+  assert.deepEqual(await tuile({ sv: 1, sg: 1 }), { ...sansVideo, focusGifEnabled: false });
+});
+
 test("studios_ordre_par_defaut", async () => {
   const folders = ["studio-33", "studio-1", "studio-3", "marvel-studios", "warner-bros", "dc-comics"].map((id) => ({ id, title: id }));
   globalThis.fetch = async (url) => new Response(String(url).endsWith("/collections/collections.json")

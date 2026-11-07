@@ -10,6 +10,14 @@ import { LOGO_V } from "./reglages.js";
 
 export const NOUVEAUTES = [
   {
+    date: "2026-11-07",
+    titre: "Tuiles fixes au choix, et une collection Animés",
+    points: [
+      "Collections : deux nouveaux interrupteurs. « Vidéo de fond des tuiles » : décoche-le si, sur Nuvio TV avec « Arrière-plan en plein écran », les tuiles disparaissent quelques secondes quand tu t'arrêtes dessus. « Tuiles animées » : décoche-le pour des tuiles toujours fixes. Réimporte ensuite les collections.",
+      "Nouvelle collection facultative « Animés » : à découvrir, nouveautés, populaires et les mieux notés.",
+    ],
+  },
+  {
     date: "2026-11-05",
     titre: "Un profil pour chacun, et le Mode famille par âge",
     points: [

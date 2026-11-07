@@ -51,6 +51,7 @@ export const COLLECTIONS = [
   { id: "animes-genres", name: "Animés par genre", optional: true },
   { id: "documentaires", name: "Documentaires", optional: true },
   { id: "sport", name: "Sport", optional: true },
+  { id: "animes", name: "Animés", optional: true },
 ];
 /** Identifiants des collections facultatives (le compte Nuvio les retire quand on les décoche). */
 export const FACULTATIVES = COLLECTIONS.filter((c) => c.optional).map((c) => c.id);
@@ -135,6 +136,8 @@ export function defaults(rows, discover) {
     to: {},           // ordre des tuiles par collection : { idCollection: [positions dans l'ordre voulu] }
     u: false,         // titres pas encore regardables dans les Tendances (masqués par défaut)
     ca: false,        // collections affichées comme l'accueil (bandes-annonces sur Nuvio TV) plutôt qu'en onglets
+    sv: false,        // tuiles sans vidéo de fond (Nuvio TV cache les rangées pendant qu'elle joue, si le fond est en plein écran)
+    sg: false,        // tuiles fixes : pas de GIF quand on s'arrête dessus
     ac: [],           // place des collections sur l'accueil : [{ id, n: rangées avant elle }] (les autres après les rangées)
     k: "",            // clé Gemini personnelle (IA avec le quota de l'utilisateur)
     al: "",           // jeton d'alerte : lien de l'hébergeur d'une copie (rangée « Mise à jour »)
@@ -289,6 +292,8 @@ export function decodeConfig(segment, rows, discover) {
     h: fromMask(raw.h, SEASON_KEYS.map(([k]) => k)) ?? base.h,
     u: raw.u === 1 || raw.u === true,
     ca: raw.ca === 1 || raw.ca === true,
+    sv: raw.sv === 1 || raw.sv === true,
+    sg: raw.sg === 1 || raw.sg === true,
     k: geminiKeyOf(raw.k),
     al: typeof raw.al === "string" && /^[a-f0-9]{24}$/.test(raw.al) ? raw.al : "",
     pf: profilsOf(raw.pf),

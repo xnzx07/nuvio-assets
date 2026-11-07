@@ -1,11 +1,11 @@
 """Collections facultatives (décochées par défaut, au choix de chacun) : définitions, affiches, collections.json.
 
-- COLLECTIONS : les 14 collections et leurs tuiles ; chaque tuile = des rangées que Nuvio sait lire (TMDB DISCOVER,
+- COLLECTIONS : les 15 collections et leurs tuiles ; chaque tuile = des rangées que Nuvio sait lire (TMDB DISCOVER,
   COLLECTION, PERSON, DIRECTOR) ou des rangées de l'addon (lauréats, moins de 90 minutes, mini-séries : Nuvio ne sait
   pas les faire seul).
 - data/optionnelles.json : pour chaque tuile, ses titres les plus vus (affiches de la tuile, fond sans texte) et
   son mur (fond animé). Affiches fixes : refaites seulement quand on relance ce script.
-- collections/collections.json : les 14 collections ajoutées à la fin, images lues sur la branche
+- collections/collections.json : les 15 collections ajoutées à la fin, images lues sur la branche
   tuiles-optionnelles (dessinées par make_optional_tiles.py, workflow optionnelles.yml).
 
 Usage :
@@ -91,6 +91,8 @@ CHANNELS = [("tf1", "TF1+", 1754, (0, 10, 30), (0, 90, 200)), ("francetv", "fran
             ("arte", "Arte", 234, (20, 10, 0), (220, 90, 20)), ("m6", "M6+", 147, (5, 10, 25), (50, 110, 210)),
             ("pluto", "Pluto TV", 300, (10, 10, 10), (230, 200, 0)), ("molotov", "Molotov", 1967, (10, 5, 20), (120, 60, 200))]
 
+ANIME = {"withGenres": "16", "withOriginalLanguage": "ja"}
+
 COLLECTIONS = [
     {"id": "decennies", "title": "Décennies", "style": "saga", "folders": [decade(y) for y in range(1970, 2030, 10)]},
     {"id": "monde", "title": "Cinéma du monde", "style": "saga", "folders": [
@@ -171,6 +173,21 @@ COLLECTIONS = [
         tile("sport-auto", "Sports mécaniques", films_series(withKeywords="233981|830")),
         tile("sport-basket", "Basket", films_series(withKeywords="6496")),
         tile("sport-arts-martiaux", "Arts martiaux", films_series(withKeywords="779"))]},
+    # Animés japonais (animation + japonais) : à découvrir, nouveautés, populaires, les mieux notés.
+    # « ordre » : affiches dans l'ordre de la rangée (sinon les quatre tuiles montreraient les mêmes animés, les plus vus).
+    {"id": "animes", "title": "Animés", "style": "saga", "ordre": True, "folders": [
+        tile("animes-decouvrir", "À découvrir", [
+            disc("Pépites récentes", "TV", "first_air_date.desc", voteAverageGte=7.5, voteCountGte=30, **ANIME),
+            disc("Films à découvrir", "MOVIE", "primary_release_date.desc", voteAverageGte=7.2, voteCountGte=50, **ANIME),
+            disc("Classiques", "TV", "vote_average.desc", releaseDateLte="2009-12-31", voteCountGte=100, **ANIME)]),
+        tile("animes-nouveautes", "Nouveautés", [
+            disc("Nouvelles séries", "TV", "first_air_date.desc", voteCountGte=10, **ANIME),
+            disc("Nouveaux films", "MOVIE", "primary_release_date.desc", voteCountGte=10, **ANIME)]),
+        tile("animes-populaires", "Populaires", [
+            disc("Séries populaires", "TV", voteCountGte=30, **ANIME), disc("Films populaires", "MOVIE", voteCountGte=50, **ANIME)]),
+        tile("animes-top", "Les mieux notés", [
+            disc("Séries", "TV", "vote_average.desc", voteCountGte=500, **ANIME),
+            disc("Films", "MOVIE", "vote_average.desc", voteCountGte=500, **ANIME)])]},
 ]
 
 # ---------- affiches : les titres les plus vus d'une rangée ----------
@@ -184,8 +201,8 @@ ADDON_DISCOVER = {"fac-moins-90": ("movie", {"with_runtime.lte": 90, "with_runti
 ADDON_AWARDS = {"fac-oscars": "oscars", "fac-palmes": "palmes", "fac-cesars": "cesars"}
 
 
-def request(src: dict) -> tuple[str, dict]:
-    """Rangée DISCOVER → (adresse TMDB, paramètres), triée par nombre de votes (les plus vus)."""
+def request(src: dict, ordre: bool = False) -> tuple[str, dict]:
+    """Rangée DISCOVER → (adresse TMDB, paramètres), triée par nombre de votes (les plus vus), ou comme la rangée."""
     tv = src.get("mediaType") == "TV"
     params = {}
     for k, v in src.get("filters", {}).items():
@@ -195,17 +212,19 @@ def request(src: dict) -> tuple[str, dict]:
             params["first_air_date.lte" if tv else "primary_release_date.lte"] = v
         elif k in FILTERS:
             params[FILTERS[k]] = v
-    params["sort_by"] = "vote_count.desc"
+    params["sort_by"] = src.get("sortBy", "popularity.desc") if ordre else "vote_count.desc"
     return f"/discover/{'tv' if tv else 'movie'}", params
 
 
-def _titles(results: list[dict]) -> list[dict]:
-    ranked = sorted((r for r in results if r.get("poster_path")), key=lambda r: -(r.get("vote_count") or 0))
+def _titles(results: list[dict], ordre: bool = False) -> list[dict]:
+    ranked = [r for r in results if r.get("poster_path")]
+    if not ordre:
+        ranked.sort(key=lambda r: -(r.get("vote_count") or 0))
     return [{"poster": r["poster_path"], "backdrop": r.get("backdrop_path")} for r in ranked]
 
 
-def titles(src: dict, pages: int = 1) -> list[dict]:
-    """Titres d'une rangée, les plus vus d'abord → [{"poster", "backdrop"}]."""
+def titles(src: dict, pages: int = 1, ordre: bool = False) -> list[dict]:
+    """Titres d'une rangée, les plus vus d'abord (ou dans l'ordre de la rangée) → [{"poster", "backdrop"}]."""
     kind = src.get("tmdbSourceType")
     if src.get("provider") == "addon":
         cat = src["catalogId"]
@@ -223,8 +242,8 @@ def titles(src: dict, pages: int = 1) -> list[dict]:
         credits = tmdb(f"/person/{src['tmdbId']}/{media}_credits")
         rows = [c for c in credits.get("crew") or [] if c.get("job") == "Director"] if kind == "DIRECTOR" else credits.get("cast") or []
         return _titles(rows)
-    path, params = request(src)
-    return _titles([r for p in range(1, pages + 1) for r in tmdb(path, page=p, **params).get("results") or []])
+    path, params = request(src, ordre)
+    return _titles([r for p in range(1, pages + 1) for r in tmdb(path, page=p, **params).get("results") or []], ordre)
 
 
 def _merge(lists: list[list[dict]], limit: int) -> list[dict]:
@@ -240,13 +259,17 @@ def _merge(lists: list[list[dict]], limit: int) -> list[dict]:
 
 def build_collection(c: dict) -> dict:
     """Affiches de chaque tuile (les plus vues) et de son mur ; une tuile sans affiche est écartée."""
-    folders = []
+    folders, ordre, vues = [], bool(c.get("ordre")), set()
     for f in c["folders"]:
-        tile_titles = _merge([titles(s) for s in f["sources"]], TILE)
+        lists = [titles(s, ordre=ordre) for s in f["sources"]]
+        if ordre:   # pas deux fois le même animé d'une tuile à l'autre
+            lists = [[t for t in x if t["poster"] not in vues] for x in lists]
+        tile_titles = _merge(lists, TILE)
+        vues |= {t["poster"] for t in tile_titles}
         if not tile_titles:
             print(f"{f['id']} : aucune affiche, tuile écartée")
             continue
-        wall = _merge([titles(s, pages=3) for s in f["sources"]], WALL)
+        wall = _merge([titles(s, pages=3, ordre=ordre) for s in f["sources"]], WALL)
         folders.append({**f, "posters": [t["poster"] for t in tile_titles],
                         "backdrop": next((t["backdrop"] for t in tile_titles if t["backdrop"]), None),
                         "wall": [t["poster"] for t in wall]})

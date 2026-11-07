@@ -132,7 +132,7 @@ hoteRefresh();
 
 
 export function configurePage({ origin, cfg, rows, discover, providers, collections, defaults, regions, genres, languages, sorts, seasons, ages = [], maxCustom, season, copy = false, fixed = "", fixedOk = false, apercus = origin }) {
-  const plain = (c) => ({ n: c.n, r: c.r, p: c.p, d: c.d, c: c.c, o: c.o, x: c.x, g: c.g, e: c.e, m: c.m, a: c.a, f: c.f, h: c.h, t: c.t, to: c.to || {}, ac: c.ac || [], u: c.u, ca: c.ca, k: c.k, al: c.al, pf: c.pf || [] });
+  const plain = (c) => ({ n: c.n, r: c.r, p: c.p, d: c.d, c: c.c, o: c.o, x: c.x, g: c.g, e: c.e, m: c.m, a: c.a, f: c.f, h: c.h, t: c.t, to: c.to || {}, ac: c.ac || [], u: c.u, ca: c.ca, sv: c.sv, sg: c.sg, k: c.k, al: c.al, pf: c.pf || [] });
   const data = {
     origin, maxCustom, fixed, fixedOk,
     cfg: plain(cfg),
@@ -287,6 +287,8 @@ ${copy ? "" : `        <p class="sub">Le lien partagé sature ? <a href="${origi
         </dialog>
         <button type="button" class="btn line" id="acc-ouvrir">Ordre de l'accueil</button>
         <label class="switch"><input type="checkbox" id="g-coll-accueil"><span><b>Ouvrir les collections comme l'accueil</b><small>Une tuile ouverte montre ses rangées comme l'accueil, au lieu des onglets. Sur Nuvio TV, la bande-annonce du film choisi se lance alors dans le fond, si elle est activée dans les réglages de l'accueil (Paramètres → Disposition). Sur téléphone, rien ne change pour les bandes-annonces.</small></span></label>
+        <label class="switch"><input type="checkbox" id="g-coll-video"><span><b>Vidéo de fond des tuiles</b><small>Quand tu t'arrêtes sur une tuile, une courte vidéo joue dans le fond. Sur Nuvio TV, avec « Arrière-plan en plein écran » activé, elle cache les tuiles le temps qu'elle joue : décoche pour garder une image fixe. Réimporte ensuite les collections.</small></span></label>
+        <label class="switch"><input type="checkbox" id="g-coll-gif"><span><b>Tuiles animées</b><small>La tuile choisie s'anime. Décoche pour des tuiles toujours fixes. Réimporte ensuite les collections.</small></span></label>
         <dialog id="acc-dialog" aria-labelledby="acc-titre">
           <div class="coll-dlg-head"><h2 id="acc-titre">L'ordre de l'accueil</h2><button type="button" class="btn line" id="acc-fermer">Fermer</button></div>
           <div class="coll-dlg-body">
@@ -1229,6 +1231,8 @@ function compact(st) {
   if (st.f) o.f = st.f === true || st.f === 10 ? 1 : st.f;
   if (st.u) o.u = 1;
   if (st.ca) o.ca = 1;
+  if (st.sv) o.sv = 1;
+  if (st.sg) o.sg = 1;
   if (st.k) o.k = st.k;
   if (st.al) o.al = st.al;
   // Profils (lien principal) : jamais dans une adresse montrée ou partagée (vu, sansCle, shared les retirent).
@@ -2506,6 +2510,8 @@ function renderAll() {
   $("g-year").value = String(state.a); renderFamille();
   $("g-unreleased").checked = !state.u;
   $("g-coll-accueil").checked = state.ca;
+  $("g-coll-video").checked = !state.sv;
+  $("g-coll-gif").checked = !state.sg;
   renderCollections();
   update();
 }
@@ -2527,6 +2533,8 @@ function renderFamille() {
 }
 $("g-unreleased").addEventListener("change", () => { state.u = !$("g-unreleased").checked; update(); });
 $("g-coll-accueil").addEventListener("change", () => { state.ca = $("g-coll-accueil").checked; update(); });
+$("g-coll-video").addEventListener("change", () => { state.sv = !$("g-coll-video").checked; update(); });
+$("g-coll-gif").addEventListener("change", () => { state.sg = !$("g-coll-gif").checked; update(); });
 
 function copy(btn, node, label) {
   const ok = () => {
