@@ -36,11 +36,10 @@ const VF = /\b(TRUEFRENCH|FRENCH|VFF|VFI|VF2|VOF)\b|\bMULTI\b.*\bVF\b|Multi Audi
 // « FRENCH.CA », « MULTi.CA » : la version du Canada, une VFQ aussi.
 const VFQ = /\b(VFQ|QU[EÉ]BEC|QU[EÉ]B[EÉ]COIS)\b|\b(FRENCH|MULTI)[ ._-]CA\b/i;
 const VF_FRANCE = /\b(TRUEFRENCH|VFF|VFI|VF2)\b/i;
-// Groupes qui écrivent la VFQ quand c'en est une (« FRENCH.CA », « MULTi.VFQ ») : leur « FRENCH » seul est donc une VFF.
-// SUPPLY : FRENCH.CA et MULTi.VFQ pour Evil Dead Burn, MULTi CA pour Primetime, FRENCH pour Beware Boiúna (en VFF,
-// confirmé le 4 novembre 2026). Pas Slay3R : son « MULTi.FRENCH » de Pressure était une VFQ.
-const GROUPE_FIABLE = /-SUPPLY(?![A-Za-z0-9])/i;
-const vffSure = (t) => VF_FRANCE.test(t) || (/\bFRENCH\b/i.test(t) && GROUPE_FIABLE.test(t) && !VFQ.test(t));
+// Plus aucun groupe cru sur parole pour un « FRENCH » seul (2026-11-07) : SUPPLY, qui écrit d'habitude « CA » pour la
+// VFQ, a sorti Leviticus en « MULTi.FRENCH » avec une piste fr-CA (VFQ, vue dans le lecteur). Seuls TRUEFRENCH, VFF,
+// VFI, VF2 prouvent une VF de France.
+const vffSure = (t) => VF_FRANCE.test(t);
 // Doublage fait par une IA (« MULTi.AI ») : pas une VF.
 const IA = /\bMULTI[ ._-]?AI\b/i;
 const enVf = (t) => VF.test(t) && !IA.test(t) && !(VFQ.test(t) && !VF_FRANCE.test(t));
