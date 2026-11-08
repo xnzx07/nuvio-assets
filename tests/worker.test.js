@@ -1788,3 +1788,24 @@ test("vfq_possible_dans_les_rangees_et_la_fiche", async () => {
   assert.match(fiche.description, /VFQ possible/);
   assert.doesNotMatch((await (await get("/meta/movie/tmdb:6.json")).json()).meta.description || "", /VFQ/);
 });
+
+// Tendances du jour rangées par la photo (N°1 à 20) : les sources sont lues aussi, la ligne de la carte dit la même chose
+// que la fiche (Hope, N°12 le 8 novembre 2026 : « Dispo depuis le 13 oct. » dans la rangée, « VFQ possible · VFF le
+// 28 févr. » sur la fiche).
+test("tendances_de_la_photo_disent_vfq_possible_comme_la_fiche", async () => {
+  const { AFFICHES_URL } = await import("../worker/reglages.js");
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  oublierInfos(); store.clear();
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.startsWith(`${AFFICHES_URL}/tendances/movie.json`)) return new Response(JSON.stringify({ ids: [3] }));
+    if (u.includes("/vf.json")) return sourcesDe({ tt903: { vf: true, sources: 8, vfqPossible: true, vffLe: jour(100) } })(u);
+    if (u.includes("/trending/movie/day")) return new Response(JSON.stringify({ results: u.includes("page=1") ? [{ id: 3, title: "Hope", original_language: "ko", release_date: jour(-40) }] : [], page: 1, total_pages: 1 }));
+    if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify({ ...filmVod(3, "ko", [["US", 4, jour(-26)]]), title: "Hope" }));
+    return new Response(JSON.stringify({ results: [] }));
+  };
+  const [hope] = (await (await get("/catalog/movie/accueil-top10.json")).json()).metas;
+  assert.equal(hope.name, "Hope");
+  assert.match(hope.description, /^📅 VFQ possible · VFF le/);
+});

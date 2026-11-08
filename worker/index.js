@@ -1736,6 +1736,9 @@ async function fetchReleasedPage(env, ctx, def, kind, page, today, opts) {
   }
   picked = [...enTete, ...picked];
   if (!picked.length) return [];
+  // Titres classés de la photo (pas passés par filmsRegardables) : leurs sources lues aussi (un appel pour la page), sinon
+  // la carte disait la date seule quand la fiche disait « VFQ possible » (Hope, N°12 le 8 novembre 2026).
+  if (kind === "movie" && !opts.sources) opts = { ...opts, lireSources: true };
   const metas = await toMetas(env, ctx, picked, kind, opts, today);
   return metas.map(sansInternes);
 }
