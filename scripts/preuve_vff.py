@@ -5,7 +5,8 @@ Une preuve suffit pour classer un film « vf » ; son absence ne prouve rien (le
    lu une fois par passage, seulement s'il y a un film à examiner), puis la fiche du film, qui doit avoir la même année
    (±1 an) et le même réalisateur : deux films peuvent porter le même titre (« Obsessed » 2009 et 2014). Lu avec
    Scrapling, sans protection à franchir (pas de robots.txt, pas de conditions contre la lecture), une page par seconde.
-2. Wikipédia FR (API, CC BY-SA) : la distribution de l'article note le comédien de doublage, « (VF : …) ». « VQ »
+2. Wikipédia FR (API, CC BY-SA) : la distribution de l'article note le comédien de doublage, « (VF : …) » ou
+   « {{Doublage|VF=…}} ». « VQ »
    (Québec) seul ne compte pas, ni « VFB » : seule la VF de France compte.
 Scrapling absent ou site muet : pas de preuve, jamais d'erreur (le film suit le chemin habituel).
 """
@@ -95,8 +96,10 @@ def preuve_rsdoublage(titres: list[str], annee: int, realisateurs: set[str]) -> 
 
 
 # « (VF : José Luccioni ; VQ : …) », « (VQ : … ; VF : …) », « ([[Version française|VF]] : …) ». « VFQ : », « VFB : »
-# ne passent pas : après VF ou VFF, le deux-points.
-VF_WIKI = re.compile(r"[(;]\s*(?:\[\[[^\]|]*\|)?VFF?(?:\]\])?\s*:")
+# ne passent pas : après VF ou VFF, le deux-points. Et le modèle « {{Doublage|VF=Thierry Ragueneau}} », celui des
+# séries surtout (Le Protecteur, The IT Crowd : passés pour « sans VF » à l'essai du 2026-11-08) ; « VQ= », « VF_lien= »
+# ne passent pas.
+VF_WIKI = re.compile(r"[(;]\s*(?:\[\[[^\]|]*\|)?VFF?(?:\]\])?\s*:|\{\{\s*[Dd]oublage\s*(?:\|[^{}|]*)*?\|\s*VFF?\s*=\s*[^|}\s]")
 
 
 def a_une_vf(wikitext: str) -> bool:

@@ -64,6 +64,15 @@ class Wikipedia(unittest.TestCase):
         self.assertFalse(pv.a_une_vf("* Al Pacino (VFQ : Luis de Cespedes ; VFB : X)"))
         self.assertFalse(pv.a_une_vf("Le film est sorti en VF en 2003."))
 
+    def test_modele_doublage(self):
+        """Le modèle des séries : Le Protecteur, The IT Crowd."""
+        self.assertTrue(pv.a_une_vf("* [[Simon Baker]] {{Doublage|VF=Thierry Ragueneau}} : Nick Fallin"))
+        self.assertTrue(pv.a_une_vf("* X {{Doublage|VQ=Untel|VF=Éric Aubrahn|VF_lien=non}} : Jake"))
+        self.assertTrue(pv.a_une_vf("* X {{doublage | VFF = Untel}}"))
+        self.assertFalse(pv.a_une_vf("* X {{Doublage|VQ=Untel}} : Jake"))
+        self.assertFalse(pv.a_une_vf("* X {{Doublage|VQ=Untel|VF_lien=non}}"))
+        self.assertFalse(pv.a_une_vf("* X {{Doublage|VF=}}"))
+
 
 class SansVf(unittest.TestCase):
     def test_preuve_sans_debrideur(self):
