@@ -75,6 +75,25 @@ class SansVf(unittest.TestCase):
         avis.assert_not_called()
         self.assertEqual(suivi["tt1"], {"id": 1, "e": "vf", "j": "2026-11-05", "n": 0, "p": "rsdoublage"})
 
+    def test_series_a_part(self):
+        """Une série notée « s » ; les films et les séries sans VF sortent dans deux listes."""
+        suivi = {}
+        for j in ("2026-11-01", "2026-11-04"):
+            sansvf.noter(suivi, "tt1", 1, "non", j)
+            sansvf.noter(suivi, "tt2", 2, "non", j, serie=True)
+        self.assertEqual(sansvf.films_de(suivi), ["tt1"])
+        self.assertEqual(sansvf.films_de(suivi, series=True), ["tt2"])
+        sansvf.noter(suivi, "tt2", 2, "doute", "2026-12-01")     # revue plus tard : reste une série
+        self.assertEqual(suivi["tt2"]["s"], 1)
+
+    def test_addon_pas_a_jour_pour_les_series(self):
+        """Un addon qui ne renvoie pas type « series » a jugé la série comme un film : « doute », rien de marqué."""
+        with mock.patch.dict("os.environ", {"TMDB_API_KEY": "x"}), mock.patch.object(sansvf, "_json", return_value={"etat": "non"}) as lire:
+            self.assertEqual(sansvf.avis_addon("tt2", serie=True), {"etat": "doute"})
+            self.assertIn(b'"type": "series"', lire.call_args[0][0].data)
+        with mock.patch.dict("os.environ", {"TMDB_API_KEY": "x"}), mock.patch.object(sansvf, "_json", return_value={"etat": "non", "type": "series"}):
+            self.assertEqual(sansvf.avis_addon("tt2", serie=True)["etat"], "non")
+
     def test_sans_preuve_avis_habituel(self):
         suivi = {}
         with mock.patch.object(sansvf, "preuve_vff", return_value=None), \

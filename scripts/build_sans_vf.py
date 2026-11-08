@@ -40,10 +40,13 @@ SUIVI = ROOT / "data" / "sans-vf-suivi.json"
 ADDON = "https://nuvio-assets.xnzxflix.workers.dev"
 AGENT = "catalogue-fr-nuit"
 TMDB = "https://api.themoviedb.org/3"
-LANGUES = "ko|ja|zh|cn|th|hi|ta|te|ml|tr|es|pt|it|de|ru|fa|id|vi|tl|ar|sv|da|no|pl|nl"
+# L'anglais aussi depuis le 2026-11-08 (Bad Genius, le remake de 2024) : un film anglais a presque toujours sa VF, que
+# Torrentio voit tout de suite, sans appel au débrideur ; seuls les vrais oubliés vont jusqu'à Lumio et StreamFusion.
+LANGUES = "en|ko|ja|zh|cn|th|hi|ta|te|ml|tr|es|pt|it|de|ru|fa|id|vi|tl|ar|sv|da|no|pl|nl"
 VOTES_MIN = 30
 PAGES_MAX = 15
 AVIS_MAX = 40            # appels à l'addon par nuit, Torrentio seul compris
+SERIES_MIN = 12          # dont, au moins, pour les nouvelles séries
 CONFIRMER_JOURS = 2
 REVOIR_DOUTE = 30
 REVOIR_NON = 60
@@ -70,11 +73,17 @@ def cle_interne():
     return hashlib.sha256(f"tri:{os.environ['TMDB_API_KEY']}".encode()).hexdigest()[:24]
 
 
-def avis_addon(imdb):
-    req = urllib.request.Request(f"{ADDON}/sans-vf/avis", data=json.dumps({"imdb": imdb}).encode(), method="POST",
+def avis_addon(imdb, serie=False):
+    """L'avis de l'addon. Série : seulement si l'addon dit l'avoir jugée comme une série (type renvoyé) ; une version de
+    l'addon qui ne connaît pas encore les séries l'aurait jugée comme un film : « doute »."""
+    corps = {"imdb": imdb, **({"type": "series"} if serie else {})}
+    req = urllib.request.Request(f"{ADDON}/sans-vf/avis", data=json.dumps(corps).encode(), method="POST",
                                  # Sans lui, Cloudflare répond 403 (erreur 1010) à l'en-tête par défaut de Python-urllib.
                                  headers={"Content-Type": "application/json", "x-tri": cle_interne(), "User-Agent": AGENT})
-    return _json(req, essais=1)
+    avis = _json(req, essais=1)
+    if serie and avis.get("type") != "series" and not avis.get("plafond"):
+        return {"etat": "doute"}
+    return avis
 
 
 def a_revoir(suivi, jour):
@@ -88,17 +97,18 @@ def a_revoir(suivi, jour):
     return confirmer + non + doute
 
 
-def noter(suivi, imdb, tmdb_id, etat, jour, preuve=None):
-    """L'état d'un film après son examen. Un « non » ne compte que s'il suit un autre « non ». preuve : la source qui a
-    prouvé la VF sans débrideur (scripts/preuve_vff.py)."""
+def noter(suivi, imdb, tmdb_id, etat, jour, preuve=None, serie=False):
+    """L'état d'un titre après son examen. Un « non » ne compte que s'il suit un autre « non ». preuve : la source qui a
+    prouvé la VF sans débrideur (scripts/preuve_vff.py). serie : une série (« s » dans le suivi)."""
     avant = suivi.get(imdb, {})
     n = avant.get("n", 0) + 1 if etat == "non" and avant.get("e") == "non" else 1 if etat == "non" else 0
-    suivi[imdb] = {"id": tmdb_id, "e": etat, "j": jour, "n": n, **({"p": preuve} if preuve else {})}
+    suivi[imdb] = {"id": tmdb_id, "e": etat, "j": jour, "n": n, **({"p": preuve} if preuve else {}),
+                   **({"s": 1} if serie or avant.get("s") else {})}
 
 
-def films_de(suivi):
-    """La liste : deux « non » d'affilée, rien d'autre."""
-    return sorted(t for t, x in suivi.items() if x["e"] == "non" and x["n"] >= 2)
+def films_de(suivi, series=False):
+    """La liste : deux « non » d'affilée, rien d'autre. series : les séries, sinon les films."""
+    return sorted(t for t, x in suivi.items() if x["e"] == "non" and x["n"] >= 2 and bool(x.get("s")) == series)
 
 
 def plateforme_en_france(fiche):
@@ -106,13 +116,14 @@ def plateforme_en_france(fiche):
     return any(fr.get(k) for k in ("flatrate", "free", "ads", "rent", "buy"))
 
 
-def nouveaux(suivi, jour):
-    """Les films pas encore suivis, du plus populaire au moins populaire (itérateur : lus au fur et à mesure)."""
+def nouveaux(suivi, jour, serie=False):
+    """Les titres pas encore suivis, du plus populaire au moins populaire (itérateur : lus au fur et à mesure)."""
     limite = (dt.date.fromisoformat(jour) - dt.timedelta(days=365)).isoformat()
-    vus = {x["id"] for x in suivi.values()}
+    vus = {x["id"] for x in suivi.values() if bool(x.get("s")) == serie}
     for page in range(1, PAGES_MAX + 1):
-        d = tmdb("/discover/movie", with_original_language=LANGUES, sort_by="popularity.desc", page=page,
-                 **{"vote_count.gte": VOTES_MIN, "primary_release_date.lte": limite})
+        d = tmdb("/discover/tv" if serie else "/discover/movie", with_original_language=LANGUES, sort_by="popularity.desc",
+                 page=page, **{"vote_count.gte": VOTES_MIN,
+                               ("first_air_date.lte" if serie else "primary_release_date.lte"): limite})
         for it in d.get("results", []):
             if it["id"] not in vus:
                 yield it["id"]
@@ -120,47 +131,51 @@ def nouveaux(suivi, jour):
             return
 
 
-def examiner(suivi, imdb, tmdb_id, fiche, jour):
-    """Un film examiné. False : le plafond de la nuit est atteint, rien n'a été noté."""
+def examiner(suivi, imdb, tmdb_id, fiche, jour, serie=False):
+    """Un titre examiné. False : le plafond de la nuit est atteint, rien n'a été noté."""
     if plateforme_en_france(fiche):
-        noter(suivi, imdb, tmdb_id, "plateforme", jour)
+        noter(suivi, imdb, tmdb_id, "plateforme", jour, serie=serie)
         return True
     # Une VF de France prouvée ailleurs (RS Doublage, Wikipédia) : « vf » pour toujours, sans appel au débrideur.
     preuve = preuve_vff(fiche)
     if preuve:
-        noter(suivi, imdb, tmdb_id, "vf", jour, preuve)
+        noter(suivi, imdb, tmdb_id, "vf", jour, preuve, serie=serie)
         return True
-    avis = avis_addon(imdb)
+    avis = avis_addon(imdb, serie)
     if avis.get("plafond"):
         return False
-    noter(suivi, imdb, tmdb_id, avis.get("etat") if avis.get("etat") in ("non", "vf") else "doute", jour)
+    noter(suivi, imdb, tmdb_id, avis.get("etat") if avis.get("etat") in ("non", "vf") else "doute", jour, serie=serie)
     return True
 
 
-def fiche_de(tmdb_id):
+def fiche_de(tmdb_id, serie=False):
     # En français : RS Doublage range les films par leur titre français (preuve_vff).
-    return tmdb(f"/movie/{tmdb_id}", language="fr-FR", append_to_response="external_ids,watch/providers,credits")
+    return tmdb(f"/{'tv' if serie else 'movie'}/{tmdb_id}", language="fr-FR",
+                append_to_response="external_ids,watch/providers,credits")
 
 
 def passer(suivi, jour):
     appels = 0
-    # Les films déjà suivis d'abord : confirmer une lecture, ou retirer de la liste un film qui a changé.
+    # Les titres déjà suivis d'abord : confirmer une lecture, ou retirer de la liste un titre qui a changé.
     for imdb in a_revoir(suivi, jour):
         if appels >= AVIS_MAX:
             return
         appels += 1
-        if not examiner(suivi, imdb, suivi[imdb]["id"], fiche_de(suivi[imdb]["id"]), jour):
+        serie = bool(suivi[imdb].get("s"))
+        if not examiner(suivi, imdb, suivi[imdb]["id"], fiche_de(suivi[imdb]["id"], serie), jour, serie):
             return
-    for tmdb_id in nouveaux(suivi, jour):
-        if appels >= AVIS_MAX:
-            return
-        fiche = fiche_de(tmdb_id)
-        imdb = (fiche.get("external_ids") or {}).get("imdb_id")
-        if not imdb:
-            continue
-        appels += 1
-        if not examiner(suivi, imdb, tmdb_id, fiche, jour):
-            return
+    # Puis les nouveaux : des films, en laissant SERIES_MIN appels au moins aux séries.
+    for serie, plafond in ((False, AVIS_MAX - SERIES_MIN), (True, AVIS_MAX)):
+        for tmdb_id in nouveaux(suivi, jour, serie):
+            if appels >= plafond:
+                break
+            fiche = fiche_de(tmdb_id, serie)
+            imdb = (fiche.get("external_ids") or {}).get("imdb_id")
+            if not imdb:
+                continue
+            appels += 1
+            if not examiner(suivi, imdb, tmdb_id, fiche, jour, serie):
+                return
 
 
 def main():
@@ -173,11 +188,11 @@ def main():
         print(f"Panne, le reste attendra demain : {e}", file=sys.stderr)
         code = 1
     SUIVI.write_text(json.dumps(suivi, indent=0, sort_keys=True) + "\n", encoding="utf-8")
-    films = films_de(suivi)
-    avant = json.loads(OUT.read_text(encoding="utf-8")).get("films") if OUT.exists() else None
-    if films != avant:
-        OUT.write_text(json.dumps({"maj": jour, "films": films}, indent=0) + "\n", encoding="utf-8")
-    print(f"{len(suivi)} films suivis, {len(films)} sans VF.")
+    films, series = films_de(suivi), films_de(suivi, series=True)
+    avant = json.loads(OUT.read_text(encoding="utf-8")) if OUT.exists() else {}
+    if films != avant.get("films") or series != avant.get("series", []):
+        OUT.write_text(json.dumps({"maj": jour, "films": films, "series": series}, indent=0) + "\n", encoding="utf-8")
+    print(f"{len(suivi)} titres suivis, {len(films)} films et {len(series)} séries sans VF.")
     return code
 
 

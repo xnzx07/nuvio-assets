@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.59.0";
+const VERSION = "5.60.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -570,7 +570,8 @@ function sansVfListe() {
       .then((r) => (r.ok ? r.json() : null)).catch(() => null)
       .then((d) => {
         const lu = d && Array.isArray(d.films);
-        if (lu) etat.films = new Set(d.films);
+        // Films et séries ensemble (data/sans-vf.json : « films », « series » depuis le 2026-11-08) : des identifiants IMDb.
+        if (lu) etat.films = new Set([...d.films, ...(Array.isArray(d.series) ? d.series : [])]);
         etat.until = Date.now() + (lu ? VOD_MS : VOD_ECHEC_MS);
         etat.promesse = null;
         return etat.films;
@@ -1038,8 +1039,9 @@ async function avisDuJour(env, cles, origine = "affiches") {
  * (Locataires : « 2 sources trouvées, aucune prête chez AllDebrid » ; « Aucune source trouvée » : le site cherché était
  * peut-être en panne). { plafond: true } : son plafond du jour atteint (voir PLAFONDS), à part de celui des rangées.
  */
-async function avisSansVf(env, imdb) {
-  const cle = `movie/${imdb}`;
+async function avisSansVf(env, imdb, serie = false) {
+  // Série : son premier épisode (S1 É1), comme les affiches jugent une série.
+  const cle = serie ? `series/${imdb}:1:1` : `movie/${imdb}`;
   const torrentio = (await lireVf(env, [cle])).get(cle);
   if (!torrentio || !(torrentio.sources > 0)) return { etat: "doute" };
   if (torrentio.vf) return { etat: "vf" };
@@ -2235,9 +2237,9 @@ async function catalog(env, ctx, type, id, extra, today, cfg, prefixe = "") {
   // Fiches TMDB de la page (extraInfo) et celles restées sans réponse (limite d'appels de TMDB, panne).
   const bilan = { vus: 0, rates: 0 };
   const lues = await catalogPage(env, ctx, type, id, extra, today, cfg, bilan, prefixe);
-  // Les vieux films sans VF (sansVfListe) : hors des rangées, trouvables par la recherche seulement.
-  const sansVfConnus = type === "movie" && !extra.search ? await sansVfListe() : new Set();
-  const metas = sansVfConnus.size ? lues.filter((m) => !sansVfConnus.has(m.imdb_id)) : lues;
+  // Les vieux films et séries sans VF (sansVfListe) : hors des rangées, trouvables par la recherche seulement.
+  const sansVfConnus = !extra.search ? await sansVfListe() : new Set();
+  const metas = sansVfConnus.size ? lues.filter((m) => !sansVfConnus.has(m.imdb_id || m.id)) : lues;
   metas.partial = lues.partial;
   // Plus d'une sur dix sans ses infos (IMDb, dates, logo, bande-annonce) : page incomplète, gardée 5 min seulement.
   if (metas.length && bilan.rates > bilan.vus / 10) metas.degrade = true;
@@ -2481,7 +2483,7 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
   ]);
   // En VO seulement (comme pas sorti : seule la VF compte) : d'après les sources seulement (voir releaseNote).
   const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
-  const note = movie && (await sansVfListe()).has(imdb) ? "Sans VF"
+  const note = (await sansVfListe()).has(imdb) ? "Sans VF"
     : movie ? releaseNote(releases, d.original_language, today, etat, vod) : await noteSerie(env, d, imdb, wp, today);
   // La même date que l'affiche et les rangées : la sortie numérique américaine (dispoChezSoi), ou son estimation.
   const dispo = movie ? dispoChezSoi(releases, d.original_language, vod).date : "";
@@ -3345,7 +3347,9 @@ const app = {
       }
       const body = await request.json().catch(() => ({}));
       if (!/^tt\d{1,10}$/.test(body.imdb || "")) return new Response(JSON.stringify({ etat: "doute" }), { headers: entete });
-      return new Response(JSON.stringify(await avisSansVf(env, body.imdb)), { headers: entete });
+      // type « series » renvoyé tel quel : le script sait que cette version de l'addon juge bien les séries.
+      const serie = body.type === "series";
+      return new Response(JSON.stringify({ ...(await avisSansVf(env, body.imdb, serie)), type: serie ? "series" : "movie" }), { headers: entete });
     }
     if (path === "/tendances/tri" && request.method === "POST") {
       if (!same(request.headers.get("x-tri") || "", await triCle(env))) return json({ error: "interdit" }, 0);

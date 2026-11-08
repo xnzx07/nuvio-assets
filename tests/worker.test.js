@@ -1717,7 +1717,9 @@ const avisSansVf = async (reponses, envPlus = {}) => {
   };
   const e = { ...env, LIENS: fakeD1(), LUMIO_URL: "https://lumio.test", STREAMFUSION_URL: "https://sf.test", ...envPlus };
   const res = await worker.fetch(new Request("https://x/sans-vf/avis", { method: "POST", headers: { "x-tri": cleInterne(env.TMDB_API_KEY) }, body: JSON.stringify({ imdb: "tt1" }) }), e, ctx);
-  return res.json();
+  const { type, ...avis } = await res.json();
+  assert.equal(type, "movie");
+  return avis;
 };
 const REFUS_LUMIO = [{ name: "⚙️ Lumio", description: "5 sources,\nmais aucune ne passe vos filtres\nAssouplissez « Langues » dans les réglages du profil." }];
 const REFUS_SF = [{ name: "🚩 Stream-Fusion", title: "Aucun résultat trouvé, 9 exclus en raison du ou des paramètre(s) suivant(s) : exclusion langue", url: "https://sf.test/x" }];
@@ -1748,6 +1750,24 @@ test("avis_sans_vf_le_doute_ne_marque_rien", async () => {
 });
 test("avis_sans_vf_son_propre_plafond", async () => {
   assert.deepEqual(await avisSansVf({ torrentio: TORRENTIO_NON, lumio: REFUS_LUMIO, sf: REFUS_SF }, { LIENS: null }), { plafond: true });
+});
+// Série (Bad Genius: The Series) : jugée sur son premier épisode, comme les affiches ; le type est renvoyé pour que le
+// script sache que cet addon juge bien les séries.
+test("avis_sans_vf_d_une_serie", async () => {
+  const lus = [];
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    lus.push(u);
+    if (u.includes("/vf.json")) return Response.json({ "series/tt1:1:1": TORRENTIO_NON });
+    if (u.startsWith("https://lumio.test")) return Response.json({ streams: REFUS_LUMIO });
+    if (u.startsWith("https://sf.test")) return Response.json({ streams: REFUS_SF });
+    return new Response("{}");
+  };
+  const e = { ...env, LIENS: fakeD1(), LUMIO_URL: "https://lumio.test", STREAMFUSION_URL: "https://sf.test" };
+  const res = await worker.fetch(new Request("https://x/sans-vf/avis", { method: "POST", headers: { "x-tri": cleInterne(env.TMDB_API_KEY) },
+    body: JSON.stringify({ imdb: "tt1", type: "series" }) }), e, ctx);
+  assert.deepEqual(await res.json(), { etat: "non", type: "series" });
+  assert.ok(lus.some((u) => u.startsWith("https://lumio.test/stream/series/tt1:1:1.json")), lus.join(", "));
 });
 test("avis_sans_vf_refuse_sans_la_cle", async () => {
   for (const headers of [{}, { "x-tri": "fausse" }]) {
