@@ -1268,6 +1268,15 @@ function cinemaNote(releases, region, date, today) {
   const first = releaseDates(releases, [1, 2, 3, 4]).find((d) => d > today) || (date > today ? date : "");
   return first ? `Sort le ${withYear(first)}` : "Date de sortie pas encore annoncée";
 }
+/**
+ * « Les plus attendus » : la date de dispo chez soi (dispoChezSoi, celle de l'affiche) après celle du cinéma, quand on
+ * la connaît : « Au cinéma le 11 nov. · Dispo vers le 15 déc. ». L'Agenda d'AppTV range le film à ce jour-là.
+ */
+function avecDispoChezSoi(note, chezSoi, today) {
+  if (!note || !chezSoi || !(chezSoi.date > today)) return note;
+  const quand = shortDate(chezSoi.date) + (chezSoi.date.slice(0, 4) === today.slice(0, 4) ? "" : ` ${chezSoi.date.slice(0, 4)}`);
+  return `${note} · Dispo ${chezSoi.vers ? "vers le" : "le"} ${quand}`;
+}
 const cinemaHere = (releases, region, today) => releaseDates(releases, [2, 3], [region]).find((d) => d > today) || "";
 
 const IMG = "https://image.tmdb.org/t/p/";
@@ -1318,7 +1327,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
     // séries : l'épisode de la semaine.
     const note = kind !== "movie" ? episodeNote(infos[i].episode, today)
       : sansVfConnus.has(ids[i]) ? "Sans VF"
-      : opts.upcoming ? cinemaNote(infos[i].releases, opts.region, date, today)
+      : opts.upcoming ? avecDispoChezSoi(cinemaNote(infos[i].releases, opts.region, date, today), chezSoi, today)
       : releaseNote(infos[i].releases, it.original_language, today,
         lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
     // Pas encore regardable : la date affichée par Nuvio (carrousel, « date de sortie

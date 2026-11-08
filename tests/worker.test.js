@@ -1789,6 +1789,26 @@ test("vfq_possible_dans_les_rangees_et_la_fiche", async () => {
   assert.doesNotMatch((await (await get("/meta/movie/tmdb:6.json")).json()).meta.description || "", /VFQ/);
 });
 
+// « Les plus attendus » : la date de dispo chez soi après celle du cinéma (Scrooge, le 8 novembre 2026 : « Au cinéma le
+// 11 nov. » seulement, et l'Agenda d'AppTV le rangeait au jour du cinéma).
+test("plus_attendus_disent_aussi_la_dispo_chez_soi", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const court = (iso) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(iso + "T00:00:00Z"));
+  oublierInfos(); store.clear();
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.includes("/trending/movie/week")) return new Response(JSON.stringify({ results: u.includes("page=1") ? [{ id: 3, title: "Scrooge", original_language: "en", release_date: jour(3) }] : [], page: 1, total_pages: 1 }));
+    if (/\/movie\/3\?/.test(u)) return new Response(JSON.stringify({ ...filmVod(3, "en", [["FR", 3, jour(3)], ["US", 4, jour(30)]]), title: "Scrooge" }));
+    return new Response(JSON.stringify({ results: [] }));
+  };
+  const [scrooge] = (await (await get("/catalog/movie/accueil-attendus.json")).json()).metas;
+  assert.equal(scrooge.name, "Scrooge");
+  const ligne = scrooge.description.split("\n")[0];
+  assert.match(ligne, /^📅 Au cinéma le .+ · Dispo le /);
+  assert.ok(ligne.includes(court(jour(30)).replace(/\.$/, "")), ligne);
+});
+
 // Tendances du jour rangées par la photo (N°1 à 20) : les sources sont lues aussi, la ligne de la carte dit la même chose
 // que la fiche (Hope, N°12 le 8 novembre 2026 : « Dispo depuis le 13 oct. » dans la rangée, « VFQ possible · VFF le
 // 28 févr. » sur la fiche).
