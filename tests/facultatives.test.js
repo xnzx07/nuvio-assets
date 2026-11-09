@@ -90,7 +90,9 @@ test("rangees_des_collections_a_filtre_exige", async () => {
     const cat = cats.find((c) => c.id === s.catalogId && c.type === s.type);
     assert.ok(cat, s.catalogId);
     assert.ok(cat.extraRequired && cat.extraRequired.includes("genre"), `${s.catalogId} sans filtre exigé`);
-    assert.ok(cat.extra[0].options.includes(s.genre), `${s.catalogId} : genre « ${s.genre} » absent`);
+    // Sagas : aucun genre proposé (hors de Découvrir sur ordinateur et téléphone), la collection donne le sien.
+    if (s.catalogId.startsWith("saga-")) assert.deepEqual(cat.extra[0].options, [], s.catalogId);
+    else assert.ok(cat.extra[0].options.includes(s.genre), `${s.catalogId} : genre « ${s.genre} » absent`);
   }
   assert.equal((await (await get(SOURCE, "/catalog/movie/fac-oscars/genre=Laur%C3%A9ats.json")).json()).metas.length, 20);
 });
@@ -173,8 +175,9 @@ test("un_catalogue_par_saga", async () => {
   const rocky = cats.find((c) => c.id === "saga-1575");
   assert.deepEqual(rocky && { type: rocky.type, name: rocky.name, showInHome: rocky.showInHome }, { type: "movie", name: "Rocky", showInHome: false });
   // Un filtre exigé : l'appli Nuvio sur ordinateur ignore showInHome et met sur l'accueil tout catalogue sans filtre
-  // exigé (les 53 sagas y étaient). Les collections le donnent (genre « Saga »).
-  assert.deepEqual(rocky.extra, [{ name: "genre", isRequired: true, options: ["Saga"] }, { name: "skip" }]);
+  // exigé (les 53 sagas y étaient). Les collections le donnent (genre « Saga »). Aucun genre proposé : Nuvio sur
+  // ordinateur et téléphone ne met pas les sagas dans la liste de Découvrir.
+  assert.deepEqual(rocky.extra, [{ name: "genre", isRequired: true, options: [] }, { name: "skip" }]);
   assert.deepEqual(rocky.extraRequired, ["genre"]);
   assert.ok(!cats.some((c) => c.id === "saga-119"));   // Le Seigneur des anneaux : dans l'ordre chez TMDB, lu en direct
   const { metas } = await (await get(SOURCE, "/catalog/movie/saga-1575/genre=Saga.json")).json();
@@ -185,7 +188,8 @@ test("un_catalogue_par_saga", async () => {
 test("catalogue_des_sagas_dans_le_manifest", async () => {
   const cat = async (cfg) => (await (await get(SOURCE, `/${seg(cfg)}/manifest.json`)).json()).catalogs.find((c) => c.id === "saga");
   const saga = await cat({});
-  assert.ok(saga && saga.extra[0].name === "genre" && saga.extra[0].options.includes("Rocky"));
+  // La saga en « genre » (collections pas réimportées), sans choix proposé : hors de la liste de Découvrir.
+  assert.ok(saga && saga.extra[0].name === "genre" && saga.extra[0].isRequired && saga.extra[0].options.length === 0);
   assert.equal(saga.showInHome, false);
   const sansSagas = COLLECTIONS.filter((c) => !c.optional && c.id !== "sagas").reduce((m, c) => m | (1 << COLLECTIONS.indexOf(c)), 0);
   assert.equal(await cat({ c: sansSagas }), undefined);
