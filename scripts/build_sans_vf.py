@@ -7,7 +7,7 @@ un film n'entre dans la liste que si tout le dit, deux fois :
 1. Candidats : films de plus d'un an, ni français ni anglais, assez connus (VOTES_MIN), les plus populaires d'abord.
 2. Aucune plateforme en France, même en location ou à l'achat (TMDB) : sinon le film a peut-être une VF, on ne l'examine
    pas (revu dans REVOIR_DOUTE jours).
-3. Une preuve de VF de France sans débrideur (scripts/preuve_vff.py : RS Doublage, Wikipédia) : « vf » tout de suite.
+3. Une preuve de VF de France sans débrideur (scripts/preuve_vff.py : RS Doublage, Wikipédia, BnF) : « vf » tout de suite.
    Sinon, l'avis de l'addon (/sans-vf/avis, worker/index.js) : Torrentio, Lumio et StreamFusion ont vu des sources et les ont
    toutes écartées. « vf » : gardé tel quel pour toujours. « doute » : revu dans REVOIR_DOUTE jours. Ces demandes passent
    par le compte AllDebrid de la personne : plafond à part, 15 films par nuit (SANSVF_PLAFOND).
@@ -99,7 +99,7 @@ def a_revoir(suivi, jour):
 
 def noter(suivi, imdb, tmdb_id, etat, jour, preuve=None, serie=False):
     """L'état d'un titre après son examen. Un « non » ne compte que s'il suit un autre « non ». preuve : la source qui a
-    prouvé la VF sans débrideur (scripts/preuve_vff.py). serie : une série (« s » dans le suivi)."""
+    prouvé la VF sans débrideur (scripts/preuve_vff.py : rsdoublage, wikipedia, bnf). serie : une série (« s » dans le suivi)."""
     avant = suivi.get(imdb, {})
     n = avant.get("n", 0) + 1 if etat == "non" and avant.get("e") == "non" else 1 if etat == "non" else 0
     suivi[imdb] = {"id": tmdb_id, "e": etat, "j": jour, "n": n, **({"p": preuve} if preuve else {}),
@@ -137,7 +137,7 @@ def examiner(suivi, imdb, tmdb_id, fiche, jour, serie=False):
         noter(suivi, imdb, tmdb_id, "plateforme", jour, serie=serie)
         return True
     # Une VF de France prouvée ailleurs (RS Doublage, Wikipédia) : « vf » pour toujours, sans appel au débrideur.
-    preuve = preuve_vff(fiche)
+    preuve = preuve_vff(fiche, serie)
     if preuve:
         noter(suivi, imdb, tmdb_id, "vf", jour, preuve, serie=serie)
         return True

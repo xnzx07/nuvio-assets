@@ -54,6 +54,83 @@ class Fiche(unittest.TestCase):
         idx.assert_not_called()
 
 
+PROTECTEUR = """Le Protecteur
+Titre original :
+The Guardian
+Année :
+2001/2004
+Création :
+David Hollander
+Distribution :
+Baker Simon
+(Nick Fallin)
+67 ép.
+Ragueneau Thierry"""
+
+
+class Series(unittest.TestCase):
+    def test_fiche_de_serie(self):
+        self.assertEqual(pv.lire_fiche(PROTECTEUR), {"annee": 2001, "real": "David Hollander", "voix": 1})
+
+    def test_serie_parmi_les_series_seulement(self):
+        """« Le Protecteur » : la série (2001) chez les séries ; un film du même nom ne compte pas pour elle."""
+        idx = {"le protecteur": ["film-1-Le+Protecteur.html", "serie-7187-Le+Protecteur.html"]}
+        with mock.patch.object(pv, "_index", idx), mock.patch.object(pv, "_page", return_value=Page(PROTECTEUR)) as lire:
+            self.assertTrue(pv.preuve_rsdoublage(["Le Protecteur"], 2001, {"david", "hollander"}, serie=True))
+        self.assertEqual([c.args[0] for c in lire.call_args_list], [f"{pv.RSD}/serie-7187-Le+Protecteur.html"])
+        with mock.patch.object(pv, "_index", idx), mock.patch.object(pv, "_page", return_value=Page(PROTECTEUR)) as lire:
+            self.assertTrue(pv.preuve_rsdoublage(["Le Protecteur"], 2001, {"david", "hollander"}))
+        self.assertEqual([c.args[0] for c in lire.call_args_list], [f"{pv.RSD}/film-1-Le+Protecteur.html"])
+
+    def test_preuve_vff_d_une_serie(self):
+        """Une série : son nom, sa première diffusion et ses créateurs (pas de réalisateur chez TMDB)."""
+        fiche = {"name": "Le Protecteur", "original_name": "The Guardian", "first_air_date": "2001-09-25",
+                 "created_by": [{"name": "David Hollander"}], "external_ids": {}}
+        with mock.patch.object(pv, "preuve_rsdoublage", return_value=True) as rsd:
+            self.assertEqual(pv.preuve_vff(fiche, serie=True), "rsdoublage")
+        rsd.assert_called_once_with(["Le Protecteur", "The Guardian"], 2001, {"david", "hollander"}, True)
+
+
+def notice(titre, resp, audio, parue="2017", st=("fre",)):
+    sz = lambda code, v: f'<mxc:subfield code="{code}">{v}</mxc:subfield>'  # noqa: E731
+    return ('<mxc:datafield tag="101" ind1="0" ind2=" ">' + "".join(sz("a", a) for a in audio) + "".join(sz("j", j) for j in st)
+            + '</mxc:datafield><mxc:datafield tag="200" ind1="1" ind2=" ">' + sz("a", titre) + sz("b", "Images animées")
+            + sz("f", resp) + '</mxc:datafield><mxc:datafield tag="214" ind1=" " ind2="0">' + sz("a", "Paris") + sz("d", parue)
+            + "</mxc:datafield>")
+
+
+class Bnf(unittest.TestCase):
+    PARK = {"park", "chan", "wook"}
+
+    def test_piste_francaise(self):
+        # Le titre doit être le même (le titre français et le titre original sont cherchés tous les deux).
+        self.assertFalse(pv.edition_bnf_vf(notice("Old boy", "Park Chan-Wook, réal.", ["fre", "kor"], "2004"), "Oldboy", 2003, self.PARK))
+        self.assertTrue(pv.edition_bnf_vf(notice("Old boy", "Park Chan-Wook, réal.", ["fre", "kor"], "2004"), "Old Boy", 2003, self.PARK))
+
+    def test_vo_seule_rien(self):
+        """Stalker chez Potemkine : russe, sous-titres français. Pas une preuve (ni dans un sens ni dans l'autre)."""
+        self.assertFalse(pv.edition_bnf_vf(notice("Stalker", "Andrei Tarkovski, réal.", ["rus"]), "Stalker", 1979, {"andrei", "tarkovski"}))
+
+    def test_plusieurs_langues_sans_detail(self):
+        self.assertFalse(pv.edition_bnf_vf(notice("Oldboy", "Park Chan-Wook, réal.", ["mul", "kor"]), "Oldboy", 2003, self.PARK))
+
+    def test_homonymes_ecartes(self):
+        """Le remake de Spike Lee (VF) ne prouve rien pour le film de Park ; un titre voisin non plus."""
+        spike = notice("Oldboy", "Spike Lee, réal. Mark Protosevich, scénario", ["fre", "eng"], "2014")
+        self.assertFalse(pv.edition_bnf_vf(spike, "Oldboy", 2003, self.PARK))
+        self.assertFalse(pv.edition_bnf_vf(notice("Andreï Tarkovski", "Andreï Tarkovski, réal.", ["fre", "rus"]), "Stalker", 1979, {"andrei", "tarkovski"}))
+
+    def test_edition_d_avant_le_film(self):
+        """Une édition parue avant le film est celle d'un autre (même titre, même nom de réalisateur)."""
+        self.assertFalse(pv.edition_bnf_vf(notice("Bad genius", "J. C. Lee, réal.", ["fre"], "[DL 2010]"), "Bad Genius", 2024, {"lee"}))
+        self.assertTrue(pv.edition_bnf_vf(notice("Bad genius", "J. C. Lee, réal.", ["fre"], "[DL 2025]"), "Bad Genius", 2024, {"lee"}))
+
+    def test_sans_realisateur_pas_de_lecture(self):
+        with mock.patch.object(pv.urllib.request, "urlopen") as lire:
+            self.assertFalse(pv.preuve_bnf(["Stalker"], 1979, set()))
+        lire.assert_not_called()
+
+
 class Wikipedia(unittest.TestCase):
     def test_vf_de_france_seulement(self):
         self.assertTrue(pv.a_une_vf("* [[Al Pacino]] (VF : [[José Luccioni]] ; VQ : [[Luis de Cespedes]])"))
