@@ -19,17 +19,22 @@ const DESORDRE = SAGAS.flatMap((t) => t.sagas).filter((s) => s.in_order === fals
 export const SAGA_CATALOGS = new Map(DESORDRE.map((s) => [`saga-${s.id}`, s.id]));
 
 /**
- * Catalogues des sagas du manifest, si Sagas ou Grands univers est cochée.
- * Genre exigé sans aucun choix proposé (options vides) : l'appli Nuvio sur ordinateur et téléphone écarte de Découvrir un
- * catalogue qui exige un genre sans en proposer (supportsDiscover de NuvioMobile), donc les sagas n'encombrent plus sa
- * liste. Les collections donnent le genre telles quelles (« Saga », ou le titre pour l'ancien catalogue), sans le
- * comparer aux options. Un filtre exigé reste nécessaire : l'appli sur ordinateur ignore showInHome et met sur
- * l'accueil tout catalogue qui n'en exige pas. Nuvio TV, lui, ne retire de Découvrir que les catalogues de recherche.
+ * Catalogues des sagas du manifest, si Sagas ou Grands univers est cochée. Ils ne servent qu'aux collections, et
+ * restent hors de Découvrir, de la recherche et de l'accueil :
+ *   - genre exigé sans aucun choix proposé (options vides) : NuvioMobile (ordinateur, téléphone) écarte de Découvrir
+ *     un catalogue qui exige un genre sans en proposer ; l'appli sur ordinateur met sur l'accueil tout catalogue sans
+ *     filtre exigé (showInHome ignoré) ;
+ *   - recherche exigée : Nuvio TV n'écarte de Découvrir que les catalogues de recherche. Aucune appli ne les interroge
+ *     pour une recherche pour autant : NuvioTV, NuvioMobile et AppTV n'y prennent que les catalogues qui n'exigent rien
+ *     d'autre que la recherche, et le genre est exigé.
+ * Les collections donnent leur genre tel quel (« Saga », ou le titre pour l'ancien catalogue), sans le comparer aux
+ * options ni vérifier les autres filtres exigés (NuvioTV, NuvioMobile, AppTV).
  */
 export function sagaCatalog(cfg, pageSize) {
   if (!cfg.c.includes("sagas") && !cfg.c.includes("univers")) return [];   // Grands univers : leurs sagas aussi
   const cat = (id, name) => ({ type: "movie", id, name, showInHome: false, pageSize,
-    extra: [{ name: "genre", isRequired: true, options: [] }, { name: "skip" }], extraRequired: ["genre"], extraSupported: ["genre", "skip"] });
+    extra: [{ name: "genre", isRequired: true, options: [] }, { name: "search", isRequired: true }, { name: "skip" }],
+    extraRequired: ["genre", "search"], extraSupported: ["genre", "search", "skip"] });
   return [cat("saga", "Saga"), ...DESORDRE.map((s) => cat(`saga-${s.id}`, s.title))];
 }
 
