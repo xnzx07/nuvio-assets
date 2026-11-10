@@ -10,9 +10,12 @@ seulement l'API YouTube Data v3 (clé gratuite, 10 000 unités par jour) :
 3. Pour les titres encore sans VF, les plus en vue d'abord : une recherche YouTube (compteur à part, 100 par jour,
    RECHERCHES gardées), refaite au plus tous les REVOIR_RECHERCHE jours.
 4. Une vidéo convient si son titre dit VF (pas VOST), bande-annonce ou teaser, nomme l'œuvre, et pour la bonne année
-   (les règles qu'avait l'addon). Les vidéos gardées sont revérifiées chaque nuit (supprimées, privées : retirées).
+   (les règles qu'avait l'addon). Sans VF nulle part, une VOSTFR qui suit les mêmes règles est gardée à sa place
+   ("l": "vost") : l'ordre voulu partout est VF, sinon VOSTFR, sinon VO. Une VF trouvée plus tard la remplace.
+   Les vidéos gardées sont revérifiées chaque nuit (supprimées, privées : retirées).
 
-data/bandes-annonces-vf.json : { "maj", "source", "titres": { "movie:tt…": { "k": id YouTube, "t": titre, "hd" } } }.
+data/bandes-annonces-vf.json : { "maj", "source", "titres": { "movie:tt…": { "k": id YouTube, "t": titre, "hd", "l"? } } }
+("l": "vost" pour une VOSTFR ; rien pour une VF).
 data/bandes-annonces-suivi.json : { "tmdb": { clé: [jour, VF chez TMDB, fin de diffusion] }, "cherche": { clé: jour } }.
 Exécuté chaque nuit par GitHub Actions (addon.yml, secrets YOUTUBE_API_KEY et TMDB_API_KEY). Sans clé YouTube : rien.
 """
@@ -49,6 +52,8 @@ PLATEFORMES = {"UCroNr00O68n25IqSNapMK8w", "UC4YtyYW5RpGBgQqChMyjfIg", "UCfrLPVj
                "UCguBmD8D2uN6Sn6Ch-cVk_g"}
 REVOIR_TMDB = 30
 REVOIR_RECHERCHE = 30
+# Les VOSTFR sont gardées depuis ce jour-là : une recherche plus ancienne restée sans rien est refaite (une fois).
+VOST_DEPUIS = "2026-11-10"
 # Chaînes YouTube officielles en France (distributeurs, plateformes, FilmsActu qui reprend leurs bandes-annonces).
 CHAINES = {
     "UCZ0o1IeuSSceEixZbSATWtw": "Warner Bros. France", "UChbOoefuXz17nioY3sgvZxQ": "Universal Pictures France",
@@ -68,11 +73,11 @@ CHAINES = {
     "UC_i8X3p8oZNaik8X513Zn1Q": "FilmsActu",
 }
 # Mots permis avant le nom de l'œuvre dans le titre de la vidéo (« Bande-annonce VF : Dune ») : ceux de l'addon.
-TRAILER_WORDS = set("bande annonce d trailer teaser vf officielle officiel nouvelle new la le les l fx netflix disney "
-                    "prime video apple tv hbo max canal paramount".split())
+TRAILER_WORDS = set("bande annonce d trailer teaser vf vost vostfr fr officielle officiel nouvelle new la le les l fx "
+                    "netflix disney prime video apple tv hbo max canal paramount".split())
 # Le mot qui suit le nom de l'œuvre : un de ceux-là (ou une année, ou rien). Sinon c'est une autre œuvre de la même
 # famille : « Jumanji : Next Level », « Godzilla x Kong », « Dune 2 », « Les Bisounours et les Cousinours ».
-APRES_LE_NOM = set("bande ba trailer teaser vf officielle officiel nouvelle new saison season version en final finale "
+APRES_LE_NOM = set("bande ba trailer teaser vf vost vostfr officielle officiel nouvelle new saison season version en final finale "
                    "netflix disney prime apple hbo max canal paramount".split())
 unites = 0
 
@@ -85,7 +90,7 @@ def norm(s: str) -> str:
 
 
 def convient(titre: str, nom: str, annee: int | None, serie: bool, officielle: bool | str = False, publiee: str = "",
-             fin: int | None = None) -> bool:
+             fin: int | None = None, vost: bool = False) -> bool:
     """Le titre d'une vidéo est-il celui d'une bande-annonce VF de l'œuvre ? Les règles qu'avait l'addon (youtubeVf),
     resserrées après le premier passage :
     - le mot qui suit le nom de l'œuvre dit bande-annonce, VF, saison… (« Jumanji : Next Level » n'est pas « Jumanji ») ;
@@ -93,11 +98,12 @@ def convient(titre: str, nom: str, annee: int | None, serie: bool, officielle: b
       diffusée) : le remake de Netflix n'est pas « Perdus dans l'espace » de 1965 ;
     - sans année dans le titre, la date de publication (publiee : « 2021-06-01… ») en tient lieu : à 2 ans près pour un
       film d'une chaîne officielle (officielle : True, ou « plateforme ») ; pendant sa diffusion pour une série qui dit sa
-      saison, ou venue d'une plateforme."""
+      saison, ou venue d'une plateforme.
+    vost : la même chose pour une VOSTFR (« VOST » dans le titre) au lieu d'une VF."""
     t = norm(titre)
     want = f" {norm(nom)} "
-    if (not re.search(r"\bvf\b|version francaise", t) or re.search(r"\bvost", t)
-            or not re.search(r"\b(bande d? ?annonce|ba|trailer|teaser|nouvelle saison)\b", t) or want not in f" {t} "):
+    if ((not est_vost(t)) if vost else (not est_vf(t))) or (
+            not re.search(r"\b(bande d? ?annonce|ba|trailer|teaser|nouvelle saison)\b", t) or want not in f" {t} "):
         return False
     suite = f" {t} "[f" {t} ".index(want) + len(want):].split()
     if suite and suite[0] not in APRES_LE_NOM and not re.fullmatch(r"(?:19|20)\d\d", suite[0]):
@@ -122,6 +128,16 @@ def convient(titre: str, nom: str, annee: int | None, serie: bool, officielle: b
     if serie:
         return annee - 2 <= pub <= derniere and (mots_serie or officielle == "plateforme")
     return bool(officielle) and annee - 2 <= pub <= annee + 2
+
+
+def est_vf(t: str) -> bool:
+    """Titre (déjà passé par norm) d'une vidéo en VF, pas en VOSTFR."""
+    return bool(re.search(r"\bvf\b|version francaise", t)) and not re.search(r"\bvost", t)
+
+
+def est_vost(t: str) -> bool:
+    """Titre (déjà passé par norm) d'une vidéo en VOSTFR (VOST, VOSTFR, VOST FR)."""
+    return bool(re.search(r"\bvost", t))
 
 
 def rang(titre: str) -> int:
@@ -174,9 +190,9 @@ def videos_des_chaines() -> list[tuple[str, str, str, bool]]:
 
 
 class Index:
-    """Vidéos VF candidates, retrouvées par les mots de leur titre."""
+    """Vidéos VF et VOSTFR candidates, retrouvées par les mots de leur titre."""
     def __init__(self, videos):
-        self.videos = [v for v in videos if re.search(r"\bvf\b|version francaise", norm(v[1])) and not re.search(r"\bvost", norm(v[1]))]
+        self.videos = [v for v in videos if est_vf(norm(v[1])) or est_vost(norm(v[1]))]
         self.par_mot = {}
         for i, v in enumerate(self.videos):
             titre = v[1]
@@ -188,10 +204,15 @@ class Index:
         if not mots:
             return None
         ids = set.intersection(*[self.par_mot.get(w, set()) for w in mots])
-        bons = [v for v in (self.videos[i] for i in ids) if convient(v[1], nom, annee, serie, v[3] if len(v) > 3 else False, v[2], fin)]
-        # La plus récente des bandes-annonces (les teasers ensuite).
-        bons.sort(key=lambda v: (rang(v[1]), -int(re.sub(r"\D", "", v[2])[:14] or 0)))
-        return bons[0] if bons else None
+        candidats = [self.videos[i] for i in ids]
+        # La VF d'abord ; sans VF, la VOSTFR (rendue avec "vost" en 5e place). Dans chaque langue, la plus récente des
+        # bandes-annonces (les teasers ensuite).
+        for vost in (False, True):
+            bons = [v for v in candidats if convient(v[1], nom, annee, serie, v[3] if len(v) > 3 else False, v[2], fin, vost)]
+            bons.sort(key=lambda v: (rang(v[1]), -int(re.sub(r"\D", "", v[2])[:14] or 0)))
+            if bons:
+                return (*bons[0][:4], "vost") if vost else bons[0]
+        return None
 
 
 def titres_des_rangees() -> list[dict]:
@@ -289,19 +310,23 @@ def main() -> None:
             # Le nom entier : sans son sous-titre, « La casa de papel : Le phénomène » prendrait celle de la série.
             v = index.chercher(t["nom"], t["annee"], serie, fin)
             if v:
-                trouves[t["cle"]] = {"k": v[0], "t": v[1]}
-        print(f"chaînes : {len(index.videos)} vidéos en VF, {len(trouves)} titres trouvés ({unites} unités)")
+                trouves[t["cle"]] = {"k": v[0], "t": v[1], **({"l": "vost"} if len(v) > 4 else {})}
+        print(f"chaînes : {len(index.videos)} vidéos en VF ou VOSTFR, {len(trouves)} titres trouvés "
+              f"(dont {sum(1 for v in trouves.values() if v.get('l'))} en VOSTFR, {unites} unités)")
     except (urllib.error.URLError, TimeoutError, ValueError) as e:
         print(f"chaînes YouTube : panne ({e})", file=sys.stderr)
         code = 1
 
-    # 3. Recherches pour les titres encore sans VF, les plus en vue d'abord.
+    # 3. Recherches pour les titres encore sans VF, les plus en vue d'abord (aussi ceux qui n'ont qu'une VOSTFR : la VF
+    # sort parfois après).
     faites = 0
     for t in a_trouver:
-        if faites >= RECHERCHES or t["cle"] in trouves or t["cle"] in deja:
+        if (faites >= RECHERCHES or (t["cle"] in trouves and not trouves[t["cle"]].get("l"))
+                or (t["cle"] in deja and not deja[t["cle"]].get("l"))):
             continue
         c = cherche.get(t["cle"])
-        if c and dt.date.fromisoformat(c) + dt.timedelta(days=REVOIR_RECHERCHE) > jour:
+        if (c and dt.date.fromisoformat(c) + dt.timedelta(days=REVOIR_RECHERCHE) > jour
+                and (c >= VOST_DEPUIS or t["cle"] in deja)):
             continue
         serie = t["type"] == "series"
         q = f"{t['nom']} {'série ' if serie else ''}bande annonce VF {t['annee'] or ''}".strip()
@@ -312,14 +337,22 @@ def main() -> None:
             break
         faites += 1
         cherche[t["cle"]] = jour.isoformat()
+        vost = None
         for it in d.get("items", []):
             titre = it["snippet"]["title"].replace("&#39;", "'").replace("&quot;", '"').replace("&amp;", "&")
             cid = it["snippet"].get("channelId")
             officielle = "plateforme" if cid in PLATEFORMES else (cid in CHAINES and cid not in REPRISES)
             fin = vu_tmdb[t["cle"]][2] if len(vu_tmdb[t["cle"]]) > 2 else None
-            if convient(titre, t["nom"], t["annee"], serie, officielle, it["snippet"].get("publishedAt", ""), fin):
+            args = (titre, t["nom"], t["annee"], serie, officielle, it["snippet"].get("publishedAt", ""), fin)
+            if convient(*args):
                 trouves[t["cle"]] = {"k": it["id"]["videoId"], "t": titre}
+                vost = None
                 break
+            if vost is None and convient(*args, vost=True):
+                vost = {"k": it["id"]["videoId"], "t": titre, "l": "vost"}
+        # Pas de VF : la première VOSTFR des résultats, si les chaînes n'en ont pas déjà donné une.
+        if vost and t["cle"] not in trouves:
+            trouves[t["cle"]] = vost
     print(f"recherches : {faites}, {sum(1 for k in trouves if k in cherche and cherche[k] == jour.isoformat())} trouvées")
 
     # 4. Garder les anciennes encore en ligne, ajouter les nouvelles (avec leur définition).
@@ -330,6 +363,8 @@ def main() -> None:
         garde = {k: v for k, v in garde.items() if v["k"] in en_ligne}
     except (urllib.error.URLError, TimeoutError, ValueError) as e:
         print(f"vérification des vidéos : panne ({e}), toutes gardées", file=sys.stderr)
+    # Une VOSTFR ne remplace jamais une VF encore en ligne.
+    trouves = {k: v for k, v in trouves.items() if not (v.get("l") and k in garde and not garde[k].get("l"))}
     nouveaux = {k: v for k, v in trouves.items() if garde.get(k, {}).get("k") != v["k"]}
     with ThreadPoolExecutor(8) as ex:
         for (k, v), h in zip(nouveaux.items(), ex.map(lambda v: hd(v["k"]), nouveaux.values())):
@@ -343,7 +378,8 @@ def main() -> None:
     suivi["tmdb"] = {k: v for k, v in vu_tmdb.items() if k in titres_vus}
     suivi["cherche"] = {k: v for k, v in cherche.items() if k in titres_vus}
     SUIVI.write_text(json.dumps(suivi, separators=(",", ":"), sort_keys=True) + "\n", encoding="utf-8")
-    print(f"{len(garde)} titres avec une bande-annonce VF de YouTube ({unites} unités)")
+    print(f"{len(garde)} titres avec une bande-annonce de YouTube, dont {sum(1 for v in garde.values() if v.get('l'))} "
+          f"en VOSTFR ({unites} unités)")
     sys.exit(code)
 
 

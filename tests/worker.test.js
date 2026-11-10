@@ -313,6 +313,32 @@ test("bande_annonce_vf_du_fichier", async () => {
   assert.ok(!calls.some((u) => /allocine\.fr|youtube\.com\/results|query\.wikidata\.org/.test(u)));
 });
 
+// L'ordre partout : VF, sinon VOSTFR, sinon VO. La VOSTFR du fichier passe devant la VO de TMDB, pas devant sa VOSTFR,
+// et garde « VOSTFR » dans son nom (AppTV reconnaît la langue au nom).
+test("bande_annonce_vostfr_du_fichier", async () => {
+  for (const [id, tmdbVideos, attendu] of [
+    [7402, [{ key: "vo_trailer1", iso_639_1: "en" }], ["vostfichier", "vo_trailer1"]],
+    [7403, [{ key: "vo_trailer1", iso_639_1: "en" }, { key: "vostf_tmdb1", iso_639_1: "fr", name: "Bande-annonce VOSTFR" }], ["vostf_tmdb1", "vo_trailer1"]],
+  ]) {
+    oublierBandesAnnonces();
+    oublierInfos();
+    const sortie = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    globalThis.fetch = async (url) => {
+      const u = decodeURIComponent(String(url));
+      if (u.endsWith("/data/bandes-annonces-vf.json")) return Response.json({ titres: { [`movie:tt${id}`]: { k: "vostfichier", t: "Film - Bande-annonce VOSTFR", hd: true, l: "vost" } } });
+      if (u.includes(`/movie/${id}?`)) return Response.json({ id, imdb_id: `tt${id}`, title: "Film", release_date: sortie(400),
+        videos: { results: tmdbVideos.map((v) => ({ site: "YouTube", type: "Trailer", size: 1080, ...v })) }, "watch/providers": { results: {} } });
+      if (u.includes("/discover/movie")) return Response.json({ results: [{ id, title: "Film", release_date: sortie(400), original_language: "en" }], page: 1, total_pages: 1 });
+      return new Response("{}");
+    };
+    const m = (await (await get(`/meta/movie/tmdb:${id}.json`)).json()).meta;
+    assert.deepEqual(m.trailers.map((t) => t.ytId), attendu);
+    assert.match(m.trailers[0].name, /VOST/);
+    const { metas } = await (await get(`/${seg({ x: [{ n: `Films ${id}`, t: 0 }] })}/catalog/movie/perso-0.json`)).json();
+    assert.equal(metas[0].trailers[0].ytId, attendu[0]);
+  }
+});
+
 // ---------- audit de sécurité ----------
 test("mot_de_passe_trop_simple_refuse", async () => {
   for (const ADMIN_PASSWORD of ["choisis-un-mot-de-passe", "court"]) {

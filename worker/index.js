@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.60.2";
+const VERSION = "5.61.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -2379,29 +2379,40 @@ function trailersOf(videos) {
 const BA_VF = donneesDuDepot("data/bandes-annonces-vf.json", "titres");
 export const oublierBandesAnnonces = BA_VF.oublier;
 
-/** Bande-annonce VF d'un titre ({ key: identifiant YouTube, title, hd }, ou { key: null }). */
+/**
+ * Bande-annonce du fichier pour un titre ({ key: identifiant YouTube, title, vost }, ou { key: null }) : une VF, ou une
+ * VOSTFR (vost) quand YouTube n'a pas de VF.
+ */
 async function vfTrailer(kind, imdb) {
   const table = await BA_VF.lire();
   const x = table && table[`${kind}:${imdb}`];
-  return x && x.k ? { key: x.k, title: x.t, hd: x.hd !== false } : { key: null };
+  return x && x.k ? { key: x.k, title: x.t, vost: x.l === "vost" } : { key: null };
 }
 
-/** Les VF du fichier pour les rangées (Nuvio y lance la bande-annonce sans ouvrir la fiche) : { "movie:tt…": { key, hd } }. */
+/** Celles du fichier pour les rangées (Nuvio y lance la bande-annonce sans ouvrir la fiche) : { "movie:tt…": { key, vost } }. */
 async function readVfIndex() {
   const table = (await BA_VF.lire()) || {};
   const out = {};
-  for (const [cle, x] of Object.entries(table)) if (x && x.k) out[cle] = { key: x.k, hd: x.hd !== false };
+  for (const [cle, x] of Object.entries(table)) if (x && x.k) out[cle] = { key: x.k, vost: x.l === "vost" };
   return out;
 }
 
-/** Bandes-annonces d'un titre de rangée : celles de TMDB, avec la VF de l'index si TMDB n'en a pas. */
+/**
+ * Les bandes-annonces de TMDB (déjà VF, puis VOSTFR, puis VO) avec celle du fichier à sa place, partout pareil (rangées,
+ * fiches, Nuvio TV comme AppTV) : la VF d'abord, sinon la VOSTFR, sinon la VO. Celle du fichier ne passe devant que si
+ * TMDB n'a rien d'aussi bien. La VOSTFR garde « VOSTFR » dans son nom (AppTV reconnaît la langue au nom).
+ */
+function withFileTrailer(trailers, vf) {
+  if (!vf || !vf.key) return trailers;
+  if (vf.vost ? trailers.some((t) => t.lang === "fr") : trailers.some((t) => isVf(t.lang, t.name))) return trailers;
+  const name = vf.vost ? (/\bVOST/i.test(vf.title || "") ? vf.title : "VOSTFR") : vf.title;
+  const item = { source: vf.key, ytId: vf.key, type: "Trailer", ...(name ? { name } : {}), lang: "fr" };
+  return [item, ...trailers];
+}
+
+/** Bandes-annonces d'un titre de rangée : celles de TMDB, avec celle de l'index à sa place (withFileTrailer). */
 function catalogTrailers(trailers, vf) {
-  let list = trailers;
-  if (vf && vf.key && !trailers.some((t) => isVf(t.lang, t.name))) {
-    const vfItem = { source: vf.key, ytId: vf.key, type: "Trailer", lang: "fr" };
-    // Même règle que la fiche : une VF pas en HD passe après la bande-annonce de TMDB.
-    list = vf.hd === false && trailers.length ? [trailers[0], vfItem, ...trailers.slice(1)] : [vfItem, ...trailers];
-  }
+  const list = withFileTrailer(trailers, vf);
   return list.length ? { trailers: list, trailerStreams: list.map((t) => ({ ytId: t.ytId })) } : {};
 }
 
@@ -2436,7 +2447,8 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
     ? ((releases.find((r) => r.iso_3166_1 === cfg.g) || {}).release_dates || []).map((r) => r.certification).find(Boolean)
     : ((brut.content_ratings && brut.content_ratings.results || []).find((r) => r.iso_3166_1 === cfg.g) || {}).rating;
   const trailers = trailersOf(brut.videos && brut.videos.results);
-  // Pas de VF sur TMDB : celle préparée la nuit (data/bandes-annonces-vf.json), attendue en fin de fiche.
+  // Pas de VF sur TMDB : celle préparée la nuit (data/bandes-annonces-vf.json, une VF ou à défaut une VOSTFR), attendue
+  // en fin de fiche.
   const vfJob = short === "fr" && imdb && !trailers.some((t) => isVf(t.lang, t.name)) ? vfTrailer(kind, imdb).catch(() => null) : null;
   const keywords = ((movie ? brut.keywords && brut.keywords.keywords : brut.keywords && brut.keywords.results) || []).map((k) => k.name);
   // Lignes écrites par l'IA, lancées dès que possible, pendant que le reste de la fiche se construit :
@@ -2629,13 +2641,10 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
   m.description = [m.description, extras.filter(Boolean).join("\n"), recapLine].filter(Boolean).join("\n\n") || undefined;
   if (vfJob) {
     const vf = await vfJob;
-    if (vf && vf.key) {
-      const vfItem = { source: vf.key, ytId: vf.key, type: "Trailer", name: vf.title, lang: "fr" };
-      // VF pas en HD sur YouTube : la bande-annonce HD de TMDB reste en premier (celle du hero), la VF
-      // juste après dans la liste de la fiche.
-      const first = trailers[0] && ((d.videos && d.videos.results) || []).find((v) => v.key === trailers[0].source);
-      m.trailers = vf.hd === false && first && first.size >= 720 ? [trailers[0], vfItem, ...trailers.slice(1)] : [vfItem, ...trailers];
-      m.trailerStreams = m.trailers.map((t) => ({ ytId: t.ytId }));
+    const list = withFileTrailer(trailers, vf);
+    if (list !== trailers) {
+      m.trailers = list;
+      m.trailerStreams = list.map((t) => ({ ytId: t.ytId }));
     }
   }
   return m;
@@ -2937,12 +2946,13 @@ async function trailer(env, kind, id) {
       || (b.type === "Trailer") - (a.type === "Trailer") || (b.official === true) - (a.official === true))[0];
   const fr = pick(await tmdb(env, path, {}, "fr-FR"));
   if (fr && isVf(fr.iso_639_1, fr.name)) return { key: fr.key, lang: fr.iso_639_1 };
-  // Pas de VF sur TMDB : Allociné + YouTube, sinon la VOSTFR, sinon la VO.
+  // Pas de VF sur TMDB : celle du fichier (YouTube, la nuit), sinon la VOSTFR de TMDB, sinon celle du fichier, sinon la VO.
   const d = await tmdb(env, `/${kind === "series" ? "tv" : "movie"}/${tmdbId}`, { append_to_response: "external_ids" });
   const imdb = (d.imdb_id || (d.external_ids && d.external_ids.imdb_id)) || null;
-  const vf = imdb ? await vfTrailer(kind, imdb, (d.title || d.name || "").trim(), (d.release_date || d.first_air_date || "").slice(0, 4)).catch(() => null) : null;
-  if (vf && vf.key) return { key: vf.key, lang: "fr" };
-  if (fr) return { key: fr.key, lang: fr.iso_639_1 };
+  const vf = imdb ? await vfTrailer(kind, imdb).catch(() => null) : null;
+  if (vf && vf.key && !vf.vost) return { key: vf.key, lang: "fr" };
+  if (fr) return { key: fr.key, lang: fr.iso_639_1, vost: true };
+  if (vf && vf.key) return { key: vf.key, lang: "fr", vost: true };
   const v = pick(await tmdb(env, path, {}, "en-US"));
   return { key: v ? v.key : null, lang: v ? v.iso_639_1 : null };
 }

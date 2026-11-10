@@ -45,7 +45,20 @@ class Convient(unittest.TestCase):
                         ("b2", "Dune Bande-annonce 2 VF 2021", "2021-08-01T00:00:00Z"),
                         ("v1", "Dune Bande-annonce VOSTFR 2021", "2021-09-01T00:00:00Z")])
         self.assertEqual(idx.chercher("Dune", 2021, False)[0], "b2")
+        self.assertEqual(len(idx.chercher("Dune", 2021, False)), 3)       # une VF : pas de marque « vost »
         self.assertIsNone(idx.chercher("Arrival", 2016, False))
+
+    def test_vostfr_sans_vf(self):
+        """Pas de VF : la VOSTFR, marquée « vost » ; jamais devant une VF."""
+        idx = ba.Index([("v1", "Dune Bande-annonce VOSTFR 2021", "2021-09-01T00:00:00Z"),
+                        ("x1", "Dune Bande-annonce 2021", "2021-09-01T00:00:00Z")])     # ni VF ni VOSTFR : jamais
+        self.assertEqual(idx.chercher("Dune", 2021, False), ("v1", "Dune Bande-annonce VOSTFR 2021", "2021-09-01T00:00:00Z", "vost"))
+        self.assertTrue(ba.convient("L'INSTITUT : SAISON 2 - Bande annonce VOSTFR | Horreur, Science-fiction, Thriller | HBO MAX",
+                                    "L'Institut", 2025, True, False, "2026-10-25T00:00:00Z", vost=True))
+        self.assertTrue(ba.convient("Bande-annonce VOSTFR : Dune 2021", "Dune", 2021, False, vost=True))
+        self.assertFalse(ba.convient("Dune Bande-annonce VOSTFR 2021", "Dune", 2021, False))           # pas une VF
+        self.assertFalse(ba.convient("Dune Bande-annonce VF 2021", "Dune", 2021, False, vost=True))     # pas une VOSTFR
+        self.assertFalse(ba.convient("Dune Extrait VOSTFR 2021", "Dune", 2021, False, vost=True))       # pas une bande-annonce
 
 
 class AutreOeuvre(unittest.TestCase):
