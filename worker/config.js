@@ -73,7 +73,7 @@ export const GENRES = [
   ["Mystère", 9648, 9648], ["Romance", 10749, null], ["Science-fiction", 878, 10765], ["Thriller", 53, null],
   ["Guerre", 10752, 10768], ["Western", 37, 37], ["Enfants", null, 10762], ["Téléfilm", 10770, null],
   // Toujours en fin de liste : les liens enregistrent les genres par leur place.
-  ["Téléréalité", null, 10764],
+  ["Téléréalité", null, 10764], ["Talk-show", null, 10767],
 ];
 
 /**
