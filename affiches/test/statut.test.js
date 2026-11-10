@@ -264,7 +264,8 @@ test("sources : la VF trouvée décide pour un film récent", () => {
   // Oasis : au cinéma en France, sortie chez soi aux États-Unis ; les dates disent « dispo », les sources non.
   const oasis = film([pays("FR", [3, jours(-42)]), pays("US", [3, jours(-40)], [4, jours(-12)])]);
   assert.equal(etatSortie(oasis, AUJ).sorti, true);
-  assert.deepEqual(etatSortie(oasis, AUJ, { vf: false, sources: 20 }), { sorti: false, statut: "salle" });
+  // En salle en France il y a 42 jours : sa VFF vers la salle + 4 mois (vffApresVo).
+  assert.deepEqual(etatSortie(oasis, AUJ, { vf: false, sources: 20 }), { sorti: false, statut: "salle", quand: { quoi: "dispo", date: "2027-01-08", vers: true } });
   // Bad Apples : pas encore chez soi d'après les dates, mais des sources VF.
   assert.deepEqual(etatSortie(film([pays("DE", [3, jours(-41)])]), AUJ, { vf: true, sources: 36 }), { sorti: true, statut: "nouveau" });
   // Sorti en VO seulement, pas au cinéma en France : pas sorti (seule la VF compte), « Bientôt » sans date.
@@ -310,7 +311,7 @@ test("vieux film : pas avec une sortie en France à venir, sauf vraie reprise", 
   const { sourcesUtiles } = await import("../lib/statut.js");
   const f3670 = film([pays("KR", [1, jours(-540)], [3, jours(-413)]), pays("FR", [1, jours(-357)], [3, jours(28)])], "", "ko");
   assert.equal(sourcesUtiles(f3670, AUJ), true);
-  assert.deepEqual(etatSortie(f3670, AUJ, { vf: false, sources: 9 }), { sorti: false, statut: "salle", cinema: jours(28) });
+  assert.deepEqual(etatSortie(f3670, AUJ, { vf: false, sources: 9 }), { sorti: false, statut: "salle", cinema: jours(28), quand: { quoi: "dispo", date: "2027-03-17", vers: true } });
   assert.equal(etatSortie(film([pays("FR", [3, "2004-10-27"], [3, jours(28)])], "", "fr"), AUJ).sorti, true);
 });
 
@@ -380,4 +381,13 @@ test("vieux film sans VF confirmée → pas sorti, statut sansvf", () => {
   // La liste a du retard : un fichier VFF explicite passe avant elle.
   assert.deepEqual(etatSortie({ ...vieux, sansVf: true }, AUJ, { vf: true, sources: 3, vff: true }), { sorti: true, statut: null });
   assert.deepEqual(etatSortie({ ...vieux, sansVf: true }, AUJ, { vf: true, sources: 3 }), { sorti: false, statut: "sansvf" });
+});
+
+// Malfaisante : en salle en France il y a 27 jours, en VO aux États-Unis aujourd'hui, sources sans VF → sa VFF à la
+// chronologie française (salle + 4 mois), comme la fiche (vffApresVo) ; Crawlers, jamais sorti en France : rien.
+test("VO seulement : la VFF à la salle en France + 4 mois, jamais une date inventée", () => {
+  const malfaisante = film([pays("US", [3, jours(-32)], [4, AUJ]), pays("FR", [3, jours(-27)])]);
+  assert.deepEqual(etatSortie(malfaisante, AUJ, { vf: false, sources: 30 }).quand, { quoi: "dispo", date: "2027-01-23", vers: true });
+  const crawlers = film([pays("US", [3, jours(-25)], [4, AUJ])]);
+  assert.deepEqual(etatSortie(crawlers, AUJ, { vf: false, sources: 20 }), { sorti: false, statut: "bientot" });
 });

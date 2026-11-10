@@ -29,6 +29,22 @@ function releaseDates(releases, types, pays) {
     .sort();
 }
 
+/**
+ * Sorti chez soi en VO seulement : quand la VFF viendra, seulement si la France le dit (sortie numérique française
+ * annoncée, sinon la salle en France + 4 mois). La même fonction que vffApresVo dans worker/index.js : la fiche et
+ * l'affiche disent le même jour (Malfaisante : « DISPO VERS LE 14 FÉVR. »). Jamais sorti en France : null.
+ */
+export function vffApresVo(releases, today) {
+  const numerique = releaseDates(releases, [4, 5, 6], ["FR"]).find((d) => d > today);
+  if (numerique) return { date: numerique, vers: false };
+  const salle = releaseDates(releases, [2, 3], ["FR"])[0];
+  if (!salle) return null;
+  const d = new Date(`${salle}T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + 4);
+  const le = d.toISOString().slice(0, 10);
+  return le > today ? { date: le, vers: true } : null;
+}
+
 // ---------- Fenêtres salle → numérique des distributeurs américains ----------
 // Les mêmes fonctions que dans worker/index.js (tableVod, estimationDe, fenetreVod, besoinEstimation) : la table
 // data/estimations-vod.json (lue par lib/estimations.js) donne la fenêtre du distributeur d'un film.
@@ -150,12 +166,14 @@ function sortieFilm(facts, today, sources) {
   // avec en dessous son arrivée chez soi (la date qui range « Bientôt dispo ») si elle est à venir : passée, sans la VF,
   // on ne sait pas quand elle viendra. Sinon « Bientôt », avec la date à venir la plus utile (comme les rangées).
   const sallesFrance = releaseDates(facts.releases, [2, 3], ["FR"]);
-  const aVenir = dispo > today ? { quoi: "dispo", date: dispo, vers } : null;
+  // Date passée, en VO seulement : la VFF à sa date française, si on la connaît (vffApresVo).
+  const vffVo = !(dispo > today) && arrive && sansVf ? vffApresVo(facts.releases, today) : null;
+  const aVenir = dispo > today ? { quoi: "dispo", date: dispo, vers } : vffVo ? { quoi: "dispo", date: vffVo.date, vers: vffVo.vers } : null;
   const enSalle = !!sallesFrance[0] && sallesFrance[0] <= today;
   const cinema = enSalle ? null : sallesFrance.find((d) => d > today);
   if (enSalle || cinema) return { sorti: false, statut: "salle", ...(cinema ? { cinema } : {}), ...(aVenir ? { quand: aVenir } : {}) };
-  // La date passée, sources sans VF (The Fix) : « Bientôt » sans date (seule la VF compte, et on ne sait pas quand
-  // elle viendra). Avant la date, sources en VO ou pas : la date (« DISPO LE 17 NOV. »), jamais « Bientôt » seul.
+  // La date passée, sources sans VF (The Fix), jamais sorti en France : « Bientôt » sans date (seule la VF compte, et
+  // on ne sait pas quand elle viendra). Avant la date, sources en VO ou pas : la date (« DISPO LE 17 NOV. »), jamais « Bientôt » seul.
   if (!aVenir) return { sorti: false, statut: "bientot" };
   // Déjà sorti quelque part (Bad Apples : au cinéma en Allemagne) : son arrivée chez soi, annoncée ou estimée, comme la
   // rangée « Bientôt dispo ». Sorti nulle part : sa première sortie (« SORT LE ») ; « DISPO LE » seulement s'il sort

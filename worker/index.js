@@ -68,11 +68,11 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.61.1";
+const VERSION = "5.62.1";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
-const CACHE_V = 15;
+const CACHE_V = 17;
 const PAGE = 20;                    // taille d'une page TMDB = taille d'une page de l'addon
 const AI_MAX = 20;                  // 1re page d'une recherche par IA (sagas entières comprises)
 const OBSCUR_VOTES = 100;           // recherche : en dessous, un titre trouvé mot à mot ne suffit pas, Gemini est consulté
@@ -683,6 +683,22 @@ export function dispoChezSoi(releases, langue, vod = null, plateformeVf = false)
   return salle ? { date: addDays(salle, SALLE_JOURS), vers: true } : { date: "", vers: false };
 }
 const VOD_FR_MOIS = 4;
+
+/**
+ * Sorti chez soi en VO seulement (sources sans VF, date américaine passée) : quand la VFF viendra, seulement si on le
+ * sait vraiment — sa sortie numérique en France annoncée, sinon la chronologie des médias (la salle en France + 4 mois,
+ * comme la VFQ : vffEstimee dans affiches/lib/qualite.js). Malfaisante, en salle en France le 14 oct. 2026, en VO aux
+ * États-Unis le 10 nov. : « Dispo vers le 14 févr. » au lieu de « Aucune date » (rangé à la fin de « Bientôt dispo »,
+ * plus visible). Jamais sorti en France (Crawlers, El despertar) : rien, pas de date inventée. { date, vers } ou null.
+ */
+export function vffApresVo(releases, today) {
+  const numerique = releaseDates(releases, [4, 5, 6], ["FR"]).find((d) => d > today);
+  if (numerique) return { date: numerique, vers: false };
+  const salle = releaseDates(releases, [2, 3], ["FR"])[0];
+  if (!salle) return null;
+  const le = addMonths(salle, VOD_FR_MOIS);
+  return le > today ? { date: le, vers: true } : null;
+}
 const addMonths = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
 
 /**
@@ -1228,7 +1244,8 @@ function filmRecent(releases, today) {
  *   « Dispo vers le 3 déc. »      pas de date annoncée : estimation (salle + la fenêtre du distributeur américain,
  *                                 sans le nommer)
  *   « Dispo depuis le 9 oct. »    date passée depuis moins de 60 jours
- *   « Aucune date »               date passée, sources sans VF (Buddy) : on ne sait pas quand la VF viendra
+ *   « Aucune date »               date passée, sources sans VF (Buddy) : on ne sait pas quand la VF viendra ; sauf
+ *                                 si la France le dit (vffApresVo : « Dispo vers le 14 févr. », Malfaisante)
  *   « Déjà dispo »                en VF avant la date (sources VF, ou plateforme en France quand on n'a pas lu les sources)
  * etat = { vf: sources VF (ou plateforme en France en VF, sources pas lues), vo: sources sans VF, surPlateforme: sur
  * une plateforme en France sans savoir si c'est en VF (sources pas lues) }. vod = estimationDe (voir dispoChezSoi).
@@ -1245,7 +1262,10 @@ function releaseNote(releases, langue, today, etat = {}, vod = null) {
   if (!connuPasse && etat.vf) return filmRecent(releases, today) ? "Déjà dispo" : "";
   // Le fichier américain est sorti sans VF : plus de date à attendre (on ne sait pas quand la VF viendra) ; jamais la
   // VO (seule la VF compte).
-  if (etat.vo && !etat.vf && !(date > today)) return "Aucune date";
+  if (etat.vo && !etat.vf && !(date > today)) {
+    const vff = vffApresVo(releases, today);
+    return vff ? `Dispo ${vff.vers ? "vers le" : "le"} ${shortDate(vff.date)}` : "Aucune date";
+  }
   // Sur une plateforme en France, sans savoir si c'est en VF : pas de date qui ne voudrait plus rien dire.
   if (!connuPasse && etat.surPlateforme) return "";
   if (!date) return "";
@@ -1324,6 +1344,8 @@ async function toMetas(env, ctx, results, kind, opts, today) {
     const vf = kind === "movie" && enVfChezSoi(infos[i].releases, it.original_language, today, lu, infos[i].plateformeFr, infos[i].vod);
     // « Pas encore en VF » : le fichier est sorti (date passée), ses sources n'ont pas la VF. Avant la date, la date.
     const vo = sansVf(lu) && !(chezSoi.date > today);
+    // En VO seulement : la VFF à sa date française, si on la connaît (vffApresVo).
+    const apresVo = vo ? vffApresVo(infos[i].releases, today) : null;
     const date = it.release_date || it.first_air_date || "";
     // Films : quand ils deviennent regardables (« Les plus attendus » : quand ils sortent au cinéma) ;
     // séries : l'épisode de la semaine.
@@ -1336,7 +1358,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
     // complète ») devient la date de dispo plutôt que la sortie en salle.
     const dispo = chezSoi.date;
     const shownDate = opts.upcoming ? cinemaHere(infos[i].releases, opts.region, today) || date
-      : dispo && dispo > today ? dispo : date;
+      : apresVo ? apresVo.date : dispo && dispo > today ? dispo : date;
     // Séries : identifiant TMDB direct. Avec l'identifiant IMDb, Nuvio refait la
     // correspondance IMDb → TMDB et tombe parfois sur une autre série (fiches TMDB
     // en double, ex. « Frères d'armes » affiché avec l'image d'une telenovela).
@@ -1375,6 +1397,8 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       _dejaVf: lu ? lu.vf : !!infos[i].plateformeFr,
       // Déjà chez soi (date passée), mais en VO seulement (sources sans VF) : « Pas encore en VF ».
       _vo: vo,
+      // Sa VFF, annoncée ou estimée par la France (vffApresVo) : range « Bientôt dispo » à ce jour-là.
+      _voVff: apresVo ? apresVo.date : "",
     };
     return meta;
   }).filter((_, i) => !tropDur(cnc ? ageFinal(infos[i], cnc[results[i].id]) : infos[i].age, opts.cfg));
@@ -1461,7 +1485,7 @@ export const oublierScenes = SCENES.oublier;
 const tropDur = (age, cfg) => Boolean(cfg && cfg.f && age != null && age > cfg.f);
 
 /** Une fiche sans les champs internes de toMetas (« _digital »…), telle qu'envoyée à Nuvio. */
-const sansInternes = ({ _digital, _guess, _vf, _vfLu, _vffSur, _vfq, _vffLe, _dejaVf, _vo, ...m }) => m;
+const sansInternes = ({ _digital, _guess, _vf, _vfLu, _vffSur, _vfq, _vffLe, _dejaVf, _vo, _voVff, ...m }) => m;
 
 /** Paramètres TMDB d'une recherche « discover », avec les règles de qualité communes
  *  et les réglages de la config (pays, genres masqués, note et année minimales, famille). */
@@ -2034,10 +2058,10 @@ function trierRangeeVf(def, today, metas) {
   // peut ne pas encore avoir la sortie numérique : Verity le 27 octobre).
   // Et une VFF prouvée par ses sources avant la date annoncée (Heart of the Beast : TRUEFRENCH et VF2 le 5 novembre, date
   // officielle le 10) : dispo depuis aujourd'hui.
-  const when = (m) => (future && m._vffLe) || (!future && m._vffSur && m._digital > today ? today : m._digital)
+  const when = (m) => (future && (m._vffLe || m._voVff)) || (!future && m._vffSur && m._digital > today ? today : m._digital)
     || (future || m._vfLu ? m._guess : "");
   // « Bientôt dispo » : à la fin, ceux dont on ne sait pas quand la VF viendra (pas encore en VF, doute sans date française).
-  const sansDate = (m) => m._vo || (m._vfq && !m._vffLe);
+  const sansDate = (m) => (m._vo && !m._voVff) || (m._vfq && !m._vffLe);
   return metas
     .filter((m) => (when(m) && when(m) >= from && when(m) <= to) || (future && (m._vo || m._vfq)))
     .filter((m) => future || (m._vf && !m._vfq))   // « Dispo depuis peu » : seulement ceux qui ont sûrement une VF

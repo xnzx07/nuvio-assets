@@ -1027,8 +1027,8 @@ test("dispo_depuis_peu_selon_les_sources", async () => {
   assert.ok(!metas.some((m) => "_vf" in m || "_dejaVf" in m));
 });
 
-// « Bientôt dispo » : aussi un film déjà sorti chez soi mais pas encore en VF d'après ses sources (The Weight), à la
-// fin ; pas celui qui y est déjà en VF, ni celui dont on n'a pas lu les sources (rien ne dit qu'il n'est pas en VF).
+// « Bientôt dispo » : aussi un film déjà sorti chez soi mais pas encore en VF d'après ses sources (The Weight), à sa
+// VFF estimée (en salle en France il y a 35 jours : + 4 mois) ; pas celui qui y est déjà en VF, ni celui dont on n'a pas lu les sources (rien ne dit qu'il n'est pas en VF).
 test("bientot_dispo_avec_les_films_pas_encore_en_vf", async () => {
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const lus = { tt901: { vf: false, sources: 47 }, tt902: { vf: true, sources: 12 } };
@@ -1052,8 +1052,8 @@ test("bientot_dispo_avec_les_films_pas_encore_en_vf", async () => {
   };
   const { metas } = await (await get("/catalog/movie/accueil-vod-bientot.json")).json();
   assert.deepEqual(metas.map((m) => m.name), ["À venir", "The Weight"]);
-  assert.match(metas[1].description || "", /Aucune date/);
-  assert.ok(!metas.some((m) => "_vo" in m));
+  assert.match(metas[1].description || "", /^📅 Dispo vers le /);
+  assert.ok(!metas.some((m) => "_vo" in m || "_voVff" in m));
 });
 
 test("bientot_dispo_et_prochainement_selon_les_sources", async () => {
@@ -1133,8 +1133,8 @@ test("fiche_vo_avec_date_connue", async () => {
   assert.equal(m.releaseInfo, jour(-60).slice(0, 4));   // la dispo dans le résumé seulement
 });
 
-// The Weight : en numérique aux États-Unis il y a 2 jours, sources sans VF (sous-titres français). Les dates
-// françaises ne comptent pas (seul le calendrier américain) : « Aucune date », sans la VOSTFR.
+// The Weight : en numérique aux États-Unis il y a 2 jours, sources sans VF (sous-titres français). Sa sortie numérique
+// en France annoncée dans 40 jours : la VFF vient avec elle, « Dispo le … » (vffApresVo), sans la VOSTFR.
 test("fiche_vo_sans_date_de_vf", async () => {
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const sortie = (pays, type, n) => ({ iso_3166_1: pays, release_dates: [{ type, release_date: jour(n) + "T00:00:00.000Z" }] });
@@ -1147,7 +1147,8 @@ test("fiche_vo_sans_date_de_vf", async () => {
     return new Response("{}");
   };
   const m = (await (await get("/meta/movie/tmdb:8007.json")).json()).meta;
-  assert.equal((m.description || "").split("\n")[0], "📅 Aucune date.");
+  assert.match((m.description || "").split("\n")[0], /^📅 Dispo le \d/);
+  assert.doesNotMatch(m.description || "", /VOSTFR/);
 });
 
 // Série récente (coréenne, sur Prime Video) dont la saison n'a pas de VF dans les sources : la fiche le dit, avec
@@ -1658,6 +1659,22 @@ test("bientot_dispo_trie_toute_la_rangee_pas_page_par_page", async () => {
   const { metas } = await (await get("/catalog/movie/accueil-vod-bientot.json")).json();
   assert.deepEqual(metas.map((m) => m.name), ["Film 3", "Film 4", "Film 2", "Film 1"]);
   assert.match(metas[3].description || "", /Aucune date/);
+});
+
+// Malfaisante (en salle en France il y a 27 jours, en VO aux États-Unis aujourd'hui, sources sans VF) : à sa VFF
+// estimée (salle en France + 4 mois), parmi les dates ; Crawlers (jamais sorti en France) : « Aucune
+// date », à la fin — pas de date inventée.
+test("bientot_dispo_vff_estimee_apres_la_vo", async () => {
+  rangeeFiches.clear();
+  rangeeFiches.set(1, filmVod(1, "en", [["FR", 3, jourDans(-27)], ["US", 3, jourDans(-32)], ["US", 4, jourDans(0)]]));
+  rangeeFiches.set(2, filmVod(2, "en", [["US", 3, jourDans(-25)], ["US", 4, jourDans(0)]]));
+  const vo = (id, nom) => ({ id, title: nom, original_language: "en", release_date: jourDans(-32), popularity: 99 - id });
+  globalThis.fetch = rangeeSurPages([[vo(1, "Malfaisante"), vo(2, "Crawlers"), aVenir(3, 5), aVenir(4, 40)]], { tt901: { vf: false, sources: 30 }, tt902: { vf: false, sources: 20 } });
+  const { metas } = await (await get("/catalog/movie/accueil-vod-bientot.json")).json();
+  assert.deepEqual(metas.map((m) => m.name), ["Film 3", "Film 4", "Malfaisante", "Crawlers"]);
+  assert.match(metas[2].description || "", /^📅 Dispo vers le /);
+  assert.equal(metas[2].released.slice(0, 10) > jourDans(80), true);
+  assert.match(metas[3].description || "", /^📅 Aucune date/);
 });
 
 test("bientot_dispo_pages_de_la_rangee_sans_doublon", async () => {
