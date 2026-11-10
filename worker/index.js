@@ -68,11 +68,11 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.62.0";
+const VERSION = "5.61.1";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
-const CACHE_V = 16;
+const CACHE_V = 15;
 const PAGE = 20;                    // taille d'une page TMDB = taille d'une page de l'addon
 const AI_MAX = 20;                  // 1re page d'une recherche par IA (sagas entières comprises)
 const OBSCUR_VOTES = 100;           // recherche : en dessous, un titre trouvé mot à mot ne suffit pas, Gemini est consulté
@@ -743,29 +743,6 @@ const avecAbonnement = (lu, abonnement) => {
 const sansVf = (lu) => !!lu && !lu.vf;
 
 /**
- * Où en est la VF d'un film, pour Kalyo (l'appli : pastille sur la carte, rang dans « Bientôt dispo » ; Nuvio ignore
- * le champ `kalyo`). La phrase « 📅 … » de la fiche reste celle de Nuvio : « Aucune date » y confond « sorti en VO » et
- * « rien de connu », l'état les sépare.
- *  - sansvf : dans la liste « SANS VF » ;
- *  - vfq : VFQ possible (doute VFF / VFQ), `date` : la VFF annoncée ;
- *  - vff : chez soi en VF, vue dans les sources (`sure`) ou prouvée par leurs noms ;
- *  - vf : chez soi en VF d'après la date ou une plateforme en France, pas encore vue dans les sources ;
- *  - vo : sorti chez soi (`date`), seulement en VO pour l'instant ;
- *  - bientot : sortie chez soi à venir, `date` annoncée ou estimée (`estime`) ;
- *  - inconnu : rien de connu.
- */
-export function etatKalyo({ sansVfConnu, vf, vfLu, vffSur, vfq, vffLe, vo, chezSoi, today }) {
-  if (sansVfConnu) return { etat: "sansvf" };
-  if (vfq) return vffLe ? { etat: "vfq", date: vffLe } : { etat: "vfq" };
-  const date = chezSoi && chezSoi.date ? chezSoi.date : "";
-  const passe = date && date <= today;
-  if (vf) return { etat: vfLu || vffSur ? "vff" : "vf", ...(passe ? { date } : {}) };
-  if (vo) return { etat: "vo", ...(passe ? { date } : {}) };
-  if (date > today) return { etat: "bientot", date, ...(chezSoi.vers ? { estime: true } : {}) };
-  return { etat: "inconnu" };
-}
-
-/**
  * Regardable chez soi en VF aujourd'hui (la règle des affiches, affiches/lib/statut.js) : des sources VF (même avant la
  * date), sinon la date de dispoChezSoi passée — le fichier américain est sorti —, sauf si ses sources n'ont pas la VF
  * ou s'il n'en a aucune (rien de publié : pas de VF non plus) ; sans sources lues (vieux film, service muet), la date
@@ -1398,11 +1375,6 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       _dejaVf: lu ? lu.vf : !!infos[i].plateformeFr,
       // Déjà chez soi (date passée), mais en VO seulement (sources sans VF) : « Pas encore en VF ».
       _vo: vo,
-      // Pour Kalyo seulement (Nuvio ignore ce champ) : l'état de la VF, sans passer par la phrase (etatKalyo).
-      kalyo: kind === "movie" ? etatKalyo({
-        sansVfConnu: sansVfConnus.has(ids[i]), vf, vfLu: !!(lu && lu.vf), vffSur: !!(lu && lu.vf && lu.vff),
-        vfq: !!(lu && lu.vfqPossible), vffLe: lu && lu.vfqPossible ? lu.vffLe || "" : "", vo, chezSoi, today,
-      }) : undefined,
     };
     return meta;
   }).filter((_, i) => !tropDur(cnc ? ageFinal(infos[i], cnc[results[i].id]) : infos[i].age, opts.cfg));
