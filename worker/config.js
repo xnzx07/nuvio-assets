@@ -89,6 +89,20 @@ export const AGES_FAMILLE = [
   [16, "16 ans et +", { movie: "TP|12|16", series: "TP|10|12|16" }],
 ];
 /** Les classifications admises pour ce mode famille et ce type ("movie" ou "series") ; "" sans mode famille. */
+/**
+ * Les genres masqués de la config en ids TMDB, par type : { movie: [28…], series: [10767…] }. Donnés dans le manifest
+ * (champ « genresMasques », ignoré par Nuvio) pour les applis qui cherchent elles-mêmes dans TMDB (Explorer de Kalyo).
+ */
+export function genresMasques(cfg) {
+  const out = { movie: [], series: [] };
+  for (const name of cfg.e || []) {
+    const g = GENRES.find(([n]) => n === name);
+    if (!g) continue;
+    if (g[1] && !out.movie.includes(g[1])) out.movie.push(g[1]);
+    if (g[2] && !out.series.includes(g[2])) out.series.push(g[2]);
+  }
+  return out;
+}
 export const classifsFamille = (f, kind) => ((AGES_FAMILLE.find(([age]) => age === f) || [])[2] || {})[kind] || "";
 
 /** Langues d'origine proposées pour les rangées sur mesure. */

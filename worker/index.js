@@ -31,7 +31,7 @@
 import DEFS from "../catalogs.json";
 import {
   PROVIDERS, COLLECTIONS, REGIONS, GENRES, LANGUAGES, SORTS, SEASON_KEYS, MAX_CUSTOM,
-  decodeConfig, defaults, langOf, contentKey, hasGlobalFilters, AGES_FAMILLE, classifsFamille,
+  decodeConfig, defaults, langOf, contentKey, hasGlobalFilters, AGES_FAMILLE, classifsFamille, genresMasques,
   // AGES_FAMILLE : passé à la page de réglages.
 } from "./config.js";
 import { configurePage } from "./page.js";
@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.62.1";
+const VERSION = "5.62.2";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -301,6 +301,8 @@ function manifest(today, cfg, url, alerts) {
       extra: [{ name: "search", isRequired: true }, paging], extraRequired: ["search"], extraSupported: ["search", "skip"],
     }))],
     behaviorHints: { configurable: true, configurationRequired: false },
+    // Genres masqués (ids TMDB) : Nuvio ignore ce champ, Kalyo l'applique à son Explorer, qui interroge TMDB sans l'addon.
+    genresMasques: genresMasques(cfg),
   };
 }
 

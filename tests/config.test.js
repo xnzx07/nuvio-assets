@@ -120,3 +120,9 @@ test("ordre_des_plateformes_hors_cle_de_cache", () => {
   assert.equal(contentKey(decodeConfig(seg({ p: [0, 1] }), rows, [])), contentKey(decodeConfig(seg({ p: [1, 0] }), rows, [])));
   assert.deepEqual(decodeConfig(seg({ p: [1, 0] }), rows, []).p, [PROVIDERS[1].id, PROVIDERS[0].id]);
 });
+
+test("genres_masques_en_ids_tmdb", async () => {
+  const { genresMasques } = await import("../worker/config.js");
+  assert.deepEqual(genresMasques({ e: ["Talk-show", "Horreur", "Animation", "Inconnu"] }), { movie: [27, 16], series: [10767, 16] });
+  assert.deepEqual(genresMasques({ e: [] }), { movie: [], series: [] });
+});
