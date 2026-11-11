@@ -52,7 +52,7 @@ import { videosCinemeta, videosReduites, oublierCinemeta, decoupageCinemeta, fic
 import { routeJeu } from "./jeu.js";
 import { routeEtat } from "./etat.js";
 import { statique } from "./statique.js";
-import { smartSearch, prepareWords, isExact, norm, capQuery, genreQuery, filmography } from "./search.js";
+import { smartSearch, prepareWords, isExact, norm, capQuery, genreQuery, filmography, sansObscurs } from "./search.js";
 import { imdbRating } from "./ratings.js";
 import { ROWS as FAC_ROWS, facultativeCatalogs, laureats, SAGA_IDS, SAGA_CATALOGS, sagaCatalog, inReleaseOrder } from "./facultatives.js";
 import { isCopy, addonId, hostRoute, hasAlerts, pendingUpdate, updateInfo, updateCard, same, UPDATE_CATALOG, SOURCE_HOST } from "./hote.js";
@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.62.2";
+const VERSION = "5.62.3";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -2280,7 +2280,8 @@ async function catalogPage(env, ctx, type, id, extra, today, cfg, bilan, prefixe
     const query = (extra.search || "").trim();
     if (!query) return [];
     const page = Math.floor(skip / PAGE) + 1;
-    const results = await runSearch(env, type, query, page, opts);
+    // sans les titres obscurs homonymes d'un titre connu (search.js, sansObscurs)
+    const results = sansObscurs(await runSearch(env, type, query, page, opts), query, today);
     opts.search = true;
     const metas = results.length ? (await toMetas(env, ctx, results, type, opts, today)).map(sansInternes) : [];
     // Recherche faite sans l'IA (Gemini trop lent ou en panne) : à ne pas garder en cache.
