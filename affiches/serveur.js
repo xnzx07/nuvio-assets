@@ -58,7 +58,7 @@ export const envDuWorker = (env) => ({ ...env, RENDUS_MINUTE: "600", RENDUS_HEUR
  * Les affiches de Nuvio servies par ce serveur, pas par le Worker (lib/statiques.js, PREFIXE) : AFFICHES_PAR_SERVEUR=on
  * ou off pour forcer l'un ou l'autre. Une affiche en ligne est renvoyée à son fichier statique, servi par Cloudflare.
  */
-export const AFFICHES_PAR_LE_SERVEUR = false;
+export const AFFICHES_PAR_LE_SERVEUR = true;
 const STATIQUES = "https://affiches.xnzxflix.workers.dev";
 // Une affiche de chaque Worker, pour savoir s'il renvoie au serveur (302) ou s'il sert lui-même.
 const TEMOIN = "/maison/movie/poster/tt0133093.jpg";
