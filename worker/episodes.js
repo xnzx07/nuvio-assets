@@ -127,3 +127,99 @@ export function ficheRecomptee(d, decoupage) {
     next_episode_to_air: renum(d.next_episode_to_air),
   };
 }
+
+const jourDe = (s) => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null);
+const decale = (jour, n) => new Date(Date.parse(`${jour}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+
+/** Les saisons de TMDB comptent-elles autrement que Cinemeta (nombre d'épisodes d'une saison, hors spéciaux) ? */
+export function comptesDifferents(seasons, videos) {
+  const leurs = new Map();
+  for (const v of videos || []) if (v && v.season > 0 && v.episode > 0) leurs.set(v.season, (leurs.get(v.season) || 0) + 1);
+  const nos = (seasons || []).filter((s) => s.season_number > 0);
+  return leurs.size > 0 && nos.some((s) => (s.episode_count || 0) !== (leurs.get(s.season_number) || 0));
+}
+
+/**
+ * Comme decoupageCinemeta, mais épisode par épisode d'après la date de diffusion : chaque épisode TMDB prend celui de
+ * Cinemeta sorti le même jour (la veille ou le lendemain si aucun ne tombe ce jour-là, pour le décalage horaire).
+ * Koh-Lanta : TMDB coupe chaque émission en deux (« Émission 8 (1) », « (2) », 32 épisodes pour 16) ; mis bout à bout,
+ * tout glissait et « All Stars » devenait une saison 35. Par date, les deux parties d'une émission prennent le même
+ * épisode (tt…:34:8), et la fiche les réunit.
+ * episodes = ceux de TMDB ({ season_number, episode_number, air_date }), positionnel = le résultat de
+ * decoupageCinemeta (repli des épisodes d'avant la première date reconnue). null sans saison coupée en parties, si les
+ * dates ne suffisent pas (moins de 90 % des épisodes de la période de Cinemeta retrouvés) ou si l'ordre recule.
+ */
+export function decoupageParDates(seasons, videos, episodes, positionnel) {
+  const leurs = (videos || []).filter((v) => v && v.season > 0 && v.episode > 0).sort(ordre);
+  const nos = (episodes || []).filter((e) => e && e.season_number > 0 && e.episode_number > 0)
+    .map((e) => ({ season: e.season_number, episode: e.episode_number, jour: jourDe(e.air_date) })).sort(ordre);
+  if (!leurs.length || !nos.length) return null;
+  const parJour = new Map();
+  for (const v of leurs) {
+    const j = jourDe(v.released);
+    if (j) parJour.set(j, [...(parJour.get(j) || []), v]);
+  }
+  if (!parJour.size) return null;
+  const jours = [...parJour.keys()].sort();
+  const premier = jours[0], dernier = jours[jours.length - 1];
+  const nosJours = new Set(nos.map((x) => x.jour).filter(Boolean));
+  const repli = positionnel ? positionnel.place : (season, episode) => ({ season, episode });
+
+  const rangDuJour = new Map(), depart = new Map(), cibles = new Map();
+  // Sans épisode Cinemeta ce jour-là (au-delà de Cinemeta) : le suivant du précédent, jamais le même.
+  let cur = null, periode = 0, trouves = 0;
+  const parties = new Map();   // saison TMDB → épisodes placés sur le même que le précédent
+  for (const x of nos) {
+    let cands = x.jour && parJour.get(x.jour);
+    // Un jour d'écart seulement si la série ne sort pas tous les jours (sinon c'est l'épisode d'à côté).
+    if (!cands && x.jour) {
+      for (const n of [-1, 1]) {
+        const j = decale(x.jour, n);
+        if (!nosJours.has(j) && parJour.has(j)) { cands = parJour.get(j); break; }
+      }
+    }
+    const rang = x.jour ? rangDuJour.get(x.jour) || 0 : 0;
+    if (x.jour) rangDuJour.set(x.jour, rang + 1);
+    // Premier épisode TMDB du jour : les épisodes Cinemeta de ce jour déjà pris (Naruto : TMDB le date d'une semaine
+    // plus tôt, un épisode d'avance) sont sautés ; les suivants du même jour continuent de là.
+    if (cands && rang === 0) {
+      const libre = cur ? cands.findIndex((c) => ordre(c, cur.cible) > 0) : 0;
+      depart.set(x.jour, libre < 0 ? cands.length - 1 : libre);
+    }
+    if (x.jour && x.jour >= premier && x.jour <= dernier) periode++;
+    let cible;
+    if (cands) {
+      if (x.jour >= premier && x.jour <= dernier) trouves++;
+      const c = cands[Math.min((depart.get(x.jour) || 0) + rang, cands.length - 1)];
+      cible = { season: c.season, episode: c.episode };
+    } else if (!cur) cible = repli(x.season, x.episode);
+    else if (x.season === cur.season) cible = { season: cur.cible.season, episode: cur.cible.episode + 1 };
+    else cible = { season: cur.cible.season + x.season - cur.season, episode: 1 };
+    if (cur && ordre(cible, cur.cible) < 0) return null;
+    if (cur && cur.season === x.season && ordre(cible, cur.cible) === 0) parties.set(x.season, (parties.get(x.season) || 0) + 1);
+    cibles.set(`${x.season}:${x.episode}`, cible);
+    cur = { season: x.season, jour: x.jour, cible };
+  }
+  // Seulement pour des épisodes vraiment coupés en parties : une saison TMDB dont 40 % des épisodes (2 au moins)
+  // sont la suite du précédent. Sinon les dates, parfois fausses d'une semaine chez l'un ou l'autre (One Piece),
+  // feraient plus de mal que le bout à bout.
+  const coupee = (seasons || []).some((s) => s.season_number > 0 && (parties.get(s.season_number) || 0) >= Math.max(2, 0.4 * (s.episode_count || 0)));
+  if (!coupee || periode < 3 || trouves < periode * 0.9) return null;
+
+  const derniere = cur.cible;
+  const place = (season, episode) => cibles.get(`${season}:${episode}`) || (season === 0 ? { season, episode } : repli(season, episode));
+  const compte = new Map();
+  const ajoute = (p, air) => {
+    const s = compte.get(p.season) || { season_number: p.season, episode_count: 0, air_date: air };
+    s.episode_count = Math.max(s.episode_count, p.episode);
+    compte.set(p.season, s);
+  };
+  for (const v of leurs) ajoute(v, jourDe(v.released));
+  for (const x of nos) ajoute(cibles.get(`${x.season}:${x.episode}`), x.jour);
+  const speciaux = (seasons || []).filter((s) => s.season_number === 0);
+  return {
+    place,
+    restants: leurs.filter((v) => ordre(v, derniere) > 0),
+    saisons: [...speciaux, ...[...compte.values()].sort((a, b) => a.season_number - b.season_number)],
+  };
+}

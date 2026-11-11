@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decoupageCinemeta, ficheRecomptee } from "../worker/episodes.js";
+import { decoupageCinemeta, decoupageParDates, comptesDifferents, ficheRecomptee } from "../worker/episodes.js";
 import { decoupageCinemeta as decoupageAffiches } from "../affiches/lib/episodes.js";
 
 // Cinemeta : une vidéo par épisode, comme dans /meta/series/<imdb>.json.
@@ -87,4 +87,51 @@ test("affiches_meme_decoupage", () => {
     for (const s of saisons) for (let e = 1; e <= s.episode_count + 2; e++) assert.deepEqual(b.place(s.season_number, e), a.place(s.season_number, e));
     assert.deepEqual(b.place(2, 77), a.place(2, 77));
   }
+});
+
+// Date du n-ième mardi depuis le 3 mars 2026 (une émission par semaine).
+const semaine = (n) => new Date(Date.parse("2026-03-03T00:00:00Z") + n * 7 * 864e5).toISOString().slice(0, 10);
+
+test("koh_lanta_emissions_coupees_en_deux_placees_par_date", () => {
+  // Cinemeta : S1 de 16 émissions (une par semaine), S2 de 13 (la 13e pas encore sortie, sans date chez TMDB).
+  const c = [
+    ...Array.from({ length: 16 }, (_, k) => ({ season: 1, episode: k + 1, released: `${semaine(k)}T21:15:00.000Z` })),
+    ...Array.from({ length: 13 }, (_, k) => ({ season: 2, episode: k + 1, released: `${semaine(30 + k)}T21:15:00.000Z` })),
+  ];
+  // TMDB : chaque émission en deux parties le même jour, 32 + 24.
+  const eps = [
+    ...Array.from({ length: 32 }, (_, k) => ({ season_number: 1, episode_number: k + 1, air_date: semaine(Math.floor(k / 2)) })),
+    ...Array.from({ length: 24 }, (_, k) => ({ season_number: 2, episode_number: k + 1, air_date: semaine(30 + Math.floor(k / 2)) })),
+  ];
+  const seasons = [{ season_number: 1, episode_count: 32 }, { season_number: 2, episode_count: 24 }];
+  assert.equal(comptesDifferents(seasons, c), true);
+  const pos = decoupageCinemeta(seasons, c);
+  const d = decoupageParDates(seasons, c, eps, pos);
+  assert.deepEqual(d.place(1, 1), { season: 1, episode: 1 });
+  assert.deepEqual(d.place(1, 2), { season: 1, episode: 1 });
+  assert.deepEqual(d.place(1, 32), { season: 1, episode: 16 });
+  assert.deepEqual(d.place(2, 15), { season: 2, episode: 8 });
+  assert.deepEqual(d.place(2, 24), { season: 2, episode: 12 });
+  assert.deepEqual(d.restants.map((v) => v.episode), [13]);
+  assert.deepEqual(d.saisons.map((s) => [s.season_number, s.episode_count]), [[1, 16], [2, 13]]);
+});
+
+test("par_dates_rien_a_changer_ou_dates_incoherentes", () => {
+  const c = Array.from({ length: 10 }, (_, k) => ({ season: 1, episode: k + 1, released: `${semaine(k)}T00:00:00.000Z` }));
+  const eps = Array.from({ length: 10 }, (_, k) => ({ season_number: 1, episode_number: k + 1, air_date: semaine(k) }));
+  assert.equal(decoupageParDates([{ season_number: 1, episode_count: 10 }], c, eps, null), null);
+  // Dates TMDB sans rapport avec Cinemeta : on n'y touche pas.
+  const autres = eps.map((e) => ({ ...e, air_date: semaine(e.episode_number + 50) }));
+  assert.equal(decoupageParDates([{ season_number: 1, episode_count: 10 }], c, autres, null), null);
+});
+
+test("par_dates_sans_parties_on_garde_le_bout_a_bout", () => {
+  // Anime en une saison TMDB, dates à un jour près (décalage horaire), aucun épisode coupé : le bout à bout reste.
+  const c = [...Array.from({ length: 24 }, (_, k) => ({ season: 1, episode: k + 1, released: `${semaine(k)}T15:00:00.000Z` })),
+    ...Array.from({ length: 12 }, (_, k) => ({ season: 2, episode: k + 1, released: `${semaine(40 + k)}T15:00:00.000Z` }))];
+  const eps = Array.from({ length: 36 }, (_, k) => ({ season_number: 1, episode_number: k + 1,
+    air_date: new Date(Date.parse(`${semaine(k < 24 ? k : 16 + k)}T00:00:00Z`) + 864e5).toISOString().slice(0, 10) }));
+  const seasons = [{ season_number: 1, episode_count: 36 }];
+  const pos = decoupageCinemeta(seasons, c);
+  assert.equal(decoupageParDates(seasons, c, eps, pos), null);
 });

@@ -48,7 +48,7 @@ import { hallPage } from "./hall.js";
 import { routeCinemeta } from "./cinemeta.js";
 import { animesDe } from "./anilist.js";
 import { wikidataDe } from "./wikidata.js";
-import { videosCinemeta, videosReduites, oublierCinemeta, decoupageCinemeta, ficheRecomptee } from "./episodes.js";
+import { videosCinemeta, videosReduites, oublierCinemeta, decoupageCinemeta, decoupageParDates, comptesDifferents, ficheRecomptee } from "./episodes.js";
 import { routeJeu } from "./jeu.js";
 import { routeEtat } from "./etat.js";
 import { statique } from "./statique.js";
@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.64.4";
+const VERSION = "5.64.5";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -2651,7 +2651,15 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
   })();
 
   const cine = await cineJob;
-  const decoupage = cine && decoupageCinemeta(brut.seasons, cine);
+  let decoupage = cine && decoupageCinemeta(brut.seasons, cine);
+  // Saisons comptées autrement : les épisodes TMDB (leurs dates) d'abord, pour les placer par date de diffusion
+  // (Koh-Lanta, chaque émission coupée en deux chez TMDB). Voir decoupageParDates.
+  if (cine && cine.length && (decoupage || comptesDifferents(brut.seasons, cine))) {
+    const [parts] = await episodesJob;
+    const eps = [];
+    for (const part of parts) for (const n of numbers) for (const e of (part[`season/${n}`] || {}).episodes || []) eps.push({ ...e, season_number: n });
+    decoupage = decoupageParDates(brut.seasons, cine, eps, decoupage) || decoupage;
+  }
   const d = decoupage ? ficheRecomptee(brut, decoupage) : brut;
   const metaId = id.startsWith("tt") ? id : imdb || `tmdb:${tmdbId}`;
   const wp = d["watch/providers"] || null;
@@ -2777,6 +2785,21 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
       });
     }
     videos.sort((a, b) => a.season - b.season || a.episode - b.episode);
+    // Parties d'un même épisode (placées par date sur le même, « Émission 8 (1) » et « (2) ») : un seul épisode.
+    for (let i = videos.length - 1; i > 0; i--) {
+      const a = videos[i - 1], b = videos[i];
+      if (a.id !== b.id) continue;
+      const sans = (t) => (t || "").replace(/\s*(?:[-–:]\s*)?(?:\((?:partie |part )?\d\)|(?:partie|part) \d)$/i, "").trim();
+      a.title = sans(a.title) === sans(b.title) ? sans(a.title) || a.title : `${a.title} / ${b.title}`;
+      if (b.overview && b.overview !== a.overview) a.overview = a.overview ? `${a.overview}\n${b.overview}` : b.overview;
+      a.thumbnail = a.thumbnail || b.thumbnail;
+      if (a._minutes || b._minutes) {
+        a._minutes = (a._minutes || 0) + (b._minutes || 0);
+        a.runtime = `${a._minutes} min`;
+      }
+      a._aired = a._aired || b._aired;
+      videos.splice(i, 1);
+    }
     // Les 3 meilleurs épisodes de chaque saison (une fois les saisons recomptées) : l'étoile.
     for (const n of new Set(videos.map((v) => v.season))) {
       const saison = videos.filter((v) => v.season === n && v._note);

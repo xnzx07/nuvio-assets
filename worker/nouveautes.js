@@ -17,6 +17,7 @@ export const NOUVEAUTES = [
       "Le film passe en tête de « Dispo depuis peu » le jour où sa VFF arrive, même s'il était sorti avant en VO.",
       "Les films « VFQ possible » sont revérifiés chaque nuit : dès qu'une VFF sort, ils passent en couleur et quittent « Bientôt dispo ».",
       "Recherche : les lettres inversées sont mieux comprises (« beware bounia » trouve Beware Boiúna).",
+      "Séries dont TMDB coupe chaque épisode en deux parties (Koh-Lanta) : les épisodes sont numérotés comme chez les addons de sources, les deux parties n'en font plus qu'un, et les sources se trouvent de nouveau.",
     ],
   },
   {
