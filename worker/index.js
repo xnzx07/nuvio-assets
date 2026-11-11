@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.64.1";
+const VERSION = "5.64.2";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -959,9 +959,33 @@ async function duBonFilm(env, cle, fichiers, texte) {
  * « FRENCH » ni « MULTi » seuls : ils portent souvent la VFQ du fichier américain.
  */
 const VFF_NOM = /\b(TRUEFRENCH|VFF|VFI|VF2)\b/i;
-/** L'avis « VF » d'après des fichiers en français, et vff si l'un d'eux prouve la VFF. */
-function avisDesFichiers(vraies, texte) {
-  return { vf: true, sources: vraies.length, qualite: qualiteDesSources(vraies.map(texte)), ...(vraies.some((s) => VFF_NOM.test(texte(s))) ? { vff: true } : {}) };
+/**
+ * Trackers torrent vus dans les fichiers de Lumio (« 🔎 C411 | V3X ») : un fichier qu'on y trouve a été publié sur un
+ * site suivi. Les sites de téléchargement direct (GenerationFree, Free-Telecharger, Wawacity…, souvent avec « 🔗 ») n'en
+ * sont pas : n'importe qui y remet un fichier refait à la main.
+ */
+const TRACKERS = /\b(C411|V3X|Tr4ker|YggReborn|Ygg\w*|DMM|0xTorrent|Draupnirr|Nostradamus|Torrent9|1337x|Knaben|Sharewood|ABN|Torr9|TorrentGalaxy|Rutracker|Rutor|EXT|UIndex)\b/i;
+/** L'équipe d'un fichier (« …-Slay3R.mkv » → slay3r), sinon son nom entier : deux copies du même fichier comptent une fois. */
+function equipeDe(t) {
+  const nom = ((/🗂️\s*([^\n/]+)/u.exec(t) || [])[1] || t).trim();
+  const g = /-\[?([A-Za-z0-9]+)\]?(?:\.(?:mkv|mp4|avi))?\s*$/i.exec(nom);
+  return (g ? g[1] : nom).toLowerCase();
+}
+/**
+ * La VFF prouvée par les noms : au moins deux équipes différentes la donnent, ou une seule mais trouvée sur un tracker
+ * torrent (ou chez StreamFusion, qui ne lit que des torrents : torrent). L'Odyssée, le 11 novembre 2026 : un seul
+ * fichier « MULTI.VF2 » d'une petite équipe (CZHD), sur des sites de téléchargement direct seulement, avait suffi à
+ * l'annoncer « VFF EN AVANCE ». Resident Evil, lui, en avait huit, de cinq équipes, sur C411 et V3X.
+ */
+function vffProuvee(fichiers, texte, torrent = false) {
+  const vff = fichiers.filter((s) => VFF_NOM.test(texte(s)));
+  if (!vff.length) return false;
+  if (new Set(vff.map((s) => equipeDe(texte(s)))).size >= 2) return true;
+  return torrent || vff.some((s) => { const src = (/🔎\s*([^\n•/]+)/u.exec(texte(s)) || [])[1] || ""; return TRACKERS.test(src) && !/🔗/u.test(texte(s)); });
+}
+/** L'avis « VF » d'après des fichiers en français, et vff si la VFF est prouvée (vffProuvee). torrent : StreamFusion. */
+function avisDesFichiers(vraies, texte, torrent = false) {
+  return { vf: true, sources: vraies.length, qualite: qualiteDesSources(vraies.map(texte)), ...(vffProuvee(vraies, texte, torrent) ? { vff: true } : {}) };
 }
 
 async function lireVfLumio(env, cles) {
@@ -1005,8 +1029,11 @@ async function lireVfLumio(env, cles) {
  * SF_MAX titres au plus lus par appel. { avis: Map clé → { vf, sources, qualite? }, plafond: true si un titre reste
  * sans avis faute de plafond }.
  */
-/** Format des avis gardés (l) : 2 = avec vff (la VFF prouvée par les noms). Un avis « VF » plus ancien est relu (avisDuJour). */
-const AVIS_FORMAT = 2;
+/**
+ * Format des avis gardés (l) : 2 = avec vff (la VFF prouvée par les noms) ; 3 = la preuve par deux équipes ou un tracker
+ * (vffProuvee). Un avis « VF » plus ancien est relu (avisDuJour).
+ */
+const AVIS_FORMAT = 3;
 /** L'avis sans son format (l), gardé seulement dans la mémoire. */
 const sansFormat = ({ l, ...a }) => a;
 const AVIS_OUI_MS = 7 * 86400000, AVIS_NON_MS = 3 * 3600000, AVIS_NON_VIEUX_MS = 86400000, AVIS_NON_RECENT_MS = 7 * 86400000;
@@ -1090,14 +1117,17 @@ async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
     // chose (pas de VF, ou une VF sans preuve lue au format 2). Un premier avis, ou un ancien format : on ne sait pas
     // depuis quand (au premier passage, toutes les VFF déjà là auraient été « nouvelles »).
     const vffDepuis = !a.vff ? null : (avant && avant.vffDepuis)
-      || (avant && (avant.vf === false || (avant.l === AVIS_FORMAT && !avant.vff)) ? parisToday() : null);
+      || (avant && (avant.vf === false || ((avant.l || 0) >= 2 && !avant.vff)) ? parisToday() : null);
     return [cle, { avis: { ...a, l: AVIS_FORMAT, ...(vffDepuis ? { vffDepuis } : {}) }, t: now, depuis: a.vf ? null : (v && v.avis && v.avis.vf === false && v.depuis) || now }];
   });
   for (const [cle, d] of neufs) avis.set(cle, sansFormat(d.avis));
   await garderAvis(env, neufs);
-  // Pas relu (plafond, panne) : un avis « VF » d'avant le format 2, encore dans ses 7 jours, plutôt que rien.
+  // Pas relu (plafond, panne) : un avis « VF » d'un ancien format, encore dans ses 7 jours, plutôt que rien ; sans sa
+  // VFF, prouvée par une règle plus lâche (L'Odyssée : un seul fichier d'une petite équipe) : le doute plutôt que l'erreur.
   for (const [cle, d] of vieux) {
-    if (!avis.has(cle) && d && d.avis && d.avis.vf === true && d.t > 0 && now - d.t < AVIS_OUI_MS) avis.set(cle, sansFormat(d.avis));
+    if (avis.has(cle) || !d || !d.avis || d.avis.vf !== true || !(d.t > 0) || now - d.t >= AVIS_OUI_MS) continue;
+    const { vff, vffDepuis, ...sans } = sansFormat(d.avis);
+    avis.set(cle, d.avis.l === AVIS_FORMAT ? sansFormat(d.avis) : sans);
   }
   return { avis, plafond: reste.length > nSf && cles.some((c) => !avis.has(c)) };
 }
@@ -1171,7 +1201,7 @@ async function lireVfStreamFusion(env, cles) {
       // Des sources VF (celles qu'on peut lire, en cache chez le débrideur) : leur qualité aussi (« 4K DV » en VF).
       // Sans celles filmées dans une salle de cinéma (CAM, TS, TC) : pas une sortie (voir filmeEnSalle).
       const vraies = await duBonFilm(env, cle, streams.filter((s) => !filmeEnSalle(s)), texte);
-      return [cle, vraies.length ? avisDesFichiers(vraies, texte) : { vf: false, sources: 0 }];
+      return [cle, vraies.length ? avisDesFichiers(vraies, texte, true) : { vf: false, sources: 0 }];
     } catch (e) { return null; }
   }));
   return new Map(lus.filter(Boolean));

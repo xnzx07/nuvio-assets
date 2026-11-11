@@ -1871,7 +1871,7 @@ test("vfq_en_vue_levee_par_la_vff_prouvee_chez_lumio", async () => {
       calls.push(u);
       if (u.startsWith("https://lumio.test/p/stream/movie/tt903.json")) {
         lumio++;
-        return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `4K • WEB-DL • DV / 🌍 🇫🇷 🇬🇧 / 🗂️ ${fichier}`, url: "https://lumio.test/play/a" }] });
+        return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `4K • WEB-DL • DV / 🌍 🇫🇷 🇬🇧 / 🔎 C411 / 🗂️ ${fichier}`, url: "https://lumio.test/play/a" }] });
       }
       if (u.includes("/vf.json")) return sourcesDe({ tt903: { vf: true, sources: 9, langue: "multi", quebec: true, vfqPossible: true, vffLe: jour(60), vffVers: true } })(u);
       if (/\/movie\/3\?/.test(u)) return Response.json({ ...filmVod(3, "en", [["FR", 3, jour(-56)], ["US", 3, jour(-54)], ["US", 4, jour(-8)]]), title: "Resident Evil" });

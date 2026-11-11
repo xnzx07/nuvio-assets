@@ -88,7 +88,7 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
     if (u.startsWith("https://lumio.test/p/stream/")) {
       appels.push(u);
       if (u.includes("tt831")) return Response.json({ streams: [
-        { name: "[AD⚡️] Lumio", description: "4K • WEB-DL • DV | 🇫🇷 🇬🇧 ✓ | 🗂️ Film.2026.MULTi.VF2.2160p.WEB.DV.mkv", url: "https://lumio.test/play/a" },
+        { name: "[AD⚡️] Lumio", description: "4K • WEB-DL • DV | 🇫🇷 🇬🇧 ✓ | 🔎 C411 | 🗂️ Film.2026.MULTi.VF2.2160p.WEB.DV.mkv", url: "https://lumio.test/play/a" },
         { name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓ | 🗂️ Film.2026.FRENCH.1080p.WEB.mkv", url: "https://lumio.test/play/b" }] });
       if (u.includes("tt832")) return Response.json({ streams: [{ name: "⚙️ Lumio", description: "68 sources, mais aucune ne passe vos filtres\nAssouplissez « Seulement les langues vérifiées »." }] });
       if (u.includes("tt833")) return new Response("panne", { status: 502 });
@@ -336,7 +336,7 @@ test("vfq_seulement_seule_la_vff_prouvee_la_change", async () => {
     if (u.startsWith("https://lumio.test/p/stream/")) {
       appels.push(u);
       const nom = u.includes("tt892") ? "Film.2026.MULTi.TRUEFRENCH.2160p.WEB-DL.mkv" : "Film.2026.MULTi.1080p.WEB.mkv";
-      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `1080p • WEB-DL | 🇫🇷 ✓ | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
+      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `1080p • WEB-DL | 🇫🇷 ✓ | 🔎 C411 | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
     }
     return new Response("{}");
   };
@@ -384,7 +384,7 @@ test("tournee_vfq_relit_lumio_pour_trouver_la_vff", async () => {
     if (u.startsWith("https://lumio.test/p/stream/")) {
       appels.push(u);
       const nom = vff ? "Film.2026.MULTi.TRUEFRENCH.2160p.WEB-DL.mkv" : "Film.2026.MULTi.2160p.WEB.mkv";
-      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `4K • WEB-DL | 🇫🇷 🇨🇦 ✓ | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
+      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `4K • WEB-DL | 🇫🇷 🇨🇦 ✓ | 🔎 C411 | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
     }
     return new Response("{}");
   };
@@ -417,7 +417,7 @@ test("vff_depuis_vue_seulement_au_changement", async () => {
     if (u.includes("/vf.json")) return Response.json({});
     if (u.startsWith("https://lumio.test/p/stream/")) {
       appels.push(u);
-      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `1080p • WEB-DL | 🇫🇷 ✓ | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
+      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `1080p • WEB-DL | 🇫🇷 ✓ | 🔎 C411 | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
     }
     return new Response("{}");
   };
@@ -434,4 +434,35 @@ test("vff_depuis_vue_seulement_au_changement", async () => {
   assert.equal(lus.get("movie/tt961").vffDepuis, jour, "VF sans preuve, puis TRUEFRENCH : arrivée vue aujourd'hui");
   assert.equal(lus.get("movie/tt962").vff, true);
   assert.equal(lus.get("movie/tt962").vffDepuis, undefined, "premier avis : on ne sait pas depuis quand");
+});
+
+// La VFF prouvée par les noms : deux équipes, ou une seule trouvée sur un tracker torrent. L'Odyssée, le 11 novembre
+// 2026 : un seul fichier « MULTI.VF2 » de CZHD, sur des sites de téléchargement direct seulement : pas une preuve.
+test("vff_prouvee_par_deux_equipes_ou_un_tracker", async () => {
+  const f = (desc) => ({ name: "[AD⚡️] Lumio", description: desc, url: "https://lumio.test/play/x" });
+  const odyssee = [
+    f("1080p • WEB-DL • 📶 2,9 Mb/s\n🇫🇷 🇨🇦 🇬🇧 ✓ • 💾 3,8 Go • 🔎 GenerationFree\n🎧 H264 • AAC 5.1 • CZHD\n🗂️ The.Odyssey.2026.WEB.1080p.MULTI.VF2.H264-CZHD.mkv"),
+    f("1080p • WEB-DL • 📶 2,9 Mb/s\n🌍 🇫🇷 🇨🇦 • 💾 3,8 Go • 🔎 Free-Telecharger • 🔗 turbobit · 1fichier\n🎧 H264 • CZHD\n🗂️ The.Odyssey.2026.WEB.1080p.MULTI.VF2.H264-CZHD.mkv"),
+    f("1080p • WEB-DL\n🇫🇷 🇨🇦 🇬🇧 ✓ • 🔎 V3X\n🗂️ The.Odyssey.2026.MULTi.1080p.WEB.H265-SUPERFLU.mkv"),
+  ];
+  const tableau = {
+    tt971: odyssee,
+    // la même équipe sur un tracker torrent : prouvée
+    tt972: [f("4K • WEB-DL\n🌍 🇫🇷 🇬🇧 • 💾 17,6 Go • 🔎 C411\n🎧 HEVC • AC3 5.1 • Slay3R\n🗂️ Resident.Evil.2026.MULTi.TRUEFRENCH.2160p.HDR.DV.WEB-DL.H265-Slay3R.mkv")],
+    // deux équipes, en téléchargement direct seulement : prouvée
+    tt973: [f("🇫🇷 ✓ • 🔎 Wawacity • 🔗 rapidgator\n🗂️ Film.2026.MULTi.VFF.1080p.WEB-AAA.mkv"), f("🇫🇷 ✓ • 🔎 Tirexo • 🔗 1fichier\n🗂️ Film.2026.MULTi.VF2.1080p.WEB-BBB.mkv")],
+  };
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/vf.json")) return Response.json({});
+    const m = /lumio\.test\/p\/stream\/movie\/(tt\d+)\.json/.exec(u);
+    if (m) return Response.json({ streams: tableau[m[1]] || [] });
+    return new Response("{}");
+  };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", AFFICHES_URL: "https://affiches.test" };
+  const lus = await lireVfPhoto(e, ["movie/tt971", "movie/tt972", "movie/tt973"]);
+  assert.equal(lus.get("movie/tt971").vf, true);
+  assert.equal(lus.get("movie/tt971").vff, undefined, "L'Odyssée : un seul fichier CZHD, hors tracker");
+  assert.equal(lus.get("movie/tt972").vff, true, "Slay3R sur C411");
+  assert.equal(lus.get("movie/tt973").vff, true, "deux équipes");
 });
