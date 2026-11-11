@@ -574,8 +574,9 @@ test("contenu_vfq_possible", () => {
   assert.notEqual(netflix.statut, "VFQ POSSIBLE");
 });
 
-// La VFF prouvée par les noms avant sa date française : « VFF EN AVANCE », la date prévue dessous (Resident Evil, le
-// 11 novembre 2026 : en salle en France le 16 septembre, VFF prévue vers le 16 janvier).
+// La VFF prouvée par les noms avant sa date française : « VFF EN AVANCE », sans date dessous (Resident Evil, le
+// 11 novembre 2026 : en salle en France le 16 septembre, VFF prévue vers le 16 janvier). Les 7 jours qui suivent son
+// arrivée (vffDepuis) : « NOUVEAU EN VFF ».
 test("contenu_vff_en_avance", () => {
   const today = "2026-11-11";
   const sorties = (...l) => l.map(([pays, type, d]) => ({ iso_3166_1: pays, release_dates: [{ type, release_date: `${d}T00:00:00.000Z` }] }));
@@ -584,11 +585,14 @@ test("contenu_vff_en_avance", () => {
   const q = { uhd: true, extra: "DV", vf: true, vff: true, sources: 8, langue: "multi" };
   const c = posterContent(faits, { quality: q }, "poster", undefined, today);
   assert.equal(c.statut, "VFF EN AVANCE");
-  assert.equal(c.statut2, "PRÉVUE VERS LE 16 JANV. 2027");
+  assert.equal(c.statut2, undefined);
   assert.equal(c.gris, false);
-  // Sortie numérique française annoncée : « LE ».
-  const annoncee = posterContent({ ...faits, releases: [...faits.releases, ...sorties(["FR", 4, "2026-12-02"])] }, { quality: q }, "poster", undefined, today);
-  assert.equal(annoncee.statut2, "PRÉVUE LE 2 DÉC.");
+  // Arrivée il y a moins de 7 jours : « NOUVEAU EN VFF », jusqu'au 7e jour, puis « VFF EN AVANCE ».
+  assert.equal(posterContent(faits, { quality: { ...q, vffDepuis: "2026-11-11" } }, "poster", undefined, today).statut, "NOUVEAU EN VFF");
+  assert.equal(posterContent(faits, { quality: { ...q, vffDepuis: "2026-11-05" } }, "poster", undefined, today).statut, "NOUVEAU EN VFF");
+  assert.equal(posterContent(faits, { quality: { ...q, vffDepuis: "2026-11-04" } }, "poster", undefined, today).statut, "VFF EN AVANCE");
+  // Après la date française aussi, pendant 7 jours (une VFF arrivée après une sortie en VO seulement).
+  assert.equal(posterContent(faits, { quality: { ...q, vffDepuis: "2027-01-30" } }, "poster", undefined, "2027-02-01").statut, "NOUVEAU EN VFF");
   // Sans preuve (vff), date française passée, film français ou plateforme qui le double : rien.
   assert.notEqual(posterContent(faits, { quality: { ...q, vff: false } }, "poster", undefined, today).statut, "VFF EN AVANCE");
   assert.notEqual(posterContent(faits, { quality: q }, "poster", undefined, "2027-02-01").statut, "VFF EN AVANCE");

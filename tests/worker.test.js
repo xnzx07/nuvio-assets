@@ -1879,9 +1879,31 @@ test("vfq_en_vue_levee_par_la_vff_prouvee_chez_lumio", async () => {
   assert.ok(prouvee.lumio >= 1, "Lumio lu malgré la VFQ en vue");
   assert.doesNotMatch(prouvee.description, /VFQ/);
   // En avance sur sa date française (salle en France + 4 mois) : la fiche le dit.
-  assert.match(prouvee.description, /^📅 Déjà dispo en VFF · en avance, prévue vers le /);
+  assert.match(prouvee.description, /^📅 Déjà dispo en VFF · en avance./);
   const multi = await lancer("Resident.Evil.2026.MULTi.2160p.WEB.H265-SUPERFLU.mkv");
   assert.match(multi.description, /VFQ possible/);
+});
+
+// La VFF arrivée après la sortie (vffDepuis : en avance sur la date française, ou après la VO) : la fiche dit le jour, et
+// « Dispo depuis peu » range le film à ce jour-là, en tête le jour même (Resident Evil : en VO le 3 novembre, en VFF le 11).
+test("vff_arrivee_en_tete_de_dispo_depuis_peu", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date());
+  oublierInfos(); store.clear();
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.includes("/vf.json")) return sourcesDe({ tt903: { vf: true, sources: 9, vff: true, vfq: { u: 1, x: null, p: 0, f: 1, a: 0 }, vffDepuis: today }, tt904: { vf: true, sources: 9 } })(u);
+    if (u.includes("/discover/movie")) return Response.json({ results: [3, 4].map((id) => ({ id, title: id === 3 ? "Evil" : "Autre", original_language: "en", release_date: jour(-60), popularity: id })), page: 1, total_pages: 1 });
+    const m = /\/movie\/([34])\?/.exec(u);
+    if (m && m[1] === "3") return Response.json({ ...filmVod(3, "en", [["FR", 3, jour(-56)], ["US", 3, jour(-54)], ["US", 4, jour(-8)]]), title: "Evil" });
+    if (m) return Response.json({ ...filmVod(4, "en", [["US", 3, jour(-50)], ["US", 4, jour(-2)]]), title: "Autre" });
+    return Response.json({ results: [] });
+  };
+  const metas = (await (await get("/catalog/movie/accueil-vod-semaine.json")).json()).metas;
+  assert.deepEqual(metas.map((m) => m.name), ["Evil", "Autre"]);
+  assert.match(metas[0].description, /^📅 Dispo en VFF depuis le .+ · en avance\./);
+  assert.equal(metas[0]._vffDepuis, undefined, "champ interne retiré");
 });
 
 // « Les plus attendus » : la date de dispo chez soi après celle du cinéma (Scrooge, le 8 novembre 2026 : « Au cinéma le

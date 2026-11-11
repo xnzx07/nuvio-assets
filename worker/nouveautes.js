@@ -13,7 +13,8 @@ export const NOUVEAUTES = [
     date: "2026-11-11",
     titre: "Les films déjà en VFF avant leur date",
     points: [
-      "Quand la VF de France d'un film sort avant sa date française prévue, son affiche le dit : « VFF EN AVANCE », avec la date prévue en dessous. La fiche dit « Déjà dispo en VFF · en avance ».",
+      "Quand la VF de France d'un film sort, son affiche dit « NOUVEAU EN VFF » pendant une semaine, puis « VFF EN AVANCE » si elle est arrivée avant sa date française prévue. La fiche dit « Dispo en VFF depuis le … ».",
+      "Le film passe en tête de « Dispo depuis peu » le jour où sa VFF arrive, même s'il était sorti avant en VO.",
       "Les films « VFQ possible » sont revérifiés chaque nuit : dès qu'une VFF sort, ils passent en couleur et quittent « Bientôt dispo ».",
     ],
   },

@@ -329,7 +329,7 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       // Une VFQ en vue chez Torrentio (quebec) : Torrentio tel quel, coupé en deux ; ni la photo ni un avis sans VFF
       // prouvée ne le contredisent. Une VFF prouvée par l'avis (vff) lève tout doute.
       const quebec = !!(qualiteTorrentio && qualiteTorrentio.quebec);
-      let quality = avisJour && avisJour.vff ? vffProuvee(avecAvisVf(qualiteTorrentio, true, qualiteDeQ(avisJour.qualite)))
+      let quality = avisJour && avisJour.vff ? vffProuvee({ ...avecAvisVf(qualiteTorrentio, true, qualiteDeQ(avisJour.qualite)), ...(avisJour.vffDepuis ? { vffDepuis: avisJour.vffDepuis } : {}) })
         : quebec ? qualiteTorrentio
           : avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, avisJour.vf ? qualiteDeQ(avisJour.qualite) : SANS_QUALITE)
             : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);

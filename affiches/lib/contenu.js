@@ -119,6 +119,15 @@ function qualiteDe(quality, montrer) {
 /** Contenu d'une affiche, ou null si le titre n'a aucune image pour cette forme. */
 /** « 16 JANV. », avec l'année si ce n'est pas celle d'aujourd'hui. */
 const jourMois = (iso, today) => `${Number(iso.slice(8, 10))} ${MOIS[Number(iso.slice(5, 7)) - 1]}${iso.slice(0, 4) === today.slice(0, 4) ? "" : " " + iso.slice(0, 4)}`;
+const ilYa = (today, n) => new Date(Date.parse(`${today}T12:00:00Z`) - n * 86400000).toISOString().slice(0, 10);
+
+/** La VFF prouvée arrivée il y a moins de 7 jours (quality.vffDepuis, AAAA-MM-JJ). Film étranger, pas sur une plateforme qui le double. */
+export function nouveauEnVff(facts, quality, today) {
+  if (!quality || !quality.vff || quality.vf === false || !facts || facts.type === "series") return false;
+  if (facts.originalLanguage === "fr" || facts.abonnementVf) return false;
+  const d = quality.vffDepuis;
+  return /^\d{4}-\d{2}-\d{2}$/.test(d || "") && d <= today && d > ilYa(today, 7);
+}
 
 /**
  * La VFF prouvée par les noms des sources (quality.vff) avant sa date française : { date, vers } (la sortie numérique en
@@ -239,14 +248,12 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
     // vffVers : une estimation (salle en France + 4 mois, la chronologie des médias), pas une date annoncée.
     libelle2 = le ? `VFF ${quality.vffVers ? "VERS LE" : "LE"} ${jourMois(le, today)}` : null;
   }
-  // La VFF déjà là, prouvée par les noms des sources (TRUEFRENCH, VFF, VF2…), avant sa sortie numérique française
-  // (annoncée, sinon la salle en France + 4 mois) : « VFF EN AVANCE », et dessous la date prévue (Resident Evil, le
-  // 11 novembre 2026 : en VFF, prévue le 16 janvier). Pas pour un film français ni sur une plateforme qui le double.
-  const avance = vffEnAvance(facts, quality, today);
-  if (avance && r.statut.on) {
-    libelle = "VFF EN AVANCE";
-    libelle2 = `PRÉVUE ${avance.vers ? "VERS LE" : "LE"} ${jourMois(avance.date, today)}`;
-  }
+  // La VFF prouvée par les noms des sources (TRUEFRENCH, VFF, VF2…) : « NOUVEAU EN VFF » les 7 jours qui suivent son
+  // arrivée (vffDepuis, vue par l'addon), puis « VFF EN AVANCE » tant que sa sortie numérique française (annoncée, sinon
+  // la salle en France + 4 mois) n'est pas passée (Resident Evil, le 11 novembre 2026 : prévue le 16 janvier). Sans date
+  // dessous : la personne la trouvait inutile. Pas pour un film français ni sur une plateforme qui le double.
+  if (r.statut.on && nouveauEnVff(facts, quality, today)) { libelle = "NOUVEAU EN VFF"; libelle2 = null; }
+  else if (r.statut.on && vffEnAvance(facts, quality, today)) { libelle = "VFF EN AVANCE"; libelle2 = null; }
   let place = r.tendance.on && rank >= 1 && rank <= 20 ? rank : null;
   // Bandeau en coin : il porte le statut ou le N° de tendance, qui ne sont alors plus écrits en haut.
   let bandeau = null;

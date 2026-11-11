@@ -407,3 +407,31 @@ test("tournee_vfq_relit_lumio_pour_trouver_la_vff", async () => {
   await tourneeVfq(e, lire);
   assert.equal(appels.length, 2);
 });
+
+// Le jour où la VFF prouvée arrive (vffDepuis) : vu seulement après un avis qui disait autre chose ; un premier avis
+// déjà en VFF ne sait pas depuis quand.
+test("vff_depuis_vue_seulement_au_changement", async () => {
+  let nom = "Film.2026.MULTi.1080p.WEB.mkv";
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/vf.json")) return Response.json({});
+    if (u.startsWith("https://lumio.test/p/stream/")) {
+      appels.push(u);
+      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `1080p • WEB-DL | 🇫🇷 ✓ | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
+    }
+    return new Response("{}");
+  };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", AFFICHES_URL: "https://affiches.test", VFQ_PLAFOND: "9" };
+  const jour = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date());
+  const rangee = { metas: [{ id: "tt961", description: "📅 VFQ possible\nRésumé" }, { id: "tt962", description: "📅 VFQ possible\nRésumé" }] };
+  // tt962 : déjà en VFF au premier avis.
+  const premier = await aHeure(LA_NUIT, () => tourneeVfq(e, async () => ({ metas: [rangee.metas[0]] })));
+  assert.deepEqual(premier.vff, []);
+  nom = "Film.2026.MULTi.TRUEFRENCH.1080p.WEB.mkv";
+  await tourneeVfq(e, async () => rangee);
+  const lus = await lireVfPhoto(e, ["movie/tt961", "movie/tt962"]);
+  assert.equal(lus.get("movie/tt961").vff, true);
+  assert.equal(lus.get("movie/tt961").vffDepuis, jour, "VF sans preuve, puis TRUEFRENCH : arrivée vue aujourd'hui");
+  assert.equal(lus.get("movie/tt962").vff, true);
+  assert.equal(lus.get("movie/tt962").vffDepuis, undefined, "premier avis : on ne sait pas depuis quand");
+});

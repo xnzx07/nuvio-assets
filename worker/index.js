@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.63.0";
+const VERSION = "5.64.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -816,7 +816,7 @@ const avisPhotoUtile = (lu) => !(lu && (lu.vff || lu.quebec));
 function avecAvis(lu, a) {
   if (a.vff) {
     const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, ...reste } = lu || {};
-    return { ...reste, vf: true, vff: true, sources: Math.max(1, a.sources || 0) };
+    return { ...reste, vf: true, vff: true, sources: Math.max(1, a.sources || 0), ...(a.vffDepuis ? { vffDepuis: a.vffDepuis } : {}) };
   }
   if (lu && lu.quebec) return lu;
   return douteux({ ...(lu || {}), vf: a.vf, sources: Math.max(1, a.sources || 0) });
@@ -1085,7 +1085,13 @@ async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
   // « Vu sans VF depuis » : gardé d'un avis à l'autre tant que la VF n'est pas là.
   const neufs = [...lus].map(([cle, a]) => {
     const v = vieux.get(cle);
-    return [cle, { avis: { ...a, l: AVIS_FORMAT }, t: now, depuis: a.vf ? null : (v && v.avis && v.avis.vf === false && v.depuis) || now }];
+    const avant = v && v.avis;
+    // Le jour où la VFF prouvée est arrivée (vffDepuis, jour de Paris) : vu seulement si l'avis d'avant disait autre
+    // chose (pas de VF, ou une VF sans preuve lue au format 2). Un premier avis, ou un ancien format : on ne sait pas
+    // depuis quand (au premier passage, toutes les VFF déjà là auraient été « nouvelles »).
+    const vffDepuis = !a.vff ? null : (avant && avant.vffDepuis)
+      || (avant && (avant.vf === false || (avant.l === AVIS_FORMAT && !avant.vff)) ? parisToday() : null);
+    return [cle, { avis: { ...a, l: AVIS_FORMAT, ...(vffDepuis ? { vffDepuis } : {}) }, t: now, depuis: a.vf ? null : (v && v.avis && v.avis.vf === false && v.depuis) || now }];
   });
   for (const [cle, d] of neufs) avis.set(cle, sansFormat(d.avis));
   await garderAvis(env, neufs);
@@ -1328,10 +1334,11 @@ function filmRecent(releases, today) {
  *   « Aucune date »               date passée, sources sans VF (Buddy) : on ne sait pas quand la VF viendra ; sauf
  *                                 si la France le dit (vffApresVo : « Dispo vers le 14 févr. », Malfaisante)
  *   « Déjà dispo »                en VF avant la date (sources VF, ou plateforme en France quand on n'a pas lu les sources)
- *   « Déjà dispo en VFF · en avance, prévue le 16 janv. »   la VFF prouvée par les noms des sources (vff : TRUEFRENCH,
- *                                 VFF, VF2…) avant sa date française (vffApresVo : annoncée, sinon salle en France + 4
- *                                 mois). Resident Evil, le 11 novembre 2026. Commence par « Déjà dispo » : AppTV le
- *                                 montre en vert, sans rendez-vous dans l'Agenda.
+ *   « Dispo en VFF depuis le 11 nov. »   la VFF prouvée par les noms des sources (vff : TRUEFRENCH, VFF, VF2…), vue
+ *                                 arriver ce jour-là (vffDepuis), depuis moins de 60 jours ; « · en avance » avant sa
+ *                                 date française (vffApresVo). AppTV range le film à ce jour-là dans l'Agenda.
+ *   « Déjà dispo en VFF · en avance »   la même VFF avant sa date française, sans savoir depuis quand (Resident Evil,
+ *                                 le 11 novembre 2026). Commence par « Déjà dispo » : AppTV le montre en vert.
  * etat = { vf: sources VF (ou plateforme en France en VF, sources pas lues), vo: sources sans VF, surPlateforme: sur
  * une plateforme en France sans savoir si c'est en VF (sources pas lues) }. vod = estimationDe (voir dispoChezSoi).
  */
@@ -1340,8 +1347,9 @@ function releaseNote(releases, langue, today, etat = {}, vod = null) {
   // vffVers : une estimation (salle en France + 4 mois), pas une date annoncée.
   if (etat.vfq) return etat.vffLe ? `VFQ possible · VFF ${etat.vffVers ? "vers le" : "le"} ${shortDate(etat.vffLe)}` : "VFQ possible";
   if (etat.vff && langue !== "fr" && filmRecent(releases, today)) {
-    const prevue = vffApresVo(releases || [], today);
-    if (prevue) return `Déjà dispo en VFF · en avance, prévue ${prevue.vers ? "vers le" : "le"} ${shortDate(prevue.date)}`;
+    const avance = !!vffApresVo(releases || [], today) ? " · en avance" : "";
+    if (etat.vffDepuis && etat.vffDepuis <= today && etat.vffDepuis >= addDays(today, -60)) return `Dispo en VFF depuis le ${shortDate(etat.vffDepuis)}${avance}`;
+    if (avance) return `Déjà dispo en VFF${avance}`;
   }
   const { date, vers } = dispoChezSoi(releases || [], langue, vod);
   const connuPasse = !!date && !vers && date <= today;
@@ -1442,7 +1450,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       : sansVfConnus.has(ids[i]) ? "Sans VF"
       : opts.upcoming ? avecDispoChezSoi(cinemaNote(infos[i].releases, opts.region, date, today), chezSoi, today)
       : releaseNote(infos[i].releases, it.original_language, today,
-        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !infos[i].abonnementVf) } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
+        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !infos[i].abonnementVf), vffDepuis: lu.vffDepuis } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
     // Pas encore regardable : la date affichée par Nuvio (carrousel, « date de sortie
     // complète ») devient la date de dispo plutôt que la sortie en salle.
     const dispo = chezSoi.date;
@@ -1479,6 +1487,8 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       _vfLu: !!(lu && lu.vf),
       // VFF prouvée par les noms des sources (TRUEFRENCH, VFF, VF2…) : déjà regardable en VF, même avant la date officielle.
       _vffSur: !!(lu && lu.vf && lu.vff),
+      // Le jour où cette VFF est arrivée (vffDepuis) : « Dispo depuis peu » range le film à ce jour-là.
+      _vffDepuis: lu && lu.vf && lu.vff && lu.vffDepuis ? lu.vffDepuis : "",
       // Le doute VFF ou VFQ : pas dans « Dispo depuis peu », dans « Bientôt dispo » à la date française annoncée.
       _vfq: !!(lu && lu.vfqPossible),
       _vffLe: lu && lu.vfqPossible ? lu.vffLe || "" : "",
@@ -1574,7 +1584,7 @@ export const oublierScenes = SCENES.oublier;
 const tropDur = (age, cfg) => Boolean(cfg && cfg.f && age != null && age > cfg.f);
 
 /** Une fiche sans les champs internes de toMetas (« _digital »…), telle qu'envoyée à Nuvio. */
-const sansInternes = ({ _digital, _guess, _vf, _vfLu, _vffSur, _vfq, _vffLe, _dejaVf, _vo, _voVff, ...m }) => m;
+const sansInternes = ({ _digital, _guess, _vf, _vfLu, _vffSur, _vffDepuis, _vfq, _vffLe, _dejaVf, _vo, _voVff, ...m }) => m;
 
 /** Paramètres TMDB d'une recherche « discover », avec les règles de qualité communes
  *  et les réglages de la config (pays, genres masqués, note et année minimales, famille). */
@@ -2147,7 +2157,10 @@ function trierRangeeVf(def, today, metas) {
   // peut ne pas encore avoir la sortie numérique : Verity le 27 octobre).
   // Et une VFF prouvée par ses sources avant la date annoncée (Heart of the Beast : TRUEFRENCH et VF2 le 5 novembre, date
   // officielle le 10) : dispo depuis aujourd'hui.
-  const when = (m) => (future && (m._vffLe || m._voVff)) || (!future && m._vffSur && m._digital > today ? today : m._digital)
+  // La VFF arrivée après la date (en avance sur la date française, ou après une sortie en VO seulement) : rangée au jour
+  // de son arrivée (vffDepuis), en tête de la rangée le jour même (Resident Evil, en VO le 3 novembre, en VFF le 11).
+  const arrivee = (m) => (!future && m._vffDepuis && m._vffDepuis <= today && m._vffDepuis > (m._digital || m._guess || "") ? m._vffDepuis : "");
+  const when = (m) => arrivee(m) || (future && (m._vffLe || m._voVff)) || (!future && m._vffSur && m._digital > today ? today : m._digital)
     || (future || m._vfLu ? m._guess : "");
   // « Bientôt dispo » : à la fin, ceux dont on ne sait pas quand la VF viendra (pas encore en VF, doute sans date française).
   const sansDate = (m) => (m._vo && !m._voVff) || (m._vfq && !m._vffLe);
@@ -2608,7 +2621,7 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
     movie && besoinEstimation(releases) ? estimationsVod().then((table) => estimationDe(table, imdb)) : null,
   ]);
   // En VO seulement (comme pas sorti : seule la VF compte) : d'après les sources seulement (voir releaseNote).
-  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !abonnementVf(wp, d.original_language, d.keywords)) } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
+  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !abonnementVf(wp, d.original_language, d.keywords)), vffDepuis: lu.vffDepuis } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
   const note = (await sansVfListe()).has(imdb) ? "Sans VF"
     : movie ? releaseNote(releases, d.original_language, today, etat, vod) : await noteSerie(env, d, imdb, wp, today);
   // La même date que l'affiche et les rangées : la sortie numérique américaine (dispoChezSoi), ou son estimation.
