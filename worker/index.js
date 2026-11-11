@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.64.0";
+const VERSION = "5.64.1";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -2450,6 +2450,12 @@ async function catalogPage(env, ctx, type, id, extra, today, cfg, bilan, prefixe
 // Les fiches détaillées (résumé, casting, saisons, épisodes, bande-annonce) en français,
 // directement depuis TMDB : plus besoin de TMDB Discover Plus.
 const CACHE_META_S = 12 * 3600;    // une fiche reste 12 h dans le cache Cloudflare
+// Sauf une fiche qui attend sa VF (« VFQ possible », « Dispo le », « Dispo vers le », « Aucune date ») : une heure. Sa VF
+// peut arriver dans la journée (avis de Lumio, tournée de nuit) ; gardée 12 h, la fiche de Resident Evil disait encore
+// « VFQ possible » le 11 novembre 2026, des heures après que la VFF a été vue.
+const CACHE_META_ATTENTE_S = 3600;
+const ATTEND_SA_VF = /^📅 (VFQ possible|Dispo le |Dispo vers le |Aucune date)/u;
+const dureeFiche = (meta) => (ATTEND_SA_VF.test((meta && meta.description) || "") ? CACHE_META_ATTENTE_S : CACHE_META_S);
 const CACHE_META_CLIENT_S = 3600;  // et 1 h dans Nuvio
 
 const STATUS_FR = {
@@ -3570,7 +3576,7 @@ const app = {
       // Rappel encore en préparation : fiche pas gardée, pour l'avoir à la prochaine ouverture.
       const { _partial, ...metaOut } = found;
       if (_partial) return json({ meta: metaOut }, 60);
-      ctx.waitUntil(caches.default.put(metaKey, json({ meta: metaOut }, CACHE_META_S)));
+      ctx.waitUntil(caches.default.put(metaKey, json({ meta: metaOut }, dureeFiche(metaOut))));
       return json({ meta: metaOut }, CACHE_META_CLIENT_S);
     }
 

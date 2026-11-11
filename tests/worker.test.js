@@ -1857,6 +1857,12 @@ test("vfq_possible_dans_les_rangees_et_la_fiche", async () => {
 // 16 janv. »). Lumio est lu, et seule une VFF prouvée change l'avis : un « MULTi » 🇫🇷 seul laisse la VFQ en vue.
 test("vfq_en_vue_levee_par_la_vff_prouvee_chez_lumio", async () => {
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const durees = [];
+  const put = globalThis.caches.default.put;
+  globalThis.caches.default.put = async (req, res) => {
+    if (/\/meta\//.test(req.url)) durees.push(Number((/max-age=(\d+)/.exec(res.headers.get("Cache-Control") || "") || [])[1]));
+    return put(req, res);
+  };
   const lancer = async (fichier) => {
     oublierInfos(); store.clear();
     let lumio = 0;
@@ -1876,12 +1882,15 @@ test("vfq_en_vue_levee_par_la_vff_prouvee_chez_lumio", async () => {
     return { description: fiche.description || "", lumio };
   };
   const prouvee = await lancer("Resident.Evil.2026.MULTi.TRUEFRENCH.2160p.WEB-DL.H265-Slay3R.mkv");
+  assert.equal(durees.at(-1), 43200, "VF là : gardée 12 h");
   assert.ok(prouvee.lumio >= 1, "Lumio lu malgré la VFQ en vue");
   assert.doesNotMatch(prouvee.description, /VFQ/);
   // En avance sur sa date française (salle en France + 4 mois) : la fiche le dit.
   assert.match(prouvee.description, /^📅 Déjà dispo en VFF · en avance./);
   const multi = await lancer("Resident.Evil.2026.MULTi.2160p.WEB.H265-SUPERFLU.mkv");
   assert.match(multi.description, /VFQ possible/);
+  // Une fiche qui attend sa VF : gardée une heure seulement (sa VF peut arriver dans la journée).
+  assert.equal(durees.at(-1), 3600);
 });
 
 // La VFF arrivée après la sortie (vffDepuis : en avance sur la date française, ou après la VO) : la fiche dit le jour, et
