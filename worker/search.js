@@ -225,27 +225,36 @@ export function prepareWords(data) {
   return { weights, byFirst };
 }
 
-/** Le mot connu le plus proche de w parmi ceux qui commencent par une des lettres données. */
-function closestWord(w, vocab, firsts) {
+const sorted = (w) => [...w].sort().join("");
+
+/**
+ * Les mots connus les plus proches de w parmi ceux qui commencent par une des lettres données, le meilleur d'abord
+ * (au plus `n`).
+ */
+function closestWords(w, vocab, firsts, n = 1) {
   const max = w.length <= 5 ? 1 : 2;
-  let best = null, bestScore = Infinity;
+  const found = [], sortedW = sorted(w);
   for (const f of firsts) {
     const byLen = vocab.byFirst.get(f);
     if (!byLen) continue;
     for (let len = w.length - max; len <= w.length + max; len++) {
       for (const c of byLen.get(len) || []) {
-        const d = editDistance(w, c, max);
+        // Les mêmes lettres dans un autre ordre (« bounia » → boiuna) : une seule faute, et préférée à une lettre
+        // changée (« bodnia ») ; mesuré, c'était deux fautes.
+        const anagram = c.length === w.length && sorted(c) === sortedW;
+        const d = anagram ? 1 : editDistance(w, c, max);
         if (d > max) continue;
         // À distance égale : une lettre oubliée plutôt qu'ajoutée (« pice » → piece, pas pie),
         // le pluriel (« blinder » → blinders), puis le mot le plus présent dans les titres connus.
-        const score = d - (c.length >= w.length ? 0.2 : 0) - (c === `${w}s` ? 0.3 : 0)
+        const score = d - (c.length >= w.length ? 0.2 : 0) - (c === `${w}s` ? 0.3 : 0) - (anagram ? 0.3 : 0)
           - 0.1 * Math.log10(1 + vocab.weights.get(c));
-        if (score < bestScore) { best = c; bestScore = score; }
+        found.push({ c, score });
       }
     }
   }
-  return best;
+  return found.sort((a, b) => a.score - b.score).slice(0, n).map((x) => x.c);
 }
+const closestWord = (w, vocab, firsts) => closestWords(w, vocab, firsts)[0] || null;
 
 // Requête très longue (un texte collé au hasard) : coupée à 100 caractères, et la correction ne regarde que ses
 // 10 premiers mots (de 30 lettres au plus). Chaque mot inconnu est comparé à une bonne part du vocabulaire :
@@ -267,17 +276,32 @@ export function capQuery(text) {
  * (la faute est rarement sur la première), puis parmi tous. null si rien n'est corrigé.
  */
 export function correctQuery(text, vocab) {
-  if (!vocab || !vocab.weights.size) return null;
-  let changed = false;
-  const out = norm(text).split(" ").filter(Boolean).map((w, i) => {
+  return correctQueries(text, vocab)[0] || null;
+}
+
+/**
+ * Comme correctQuery, plus une 2e correction : le premier mot corrigé remplacé par son 2e mot le plus proche
+ * (« beware bounia » → « beware bodnia », à une faute, et « beware boiuna », à deux : Beware Boiúna). Les deux
+ * sont cherchées ; le classement garde le titre qui ressemble le plus à la requête. [] si rien n'est corrigé.
+ */
+export function correctQueries(text, vocab) {
+  if (!vocab || !vocab.weights.size) return [];
+  let changed = false, alt = null;
+  const words = norm(text).split(" ").filter(Boolean);
+  const out = words.map((w, i) => {
     if (i >= MAX_FIX_WORDS || w.length < 4 || w.length > 30 || /\d/.test(w) || vocab.weights.has(w)) return w;
-    const best = closestWord(w, vocab, [w[0]])
-      || closestWord(w, vocab, [...vocab.byFirst.keys()].filter((f) => f !== w[0]));
-    if (!best) return w;
+    let best = closestWords(w, vocab, [w[0]], 2);
+    if (!best.length) best = closestWords(w, vocab, [...vocab.byFirst.keys()].filter((f) => f !== w[0]), 2);
+    if (!best.length) return w;
     changed = true;
-    return best;
+    if (alt === null && best[1]) alt = { i, w: best[1] };
+    return best[0];
   });
-  return changed ? out.join(" ") : null;
+  if (!changed) return [];
+  const first = out.join(" ");
+  if (!alt) return [first];
+  const second = out.map((w, i) => (i === alt.i ? alt.w : w)).join(" ");
+  return [first, second];
 }
 
 /** Requêtes de secours pour une faute que le vocabulaire n'a pas su corriger : débuts de mots. */
@@ -796,7 +820,8 @@ export async function smartSearch(query, page, search, kind, api, opts = {}) {
   }
 
   const vocab = opts.words ? await opts.words().catch(() => null) : null;
-  const fixed = alias ? null : correctQuery(main, vocab);  // « inseption » → « inception »
+  // « inseption » → « inception » ; fixed2 : la 2e correction possible (« bounia » → bodnia, puis boiuna)
+  const [fixed = null, fixed2 = null] = alias ? [] : correctQueries(main, vocab);
   const sagaBase = sq ? (ALIASES[norm(sq.base)] || correctQuery(sq.base, vocab) || sq.base) : null;
   const studio = !alias && !ym && !sq ? (STUDIOS[norm(base)] || {})[kind === "series" ? "series" : "movie"] : null;
   const variant = !alias && !ym && !sq ? pluralVariant(main) : null;   // « monstre » → « monstres »
@@ -806,17 +831,19 @@ export async function smartSearch(query, page, search, kind, api, opts = {}) {
   if (alias) forms.push({ q: alias, pen: PEN_DERIVED });
   if (ym) forms.push({ q: ym[1], pen: PEN_DERIVED });
   if (fixed) forms.push({ q: fixed, pen: PEN_FIXED });
+  if (fixed2) forms.push({ q: fixed2, pen: PEN_FIXED });
   // « pacino de niro », « tom hanks et meg ryan » : chaque nom cherché à part (au plus PEOPLE_SEARCHES).
   const splits = api && !alias && !ym && !sq && !studio && !genre ? personSplits(main, vocab) : [];
   const names = [...new Set(splits.flat())];
 
   const none = Promise.resolve(null);
-  const [rawRes, cleanRes, aliasRes, yearRes, fixedRes, pluralRes, enRes, people, sagas, studioRes, otherRes, genreRes, ...namesRes] = await Promise.all([
+  const [rawRes, cleanRes, aliasRes, yearRes, fixedRes, fixed2Res, pluralRes, enRes, people, sagas, studioRes, otherRes, genreRes, ...namesRes] = await Promise.all([
     search(raw, 1),
     clean ? search(clean, 1) : none,
     alias ? search(alias, 1) : none,
     ym ? search(ym[1], 1, { [yearKey]: ym[2] }) : none,
     fixed ? search(fixed, 1) : none,
+    fixed2 ? search(fixed2, 1) : none,
     variant ? search(variant, 1) : none,
     // Titres anglais des résultats (« spirited away » → Le Voyage de Chihiro) ; pas affichés.
     search(main, 1, { language: "en-US" }),
@@ -837,7 +864,7 @@ export async function smartSearch(query, page, search, kind, api, opts = {}) {
   const en = new Map(results(enRes).map((it) => [it.id, it.title || it.name]));
 
   let pool = dedupe(usable([
-    ...results(rawRes), ...results(cleanRes), ...results(aliasRes), ...results(yearRes), ...results(fixedRes),
+    ...results(rawRes), ...results(cleanRes), ...results(aliasRes), ...results(yearRes), ...results(fixedRes), ...results(fixed2Res),
     ...results(pluralRes).filter((it) => titleMatch(main, it)),
   ]));
   pool.forEach((it) => { if (en.has(it.id)) it.en_title = en.get(it.id); });

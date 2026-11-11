@@ -1,7 +1,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import worker, { oublierInfos } from "../worker/index.js";
-import { capQuery, correctQuery, prepareWords } from "../worker/search.js";
+import { capQuery, correctQueries, correctQuery, prepareWords } from "../worker/search.js";
 
 // Addon appelé comme par Cloudflare (cache en mémoire, TMDB simulé) : adresses piégées, erreurs, budget d'appels.
 let store, calls;
@@ -101,6 +101,15 @@ test("fiche_legere_sans_appel_gemini", async () => {
   assert.ok(!calls.some((u) => u.includes("generativelanguage")), "Gemini appelé pour une fiche légère");
   await get(`${avecCle}/meta/movie/tmdb:7.json`);
   assert.ok(calls.some((u) => u.includes("generativelanguage")), "fiche complète : Gemini pas appelé");
+});
+
+// Lettres inversées (« bounia ») : une seule faute, préférée à une lettre changée (« bodnia »), et la 2e correction
+// la plus proche cherchée aussi (Beware Boiúna, 11 novembre 2026).
+test("recherche_lettres_inversees", () => {
+  const vocab = prepareWords({ beware: 30, boiuna: 1, bodnia: 3, bonnie: 20 });
+  assert.deepEqual(correctQueries("beware bounia", vocab), ["beware boiuna", "beware bodnia"]);
+  assert.equal(correctQuery("beware bounia", vocab), "beware boiuna");
+  assert.deepEqual(correctQueries("beware", vocab), []);
 });
 
 // Recherche d'un texte collé au hasard : coupée à 100 caractères, correction sur les 10 premiers mots seulement.
