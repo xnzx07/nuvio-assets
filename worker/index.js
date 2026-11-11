@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.62.4";
+const VERSION = "5.63.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1054,26 +1054,32 @@ async function garderAvis(env, neufs) {
   } catch (e) { console.warn(`garder les avis : ${e && e.message}`); }
 }
 
-async function avisDuJour(env, cles, origine = "affiches") {
+/**
+ * opts.budget : le plafond de Lumio à prendre (« lumio » ; « vfq » pour la tournée de nuit, tourneeVfq) ; opts.relire :
+ * un avis « VF » gardé sans VFF prouvée est relu quand même (tournée de nuit : la VFF arrive souvent après la VFQ), et
+ * StreamFusion n'est pas demandé.
+ */
+async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
   const now = Date.now(), avis = new Map(), vieux = new Map();
   const manque = [];
+  const bon = (d) => avisFrais(d, now) && !(opts.relire && d.avis.vf && !d.avis.vff);
   for (const cle of cles) {
     const hit = await caches.default.match(avisCache(cle)).catch(() => null);
     const d = hit ? await hit.json().catch(() => null) : null;
-    if (avisFrais(d, now)) avis.set(cle, sansFormat(d.avis)); else { manque.push(cle); if (d) vieux.set(cle, d); }
+    if (bon(d)) avis.set(cle, sansFormat(d.avis)); else { manque.push(cle); if (d) vieux.set(cle, d); }
   }
   // La mémoire commune : un titre déjà demandé ailleurs (un autre centre de données) n'est pas redemandé.
   for (const [cle, d] of await lireAvisGardes(env, manque)) {
     vieux.set(cle, d);
-    if (avisFrais(d, now)) { avis.set(cle, sansFormat(d.avis)); await garderAvisIci(cle, d); }
+    if (bon(d)) { avis.set(cle, sansFormat(d.avis)); await garderAvisIci(cle, d); }
   }
   const aLire = manque.filter((c) => !avis.has(c)).slice(0, SF_MAX);
   // Lumio d'abord, dans son plafond ; StreamFusion pour le reste, dans le sien. SF_MAX appels au plus en tout (la
   // limite de 50 appels sortants par requête).
   const lus = new Map();
-  const nLumio = env.LUMIO_URL ? await reserver(env, "lumio", aLire.length, origine) : 0;
+  const nLumio = env.LUMIO_URL ? await reserver(env, opts.budget || "lumio", aLire.length, origine) : 0;
   if (nLumio) (await lireVfLumio(env, aLire.slice(0, nLumio))).forEach((v, k) => lus.set(k, v));
-  const reste = aLire.filter((c) => !lus.has(c)).slice(0, Math.max(0, SF_MAX - nLumio));
+  const reste = opts.relire ? [] : aLire.filter((c) => !lus.has(c)).slice(0, Math.max(0, SF_MAX - nLumio));
   const nSf = reste.length && env.STREAMFUSION_URL ? await reserver(env, "sf", reste.length, origine) : 0;
   if (nSf) (await lireVfStreamFusion(env, reste.slice(0, nSf))).forEach((v, k) => lus.set(k, v));
   // « Vu sans VF depuis » : gardé d'un avis à l'autre tant que la VF n'est pas là.
@@ -1183,7 +1189,9 @@ const RESERVE_PHOTO_JUSQUA = 7;
 const reservePhotoTenue = () => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" }).format(new Date(Date.now()))) < RESERVE_PHOTO_JUSQUA;
 // sansvf : les films examinés chaque nuit pour la liste « SANS VF » (avisSansVf), une ou deux demandes par film, à part
 // des plafonds des rangées et des affiches.
-const PLAFONDS = { sf: ["SF_PLAFOND", 300, "", 0.4], lumio: ["LUMIO_PLAFOND", 50, "lumio:", 0.6], sansvf: ["SANSVF_PLAFOND", 15, "sansvf:", 0] };
+// vfq : la tournée de nuit des films « VFQ possible » (tourneeVfq), à part elle aussi.
+const PLAFONDS = { sf: ["SF_PLAFOND", 300, "", 0.4], lumio: ["LUMIO_PLAFOND", 50, "lumio:", 0.6], sansvf: ["SANSVF_PLAFOND", 15, "sansvf:", 0],
+  vfq: ["VFQ_PLAFOND", 20, "vfq:", 0] };
 const plafondsAtteints = new Set();
 const plafondCache = (cle) => new Request(`https://avis.cache/plafond/${cle}`);
 let budgetPret = null;
@@ -1258,6 +1266,30 @@ export async function lireVfPhoto(env, cles) {
   })]);
 }
 
+/**
+ * La tournée de nuit des films « VFQ possible » de « Bientôt dispo » : Lumio relu pour chacun (VFQ_PLAFOND, 20 par
+ * nuit, à part des autres plafonds), même avec un avis « VF » gardé, pour trouver une VFF prouvée par les noms
+ * (TRUEFRENCH, VFF, VF2) dès qu'elle sort. Sans elle, un film que personne n'ouvre restait « VFQ possible » jusqu'à la
+ * date française (Resident Evil, le 11 novembre 2026 : en VFF bien avant le 16 janvier). L'avis trouvé est gardé comme
+ * les autres (mémoire commune) : fiches, rangées et affiches le lisent ensuite. lire(chemin) : une page de la rangée
+ * (le serveur qui la sert). { vus, relus, vff : [clés] }.
+ */
+export async function tourneeVfq(env, lire) {
+  const cles = [];
+  for (const skip of [0, 20, 40]) {
+    let metas = [];
+    try { metas = ((await lire(`/catalog/movie/accueil-vod-bientot${skip ? `/skip=${skip}` : ""}.json`)) || {}).metas || []; } catch (e) { break; }
+    for (const m of metas) {
+      if (/^tt\d{1,10}$/.test(m.id || "") && /^📅 VFQ possible/u.test(m.description || "")) cles.push(`movie/${m.id}`);
+    }
+    if (metas.length < 20) break;
+  }
+  const uniques = [...new Set(cles)].slice(0, SF_MAX);
+  if (!uniques.length) return { vus: 0, relus: 0, vff: [] };
+  const { avis } = await avisDuJour(env, uniques, "vfq", { budget: "vfq", relire: true });
+  return { vus: uniques.length, relus: avis.size, vff: uniques.filter((c) => avis.get(c) && avis.get(c).vff) };
+}
+
 /** Pour les tests : oublie les plafonds atteints et la table des avis déjà préparée. */
 export const oublierAvis = () => { plafondsAtteints.clear(); avisPret = null; budgetPret = null; };
 
@@ -1296,6 +1328,10 @@ function filmRecent(releases, today) {
  *   « Aucune date »               date passée, sources sans VF (Buddy) : on ne sait pas quand la VF viendra ; sauf
  *                                 si la France le dit (vffApresVo : « Dispo vers le 14 févr. », Malfaisante)
  *   « Déjà dispo »                en VF avant la date (sources VF, ou plateforme en France quand on n'a pas lu les sources)
+ *   « Déjà dispo en VFF · en avance, prévue le 16 janv. »   la VFF prouvée par les noms des sources (vff : TRUEFRENCH,
+ *                                 VFF, VF2…) avant sa date française (vffApresVo : annoncée, sinon salle en France + 4
+ *                                 mois). Resident Evil, le 11 novembre 2026. Commence par « Déjà dispo » : AppTV le
+ *                                 montre en vert, sans rendez-vous dans l'Agenda.
  * etat = { vf: sources VF (ou plateforme en France en VF, sources pas lues), vo: sources sans VF, surPlateforme: sur
  * une plateforme en France sans savoir si c'est en VF (sources pas lues) }. vod = estimationDe (voir dispoChezSoi).
  */
@@ -1303,6 +1339,10 @@ function releaseNote(releases, langue, today, etat = {}, vod = null) {
   // Le doute : VFF ou VFQ (affiches/lib/qualite.js, avecDatesVff), et la sortie française annoncée, avec laquelle la VFF arrive.
   // vffVers : une estimation (salle en France + 4 mois), pas une date annoncée.
   if (etat.vfq) return etat.vffLe ? `VFQ possible · VFF ${etat.vffVers ? "vers le" : "le"} ${shortDate(etat.vffLe)}` : "VFQ possible";
+  if (etat.vff && langue !== "fr" && filmRecent(releases, today)) {
+    const prevue = vffApresVo(releases || [], today);
+    if (prevue) return `Déjà dispo en VFF · en avance, prévue ${prevue.vers ? "vers le" : "le"} ${shortDate(prevue.date)}`;
+  }
   const { date, vers } = dispoChezSoi(releases || [], langue, vod);
   const connuPasse = !!date && !vers && date <= today;
   // Les dates et les plateformes se trompent (Kraken, norvégien, en VF sur Paramount+) : seules les sources disent
@@ -1402,7 +1442,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       : sansVfConnus.has(ids[i]) ? "Sans VF"
       : opts.upcoming ? avecDispoChezSoi(cinemaNote(infos[i].releases, opts.region, date, today), chezSoi, today)
       : releaseNote(infos[i].releases, it.original_language, today,
-        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
+        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !infos[i].abonnementVf) } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
     // Pas encore regardable : la date affichée par Nuvio (carrousel, « date de sortie
     // complète ») devient la date de dispo plutôt que la sortie en salle.
     const dispo = chezSoi.date;
@@ -2568,7 +2608,7 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
     movie && besoinEstimation(releases) ? estimationsVod().then((table) => estimationDe(table, imdb)) : null,
   ]);
   // En VO seulement (comme pas sorti : seule la VF compte) : d'après les sources seulement (voir releaseNote).
-  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
+  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !abonnementVf(wp, d.original_language, d.keywords)) } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
   const note = (await sansVfListe()).has(imdb) ? "Sans VF"
     : movie ? releaseNote(releases, d.original_language, today, etat, vod) : await noteSerie(env, d, imdb, wp, today);
   // La même date que l'affiche et les rangées : la sortie numérique américaine (dispoChezSoi), ou son estimation.
@@ -3191,6 +3231,11 @@ export default {
       : prendrePhotos(env, event.scheduledTime, classerTendances));
     ctx.waitUntil(nettoyerReserve(env, event.scheduledTime));
     ctx.waitUntil(prendreTops(env, event.scheduledTime).catch((e) => console.warn(`tops : ${e && e.message}`)));
+    // Les films « VFQ possible » : une VFF sortie depuis (tourneeVfq). Par SELF : son propre budget d'appels.
+    if (env.SELF) {
+      ctx.waitUntil(triCle(env).then((cle) => env.SELF.fetch(new Request("https://self/vfq/tournee", { method: "POST", headers: { "x-tri": cle } })))
+        .catch((e) => console.warn(`tournée VFQ : ${e && e.message}`)));
+    }
   },
 };
 
@@ -3434,6 +3479,16 @@ const app = {
       // type « series » renvoyé tel quel : le script sait que cette version de l'addon juge bien les séries.
       const serie = body.type === "series";
       return new Response(JSON.stringify({ ...(await avisSansVf(env, body.imdb, serie)), type: serie ? "series" : "movie" }), { headers: entete });
+    }
+    // La tournée de nuit des films « VFQ possible » (tourneeVfq), lancée par la tâche de 4 h : appel de l'addon à
+    // lui-même (son propre budget d'appels sortants). La rangée vient du serveur qui la sert (Oracle quand il est actif).
+    if (path === "/vfq/tournee" && request.method === "POST") {
+      if (!same(request.headers.get("x-tri") || "", await triCle(env))) return json({ error: "interdit" }, 0);
+      const lire = async (p) => {
+        const res = ACTIF ? await fetch(SERVEUR_ADDON + p) : await app.fetch(new Request(url.origin + p), env, ctx);
+        return res.ok ? res.json() : null;
+      };
+      return json(await tourneeVfq(env, lire), 0);
     }
     if (path === "/tendances/tri" && request.method === "POST") {
       if (!same(request.headers.get("x-tri") || "", await triCle(env))) return json({ error: "interdit" }, 0);

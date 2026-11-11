@@ -291,7 +291,7 @@ export function avecStreamFusion(t, avis) {
 export function vffProuvee(q) {
   if (!q) return q;
   const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, vfqDoute, ...reste } = q;
-  return { ...reste, vf: true };
+  return { ...reste, vf: true, vff: true };
 }
 
 /** Attente de StreamFusion (lu par l'addon), en plus de celle de Torrentio. */

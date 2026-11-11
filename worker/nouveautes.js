@@ -10,6 +10,14 @@ import { LOGO_V } from "./reglages.js";
 
 export const NOUVEAUTES = [
   {
+    date: "2026-11-11",
+    titre: "Les films déjà en VFF avant leur date",
+    points: [
+      "Quand la VF de France d'un film sort avant sa date française prévue, son affiche le dit : « VFF EN AVANCE », avec la date prévue en dessous. La fiche dit « Déjà dispo en VFF · en avance ».",
+      "Les films « VFQ possible » sont revérifiés chaque nuit : dès qu'une VFF sort, ils passent en couleur et quittent « Bientôt dispo ».",
+    ],
+  },
+  {
     date: "2026-11-07",
     titre: "Exporter tout ce que tu as regardé",
     points: [

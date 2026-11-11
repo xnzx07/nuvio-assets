@@ -573,3 +573,25 @@ test("contenu_vfq_possible", () => {
   assert.equal(netflix.moitie, undefined);
   assert.notEqual(netflix.statut, "VFQ POSSIBLE");
 });
+
+// La VFF prouvée par les noms avant sa date française : « VFF EN AVANCE », la date prévue dessous (Resident Evil, le
+// 11 novembre 2026 : en salle en France le 16 septembre, VFF prévue vers le 16 janvier).
+test("contenu_vff_en_avance", () => {
+  const today = "2026-11-11";
+  const sorties = (...l) => l.map(([pays, type, d]) => ({ iso_3166_1: pays, release_dates: [{ type, release_date: `${d}T00:00:00.000Z` }] }));
+  const faits = { type: "movie", title: "Resident Evil", firstAir: null, poster: "/p.jpg", textlessPoster: "/t.jpg", logo: "/l.png", genreIds: [], originalLanguage: "en", year: "2026",
+    releases: sorties(["FR", 3, "2026-09-16"], ["US", 3, "2026-09-18"], ["US", 4, "2026-11-03"]) };
+  const q = { uhd: true, extra: "DV", vf: true, vff: true, sources: 8, langue: "multi" };
+  const c = posterContent(faits, { quality: q }, "poster", undefined, today);
+  assert.equal(c.statut, "VFF EN AVANCE");
+  assert.equal(c.statut2, "PRÉVUE VERS LE 16 JANV. 2027");
+  assert.equal(c.gris, false);
+  // Sortie numérique française annoncée : « LE ».
+  const annoncee = posterContent({ ...faits, releases: [...faits.releases, ...sorties(["FR", 4, "2026-12-02"])] }, { quality: q }, "poster", undefined, today);
+  assert.equal(annoncee.statut2, "PRÉVUE LE 2 DÉC.");
+  // Sans preuve (vff), date française passée, film français ou plateforme qui le double : rien.
+  assert.notEqual(posterContent(faits, { quality: { ...q, vff: false } }, "poster", undefined, today).statut, "VFF EN AVANCE");
+  assert.notEqual(posterContent(faits, { quality: q }, "poster", undefined, "2027-02-01").statut, "VFF EN AVANCE");
+  assert.notEqual(posterContent({ ...faits, originalLanguage: "fr" }, { quality: q }, "poster", undefined, today).statut, "VFF EN AVANCE");
+  assert.notEqual(posterContent({ ...faits, abonnementVf: true }, { quality: q }, "poster", undefined, today).statut, "VFF EN AVANCE");
+});

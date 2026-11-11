@@ -1878,6 +1878,8 @@ test("vfq_en_vue_levee_par_la_vff_prouvee_chez_lumio", async () => {
   const prouvee = await lancer("Resident.Evil.2026.MULTi.TRUEFRENCH.2160p.WEB-DL.H265-Slay3R.mkv");
   assert.ok(prouvee.lumio >= 1, "Lumio lu malgré la VFQ en vue");
   assert.doesNotMatch(prouvee.description, /VFQ/);
+  // En avance sur sa date française (salle en France + 4 mois) : la fiche le dit.
+  assert.match(prouvee.description, /^📅 Déjà dispo en VFF · en avance, prévue vers le /);
   const multi = await lancer("Resident.Evil.2026.MULTi.2160p.WEB.H265-SUPERFLU.mkv");
   assert.match(multi.description, /VFQ possible/);
 });

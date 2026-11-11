@@ -1,6 +1,6 @@
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import worker, { oublierAvis, lireVfPhoto, avecAvisDuJour } from "../worker/index.js";
+import worker, { oublierAvis, lireVfPhoto, avecAvisDuJour, tourneeVfq } from "../worker/index.js";
 import { fakeD1 } from "./support/d1.mjs";
 
 let store, appels, env;
@@ -373,4 +373,37 @@ test("doute_vfq_lumio_decide", async () => {
   assert.deepEqual([lus.get("movie/tt911").vf, lus.get("movie/tt911").vfqPossible, lus.get("movie/tt911").vffLe], [true, true, "2026-11-17"]);
   assert.deepEqual([lus.get("movie/tt912").vf, lus.get("movie/tt912").vfqPossible], [false, undefined]);
   assert.deepEqual([lus.get("movie/tt914").vf, lus.get("movie/tt914").vfqPossible], [true, true], "rien chez Torrentio, Lumio dit VF : le doute");
+});
+
+// La tournée de nuit des films « VFQ possible » de « Bientôt dispo » : Lumio relu même avec un avis « VF » gardé (sans
+// VFF prouvée), dans son plafond à part (VFQ_PLAFOND) ; seuls ceux-là. Resident Evil, le 11 novembre 2026.
+test("tournee_vfq_relit_lumio_pour_trouver_la_vff", async () => {
+  let vff = false;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.startsWith("https://lumio.test/p/stream/")) {
+      appels.push(u);
+      const nom = vff ? "Film.2026.MULTi.TRUEFRENCH.2160p.WEB-DL.mkv" : "Film.2026.MULTi.2160p.WEB.mkv";
+      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `4K • WEB-DL | 🇫🇷 🇨🇦 ✓ | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
+    }
+    return new Response("{}");
+  };
+  const rangee = { metas: [
+    { id: "tt951", description: "📅 VFQ possible · VFF vers le 16 janv.\nRésumé" },
+    { id: "tt952", description: "📅 Dispo le 20 nov.\nRésumé" },
+    { id: "tmdb:9", description: "📅 VFQ possible\nRésumé" } ] };
+  const lus = [];
+  const lire = async (p) => { lus.push(p); return rangee; };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", VFQ_PLAFOND: "5" };
+  const premier = await tourneeVfq(e, lire);
+  assert.deepEqual(premier, { vus: 1, relus: 1, vff: [] });
+  assert.deepEqual(lus, ["/catalog/movie/accueil-vod-bientot.json"], "moins de 20 : une page");
+  // Le lendemain, la VFF est sortie : l'avis « VF » gardé 7 jours est relu quand même.
+  vff = true;
+  assert.deepEqual(await tourneeVfq(e, lire), { vus: 1, relus: 1, vff: ["movie/tt951"] });
+  assert.equal(appels.length, 2);
+  assert.ok(!appels.some((u) => u.startsWith("https://sf.test")), "pas StreamFusion");
+  // Une VFF prouvée gardée : pas relue.
+  await tourneeVfq(e, lire);
+  assert.equal(appels.length, 2);
 });

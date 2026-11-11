@@ -7,6 +7,7 @@
 import { createHash } from "node:crypto";
 import { DEFAUT_REGLAGES, PALETTE } from "./lien-affiches.js";
 import { etatSortie, suiteSerie, libelleSuite } from "./statut.js";
+import { prochaineVff, vffEstimee } from "./qualite.js";
 import { jourParis } from "./jour.js";
 import { policePour } from "./polices.js";
 
@@ -116,6 +117,23 @@ function qualiteDe(quality, montrer) {
 
 
 /** Contenu d'une affiche, ou null si le titre n'a aucune image pour cette forme. */
+/** « 16 JANV. », avec l'année si ce n'est pas celle d'aujourd'hui. */
+const jourMois = (iso, today) => `${Number(iso.slice(8, 10))} ${MOIS[Number(iso.slice(5, 7)) - 1]}${iso.slice(0, 4) === today.slice(0, 4) ? "" : " " + iso.slice(0, 4)}`;
+
+/**
+ * La VFF prouvée par les noms des sources (quality.vff) avant sa date française : { date, vers } (la sortie numérique en
+ * France annoncée, sinon l'estimation salle + 4 mois), ou null. Film étranger seulement, pas sur une plateforme en
+ * France qui le double (la VFF y est déjà, à sa date).
+ */
+export function vffEnAvance(facts, quality, today) {
+  if (!quality || !quality.vff || quality.vf === false || !facts || facts.type === "series") return null;
+  if (facts.originalLanguage === "fr" || facts.abonnementVf) return null;
+  const le = prochaineVff(facts.releases || [], today);
+  if (le) return { date: le, vers: false };
+  const estimee = vffEstimee(facts.releases || [], today);
+  return estimee ? { date: estimee, vers: true } : null;
+}
+
 export function posterContent(facts, { imdbRating, rank, quality, notes, saga, saison }, shape, r = DEFAUT_REGLAGES, today = aujourdhui()) {
   const paysage = shape === "landscape";
   // Image : sans texte + notre logo (défaut) ; en portrait, l'affiche officielle (avec son texte, sans logo) ou
@@ -219,7 +237,15 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
     libelle = "VFQ POSSIBLE";
     const le = quality.vffLe;
     // vffVers : une estimation (salle en France + 4 mois, la chronologie des médias), pas une date annoncée.
-    libelle2 = le ? `VFF ${quality.vffVers ? "VERS LE" : "LE"} ${Number(le.slice(8, 10))} ${MOIS[Number(le.slice(5, 7)) - 1]}${le.slice(0, 4) === today.slice(0, 4) ? "" : " " + le.slice(0, 4)}` : null;
+    libelle2 = le ? `VFF ${quality.vffVers ? "VERS LE" : "LE"} ${jourMois(le, today)}` : null;
+  }
+  // La VFF déjà là, prouvée par les noms des sources (TRUEFRENCH, VFF, VF2…), avant sa sortie numérique française
+  // (annoncée, sinon la salle en France + 4 mois) : « VFF EN AVANCE », et dessous la date prévue (Resident Evil, le
+  // 11 novembre 2026 : en VFF, prévue le 16 janvier). Pas pour un film français ni sur une plateforme qui le double.
+  const avance = vffEnAvance(facts, quality, today);
+  if (avance && r.statut.on) {
+    libelle = "VFF EN AVANCE";
+    libelle2 = `PRÉVUE ${avance.vers ? "VERS LE" : "LE"} ${jourMois(avance.date, today)}`;
   }
   let place = r.tendance.on && rank >= 1 && rank <= 20 ? rank : null;
   // Bandeau en coin : il porte le statut ou le N° de tendance, qui ne sont alors plus écrits en haut.
