@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.64.2";
+const VERSION = "5.64.3";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -816,7 +816,7 @@ const avisPhotoUtile = (lu) => !(lu && (lu.vff || lu.quebec));
 function avecAvis(lu, a) {
   if (a.vff) {
     const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, ...reste } = lu || {};
-    return { ...reste, vf: true, vff: true, sources: Math.max(1, a.sources || 0), ...(a.vffDepuis ? { vffDepuis: a.vffDepuis } : {}) };
+    return { ...reste, vf: true, vff: true, sources: Math.max(1, a.sources || 0), ...(a.vffDepuis ? { vffDepuis: a.vffDepuis } : {}), ...(a.vffVu ? { vffVu: a.vffVu } : {}) };
   }
   if (lu && lu.quebec) return lu;
   return douteux({ ...(lu || {}), vf: a.vf, sources: Math.max(1, a.sources || 0) });
@@ -1118,7 +1118,10 @@ async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
     // depuis quand (au premier passage, toutes les VFF déjà là auraient été « nouvelles »).
     const vffDepuis = !a.vff ? null : (avant && avant.vffDepuis)
       || (avant && (avant.vf === false || ((avant.l || 0) >= 2 && !avant.vff)) ? parisToday() : null);
-    return [cle, { avis: { ...a, l: AVIS_FORMAT, ...(vffDepuis ? { vffDepuis } : {}) }, t: now, depuis: a.vf ? null : (v && v.avis && v.avis.vf === false && v.depuis) || now }];
+    // Le premier jour où cette VFF a été vue (vffVu), même au premier avis : la date d'une VFF en avance sur sa date
+    // française, pour l'Agenda d'AppTV (releaseNote). Une VFF perdue puis revenue repart de ce jour-là.
+    const vffVu = !a.vff ? null : (avant && avant.vff && avant.vffVu) || vffDepuis || parisToday();
+    return [cle, { avis: { ...a, l: AVIS_FORMAT, ...(vffDepuis ? { vffDepuis } : {}), ...(vffVu ? { vffVu } : {}) }, t: now, depuis: a.vf ? null : (v && v.avis && v.avis.vf === false && v.depuis) || now }];
   });
   for (const [cle, d] of neufs) avis.set(cle, sansFormat(d.avis));
   await garderAvis(env, neufs);
@@ -1126,7 +1129,7 @@ async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
   // VFF, prouvée par une règle plus lâche (L'Odyssée : un seul fichier d'une petite équipe) : le doute plutôt que l'erreur.
   for (const [cle, d] of vieux) {
     if (avis.has(cle) || !d || !d.avis || d.avis.vf !== true || !(d.t > 0) || now - d.t >= AVIS_OUI_MS) continue;
-    const { vff, vffDepuis, ...sans } = sansFormat(d.avis);
+    const { vff, vffDepuis, vffVu, ...sans } = sansFormat(d.avis);
     avis.set(cle, d.avis.l === AVIS_FORMAT ? sansFormat(d.avis) : sans);
   }
   return { avis, plafond: reste.length > nSf && cles.some((c) => !avis.has(c)) };
@@ -1277,8 +1280,9 @@ async function routeStreamFusion(request, env, cle) {
     return new Response(JSON.stringify({ error: "refusé" }), { status: 403, headers: entete });
   }
   const { avis, plafond } = await avisDuJour(env, [cle]);
-  const a = avis.get(cle);
-  return new Response(JSON.stringify(a || (plafond ? { plafond: true } : { erreur: true })), { headers: entete });
+  // vffVu (le premier jour vu) ne sert qu'aux fiches de l'addon (releaseNote) : pas aux affiches.
+  const { vffVu, ...a } = avis.get(cle) || {};
+  return new Response(JSON.stringify(Object.keys(a).length ? a : (plafond ? { plafond: true } : { erreur: true })), { headers: entete });
 }
 
 /**
@@ -1367,8 +1371,10 @@ function filmRecent(releases, today) {
  *   « Dispo en VFF depuis le 11 nov. »   la VFF prouvée par les noms des sources (vff : TRUEFRENCH, VFF, VF2…), vue
  *                                 arriver ce jour-là (vffDepuis), depuis moins de 60 jours ; « · en avance » avant sa
  *                                 date française (vffApresVo). AppTV range le film à ce jour-là dans l'Agenda.
- *   « Déjà dispo en VFF · en avance »   la même VFF avant sa date française, sans savoir depuis quand (Resident Evil,
- *                                 le 11 novembre 2026). Commence par « Déjà dispo » : AppTV le montre en vert.
+ *                                 Avant sa date française sans l'avoir vue arriver (déjà là au premier avis) : le
+ *                                 premier jour où on l'a vue (vffVu), pour que l'Agenda d'AppTV la montre.
+ *   « Déjà dispo en VFF · en avance »   la même VFF avant sa date française, sans aucune date (un avis gardé d'avant
+ *                                 vffVu). Commence par « Déjà dispo » : AppTV le montre en vert, sans rendez-vous.
  * etat = { vf: sources VF (ou plateforme en France en VF, sources pas lues), vo: sources sans VF, surPlateforme: sur
  * une plateforme en France sans savoir si c'est en VF (sources pas lues) }. vod = estimationDe (voir dispoChezSoi).
  */
@@ -1378,7 +1384,8 @@ function releaseNote(releases, langue, today, etat = {}, vod = null) {
   if (etat.vfq) return etat.vffLe ? `VFQ possible · VFF ${etat.vffVers ? "vers le" : "le"} ${shortDate(etat.vffLe)}` : "VFQ possible";
   if (etat.vff && langue !== "fr" && filmRecent(releases, today)) {
     const avance = !!vffApresVo(releases || [], today) ? " · en avance" : "";
-    if (etat.vffDepuis && etat.vffDepuis <= today && etat.vffDepuis >= addDays(today, -60)) return `Dispo en VFF depuis le ${shortDate(etat.vffDepuis)}${avance}`;
+    const depuis = etat.vffDepuis || (avance && etat.vffVu);
+    if (depuis && depuis <= today && depuis >= addDays(today, -60)) return `Dispo en VFF depuis le ${shortDate(depuis)}${avance}`;
     if (avance) return `Déjà dispo en VFF${avance}`;
   }
   const { date, vers } = dispoChezSoi(releases || [], langue, vod);
@@ -1480,7 +1487,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       : sansVfConnus.has(ids[i]) ? "Sans VF"
       : opts.upcoming ? avecDispoChezSoi(cinemaNote(infos[i].releases, opts.region, date, today), chezSoi, today)
       : releaseNote(infos[i].releases, it.original_language, today,
-        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !infos[i].abonnementVf), vffDepuis: lu.vffDepuis } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
+        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !infos[i].abonnementVf), vffDepuis: lu.vffDepuis, vffVu: lu.vffVu } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
     // Pas encore regardable : la date affichée par Nuvio (carrousel, « date de sortie
     // complète ») devient la date de dispo plutôt que la sortie en salle.
     const dispo = chezSoi.date;
@@ -2657,7 +2664,7 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
     movie && besoinEstimation(releases) ? estimationsVod().then((table) => estimationDe(table, imdb)) : null,
   ]);
   // En VO seulement (comme pas sorti : seule la VF compte) : d'après les sources seulement (voir releaseNote).
-  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !abonnementVf(wp, d.original_language, d.keywords)), vffDepuis: lu.vffDepuis } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
+  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !abonnementVf(wp, d.original_language, d.keywords)), vffDepuis: lu.vffDepuis, vffVu: lu.vffVu } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
   const note = (await sansVfListe()).has(imdb) ? "Sans VF"
     : movie ? releaseNote(releases, d.original_language, today, etat, vod) : await noteSerie(env, d, imdb, wp, today);
   // La même date que l'affiche et les rangées : la sortie numérique américaine (dispoChezSoi), ou son estimation.

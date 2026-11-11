@@ -349,7 +349,8 @@ test("vfq_seulement_seule_la_vff_prouvee_la_change", async () => {
   const rangee = new Map([["tt891", { vf: false, sources: 9, quebec: true }], ["tt892", { vf: true, sources: 9, quebec: true, vfqPossible: true, vffLe: "2027-01-16" }]]);
   await avecAvisDuJour(e, rangee, [["tt891", "movie/tt891"], ["tt892", "movie/tt892"]]);
   assert.deepEqual(rangee.get("tt891"), { vf: false, sources: 9, quebec: true });
-  assert.deepEqual(rangee.get("tt892"), { vf: true, vff: true, sources: 1 });
+  const jour = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date());
+  assert.deepEqual(rangee.get("tt892"), { vf: true, vff: true, sources: 1, vffVu: jour });
 });
 
 // Le doute dans l'addon : Lumio est encore demandé pour vffImpossible (« non » : pas de VF ; « oui » : le doute).
@@ -434,6 +435,9 @@ test("vff_depuis_vue_seulement_au_changement", async () => {
   assert.equal(lus.get("movie/tt961").vffDepuis, jour, "VF sans preuve, puis TRUEFRENCH : arrivée vue aujourd'hui");
   assert.equal(lus.get("movie/tt962").vff, true);
   assert.equal(lus.get("movie/tt962").vffDepuis, undefined, "premier avis : on ne sait pas depuis quand");
+  // Le premier jour vu (vffVu), lui, est toujours là : la date d'une VFF en avance dans l'Agenda d'AppTV.
+  assert.equal(lus.get("movie/tt962").vffVu, jour);
+  assert.equal(lus.get("movie/tt961").vffVu, jour);
 });
 
 // La VFF prouvée par les noms : deux équipes, ou une seule trouvée sur un tracker torrent. L'Odyssée, le 11 novembre

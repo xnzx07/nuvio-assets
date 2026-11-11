@@ -1885,8 +1885,9 @@ test("vfq_en_vue_levee_par_la_vff_prouvee_chez_lumio", async () => {
   assert.equal(durees.at(-1), 43200, "VF là : gardée 12 h");
   assert.ok(prouvee.lumio >= 1, "Lumio lu malgré la VFQ en vue");
   assert.doesNotMatch(prouvee.description, /VFQ/);
-  // En avance sur sa date française (salle en France + 4 mois) : la fiche le dit.
-  assert.match(prouvee.description, /^📅 Déjà dispo en VFF · en avance./);
+  // En avance sur sa date française (salle en France + 4 mois) : la fiche le dit, avec le jour où on l'a vue (vffVu, même
+  // au premier avis), pour que l'Agenda d'AppTV la montre.
+  assert.match(prouvee.description, /^📅 Dispo en VFF depuis le \d{1,2} [a-zéû]+\.? · en avance\./);
   const multi = await lancer("Resident.Evil.2026.MULTi.2160p.WEB.H265-SUPERFLU.mkv");
   assert.match(multi.description, /VFQ possible/);
   // Une fiche qui attend sa VF : gardée une heure seulement (sa VF peut arriver dans la journée).
