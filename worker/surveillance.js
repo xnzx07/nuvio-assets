@@ -9,7 +9,7 @@ import { ACTIF, SERVEUR_ADDON } from "./construire/redirections.mjs";
 
 export const CRON_SURVEILLANCE = "*/5 * * * *";
 const ADDON = "https://nuvio-assets.xnzxflix.workers.dev";
-const PAGE = "/catalog/movie/accueil-top10.json";
+const PAGE = "/catalog/movie/accueil-top10.json", AFFICHE = "/maison/movie/poster/tt0133093.jpg";
 const LANCEMENT = "https://api.github.com/repos/xnzx07/nuvio-assets/actions/workflows/surveillance.yml/dispatches";
 const DELAI_MS = 15000, PAUSE_S = 900;
 const DEJA = new Request("https://cache.local/surveillance/lancee");
@@ -17,7 +17,10 @@ const DEJA = new Request("https://cache.local/surveillance/lancee");
 async function serveurRepond(fetchImpl) {
   try {
     const r = await fetchImpl(SERVEUR_ADDON + PAGE, { signal: AbortSignal.timeout(DELAI_MS) });
-    return r.ok && ((await r.json()).metas || []).length > 0;
+    if (!r.ok || !((await r.json()).metas || []).length) return false;
+    // Les affiches aussi (le Worker « affiches » les lui renvoie).
+    const a = await fetchImpl(SERVEUR_ADDON + AFFICHE, { redirect: "manual", signal: AbortSignal.timeout(DELAI_MS) });
+    return a.status === 302 || a.status === 200;
   } catch { return false; }
 }
 

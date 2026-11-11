@@ -5,9 +5,10 @@ import { redirige, serveurPret, SERVEUR_ADDON } from "../worker/construire/redir
 
 const page = (metas = [{ id: "tt1" }]) => Response.json({ metas });
 // reponses : ce que dit l'addon (sa redirection), puis le serveur à chaque essai.
-function scene({ addon = 307, serveur = [] }) {
+function scene({ addon = 307, serveur = [], affiche = 302 }) {
   const appels = { addon: 0, serveur: 0 };
   const fetchImpl = async (u, init = {}) => {
+    if (String(u).startsWith(SERVEUR_ADDON + "/maison/")) return new Response("", { status: affiche });
     if (String(u).startsWith(SERVEUR_ADDON)) {
       const r = serveur[Math.min(appels.serveur++, serveur.length - 1)];
       if (r instanceof Error) throw r;
@@ -33,6 +34,12 @@ test("un_echec_isole_ne_coupe_pas", async () => {
   const s = scene({ serveur: [panne, 502, "ok"] });
   assert.equal((await decider(s)).action, "rien");
   assert.equal(s.appels.serveur, 3);
+});
+
+// Les catalogues répondent mais plus les affiches : coupé aussi (le Worker « affiches » les renvoie au serveur).
+test("affiches_muettes_coupent", async () => {
+  const s = scene({ serveur: ["ok"], affiche: 502 });
+  assert.equal((await decider(s)).action, "couper");
 });
 
 test("trois_echecs_de_suite_coupent", async () => {

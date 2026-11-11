@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { ACTIF, SERVEUR_ADDON } from "../worker/construire/redirections.mjs";
 
 const ADDON = "https://nuvio-assets.xnzxflix.workers.dev";
-const PAGE = "/catalog/movie/accueil-top10.json";
+const PAGE = "/catalog/movie/accueil-top10.json", AFFICHE = "/maison/movie/poster/tt0133093.jpg";
 const DELAI_MS = 20000;
 // Coupé après 3 échecs sur 2 minutes (un redémarrage après une mise à jour dure quelques secondes) ; rétabli après 5
 // réussites sur 4 minutes, pour ne pas aller et venir.
@@ -19,7 +19,10 @@ async function serveurRepond(fetchImpl) {
     const r = await fetchImpl(SERVEUR_ADDON + PAGE, { signal: AbortSignal.timeout(DELAI_MS) });
     if (!r.ok) return false;
     const j = await r.json();
-    return Array.isArray(j.metas) && j.metas.length > 0;
+    if (!Array.isArray(j.metas) || !j.metas.length) return false;
+    // Les affiches aussi (le Worker « affiches » les lui renvoie) : renvoyée à son fichier (302) ou servie d'ici.
+    const a = await fetchImpl(SERVEUR_ADDON + AFFICHE, { redirect: "manual", signal: AbortSignal.timeout(DELAI_MS) });
+    return a.status === 302 || a.status === 200;
   } catch { return false; }
 }
 
