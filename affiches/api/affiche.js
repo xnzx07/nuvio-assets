@@ -12,7 +12,7 @@
 import { titleFacts } from "../lib/tmdb.js";
 import { lireNoteImdb } from "../lib/notes.js";
 import { lireRang, secondesAvantBascule, ADDON_URL } from "../lib/tendances.js";
-import { qualityOf, avisDuJour, qualiteDeQ, avecAvisDoute } from "../lib/qualite.js";
+import { qualityOf, avisDuJour, qualiteDeQ, avecAvisDoute, vffProuvee } from "../lib/qualite.js";
 import { posterContent, contentKey } from "../lib/contenu.js";
 import { etatSortie, sourcesUtiles, dispoChezSoi, estimationDe, besoinEstimation, LIBELLES_FIN } from "../lib/statut.js";
 import { lireEstimations } from "../lib/estimations.js";
@@ -276,13 +276,13 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       // (StreamFusion).
       const qualiteLue = lireSources ? chrono.mesure("qualite", qualiteATemps(type, facts, fetchImpl, env.QUALITE_RELAIS || relais, env.RELAIS_KEY, request.headers.get("X-Apercu") === "1" ? ATTENTE_APERCU_MS : ATTENTE_QUALITE_MS, env.STREAMFUSION !== "off")) : { enRetard: false, quality: null };
       // L'avis du jour seulement si Torrentio n'est pas sûr de la VF (vff : un fichier TRUEFRENCH, VFF…) : chaque avis
-      // de l'addon peut être une demande au compte AllDebrid de la personne (Lumio, StreamFusion). Ni s'il ne voit que de
-      // la VFQ (quebec) : Lumio et StreamFusion la prennent pour de la VF (Hope, By Any Means, le 28 octobre 2026), et
-      // l'affiche est déjà coupée en deux (lib/qualite.js, avecDatesVff).
+      // de l'addon peut être une demande au compte AllDebrid de la personne (Lumio, StreamFusion). S'il ne voit que de
+      // la VFQ (quebec), l'avis ne compte que s'il prouve la VFF par ses noms (vff) : sinon Lumio et StreamFusion prennent
+      // la VFQ pour de la VF (Hope, By Any Means, le 28 octobre 2026). Resident Evil, le 11 novembre 2026 : un
+      // « MULTi.VFQ » chez Torrentio, huit fichiers TRUEFRENCH, VFF ou VF2 chez Lumio.
       const avisLu = videoAvis ? chrono.mesure("avis", Promise.resolve(qualiteLue).then(({ quality: q }) => (q && q.vff
         ? { vf: true, sources: Math.max(1, q.sources || 0), qualite: q.vfq || null }
-        : q && q.quebec ? null
-          : avisDuJour(env.ADDON_URL || ADDON_URL, videoAvis, env.RELAIS_KEY, fetchImpl)))) : null;
+        : avisDuJour(env.ADDON_URL || ADDON_URL, videoAvis, env.RELAIS_KEY, fetchImpl)))) : null;
       const lectures = Promise.all([
         noteImdb && facts.imdbId ? chrono.mesure("imdb", lireNoteImdb(facts.imdbId, fetchImpl, ATTENTE_NOTES_MS)) : { note: undefined, manque: false },
         tendance || lireSources ? chrono.mesure("tendances", lireRang(env, type, facts.tmdbId, fetchImpl, relais).catch(() => ({ rang: null, illisible: true, vf: null, qualite: null }))) : { rang: null, illisible: false, vf: null, qualite: null },
@@ -326,11 +326,14 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       // L'avis du jour prime sur celui de la photo de 4 h (The Dog Stars : sans VF à 4 h, en VF dans la journée).
       // Sans VF, pas de qualité : celle de Torrentio est celle d'un fichier en VFQ ou en VO (By Any Means, « 4K DV »).
       const SANS_QUALITE = { uhd: false, extra: null, fhd: false, hdr10p: false, atmos: false };
-      // Une VFQ en vue chez Torrentio (quebec) : Torrentio tel quel, coupé en deux ; la photo ne le contredit pas.
-      let quality = avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, avisJour.vf ? qualiteDeQ(avisJour.qualite) : SANS_QUALITE)
-        : qualiteTorrentio && qualiteTorrentio.quebec ? qualiteTorrentio
-          : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
-      quality = avecAvisDoute(quality);
+      // Une VFQ en vue chez Torrentio (quebec) : Torrentio tel quel, coupé en deux ; ni la photo ni un avis sans VFF
+      // prouvée ne le contredisent. Une VFF prouvée par l'avis (vff) lève tout doute.
+      const quebec = !!(qualiteTorrentio && qualiteTorrentio.quebec);
+      let quality = avisJour && avisJour.vff ? vffProuvee(avecAvisVf(qualiteTorrentio, true, qualiteDeQ(avisJour.qualite)))
+        : quebec ? qualiteTorrentio
+          : avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, avisJour.vf ? qualiteDeQ(avisJour.qualite) : SANS_QUALITE)
+            : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
+      if (!(avisJour && avisJour.vff)) quality = avecAvisDoute(quality);
       // Récent sans VF d'après l'avis du jour : « revoir », le serveur la redessine quelques heures plus tard.
       const aRevoir = !!avisJour && avisJour.vf === false;
       const saga = sagaVoulue ? rangSaga(filmsSaga, facts.tmdbId, aujourdhui) : null;

@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.62.3";
+const VERSION = "5.62.4";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -799,8 +799,28 @@ async function avisPhoto(env, kind) {
     return vfi;
   } catch (e) { return {}; }
 }
-/** L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose ? Pas pour une VF sûre, ni une VFQ en vue (coupée en deux). */
-const avisUtile = (lu) => !(lu && (lu.vff || lu.quebec));
+/**
+ * L'avis de Lumio ou StreamFusion peut-il encore changer quelque chose ? Pas pour une VF sûre chez Torrentio (vff). Une
+ * VFQ en vue chez Torrentio (quebec), si : Lumio peut avoir la VFF prouvée par ses noms (TRUEFRENCH, VFF, VF2), que
+ * Torrentio ne voit pas (Resident Evil, le 11 novembre 2026 : un seul « MULTi.VFQ » chez Torrentio, huit fichiers
+ * TRUEFRENCH, VFF ou VF2 chez Lumio, venus des sites français ; la fiche disait « VFQ possible · VFF le 16 janv. »).
+ */
+const avisUtile = (lu) => !(lu && lu.vff);
+/** L'avis de la photo (0 ou 1, sans preuve de VFF) : pas pour une VF sûre, ni une VFQ en vue (coupée en deux). */
+const avisPhotoUtile = (lu) => !(lu && (lu.vff || lu.quebec));
+/**
+ * Les sources lues, corrigées par l'avis de Lumio ou StreamFusion ({ vf, sources, vff? }). Une VFF prouvée par ses noms
+ * (vff) lève tout doute : ni VFQ en vue, ni date de VFF à attendre. Sinon, une VFQ en vue chez Torrentio (quebec) reste
+ * telle quelle (Lumio et StreamFusion prennent la VFQ pour de la VF : Hope, By Any Means) ; le reste suit l'avis.
+ */
+function avecAvis(lu, a) {
+  if (a.vff) {
+    const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, ...reste } = lu || {};
+    return { ...reste, vf: true, vff: true, sources: Math.max(1, a.sources || 0) };
+  }
+  if (lu && lu.quebec) return lu;
+  return douteux({ ...(lu || {}), vf: a.vf, sources: Math.max(1, a.sources || 0) });
+}
 /** Un avis appliqué, sans VFF possible d'après les dates (vffImpossible) : « oui » est le doute, « non » le lève. */
 function douteux(lu) {
   if (!lu.vffImpossible) return lu;
@@ -815,7 +835,7 @@ async function avecAvisPhoto(env, kind, lus, lire) {
   if (lire !== lireVf || !lus.size) return lus;
   const avis = await avisPhoto(env, kind);
   for (const [imdb, lu] of lus) {
-    if ((avis[imdb] === 0 || avis[imdb] === 1) && avisUtile(lu)) lus.set(imdb, douteux({ ...lu, vf: avis[imdb] === 1, sources: Math.max(1, lu.sources || 0) }));
+    if ((avis[imdb] === 0 || avis[imdb] === 1) && avisPhotoUtile(lu)) lus.set(imdb, douteux({ ...lu, vf: avis[imdb] === 1, sources: Math.max(1, lu.sources || 0) }));
   }
   return lus;
 }
@@ -832,8 +852,8 @@ async function sourcesVf(env, imdbs, lire = lireVf) {
  * L'avis du jour (avisDuJour : Lumio, sinon StreamFusion) par-dessus Torrentio et la photo, pour les rangées et les
  * fiches : le même que celui des affiches. Seulement avec Lumio (LUMIO_URL) : StreamFusion seul garde son plafond pour
  * la photo et les affiches. paires : [[imdb, clé]] ; lus : Map imdb → { vf, sources, langue } (complétée ici).
- * Pas pour un titre dont Torrentio est sûr (vff : un fichier TRUEFRENCH, VFF… ; quebec : de la VFQ seulement, que Lumio
- * prend pour de la VF) : pas une demande de plus au compte AllDebrid de la personne.
+ * Pas pour un titre dont Torrentio est sûr (vff : un fichier TRUEFRENCH, VFF…) : pas une demande de plus au compte
+ * AllDebrid de la personne. Une VFQ en vue chez Torrentio (quebec) : seulement une VFF prouvée la change (avecAvis).
  */
 export async function avecAvisDuJour(env, lus, paires) {
   if (!env.LUMIO_URL) return lus;
@@ -842,7 +862,7 @@ export async function avecAvisDuJour(env, lus, paires) {
   const avis = await avisEnLots(env, paires.map(([, cle]) => cle));
   for (const [imdb, cle] of paires) {
     const a = avis.get(cle);
-    if (a) lus.set(imdb, douteux({ ...(lus.get(imdb) || {}), vf: a.vf, sources: Math.max(1, a.sources || 0) }));
+    if (a) lus.set(imdb, avecAvis(lus.get(imdb), a));
   }
   return lus;
 }
@@ -934,6 +954,16 @@ async function duBonFilm(env, cle, fichiers, texte) {
   });
 }
 
+/**
+ * La VFF prouvée par le nom d'un fichier : TRUEFRENCH, VFF, VFI, VF2 (les mêmes que affiches/lib/qualite.js). Ni
+ * « FRENCH » ni « MULTi » seuls : ils portent souvent la VFQ du fichier américain.
+ */
+const VFF_NOM = /\b(TRUEFRENCH|VFF|VFI|VF2)\b/i;
+/** L'avis « VF » d'après des fichiers en français, et vff si l'un d'eux prouve la VFF. */
+function avisDesFichiers(vraies, texte) {
+  return { vf: true, sources: vraies.length, qualite: qualiteDesSources(vraies.map(texte)), ...(vraies.some((s) => VFF_NOM.test(texte(s))) ? { vff: true } : {}) };
+}
+
 async function lireVfLumio(env, cles) {
   const base = String(env.LUMIO_URL || "").trim().replace(/\/manifest\.json$/, "");
   if (!/^https:\/\//.test(base)) return new Map();
@@ -950,7 +980,7 @@ async function lireVfLumio(env, cles) {
       // Mongoose, le 4 novembre 2026 : un seul fichier, MULTI, « 🌍 🇬🇧 »). Sans aucun drapeau : on le croit.
       const sansFrancais = (s) => /🌍|[\u{1F1E6}-\u{1F1FF}]{2}/u.test(texte(s)) && !texte(s).includes("🇫🇷");
       const vraies = fichiers.filter((s) => !sansFrancais(s));
-      if (vraies.length) return [cle, { vf: true, sources: vraies.length, qualite: qualiteDesSources(vraies.map(texte)) }];
+      if (vraies.length) return [cle, avisDesFichiers(vraies, texte)];
       if (fichiers.length) return [cle, { vf: false, sources: fichiers.length }];
       // « 68 sources, mais aucune ne passe vos filtres », « Aucune source trouvée » : il a cherché, rien en VF.
       const vide = messages.find((s) => /ne passe|aucun(e)? (r[ée]sultat|source)/i.test(texte(s)));
@@ -975,6 +1005,10 @@ async function lireVfLumio(env, cles) {
  * SF_MAX titres au plus lus par appel. { avis: Map clé → { vf, sources, qualite? }, plafond: true si un titre reste
  * sans avis faute de plafond }.
  */
+/** Format des avis gardés (l) : 2 = avec vff (la VFF prouvée par les noms). Un avis « VF » plus ancien est relu (avisDuJour). */
+const AVIS_FORMAT = 2;
+/** L'avis sans son format (l), gardé seulement dans la mémoire. */
+const sansFormat = ({ l, ...a }) => a;
 const AVIS_OUI_MS = 7 * 86400000, AVIS_NON_MS = 3 * 3600000, AVIS_NON_VIEUX_MS = 86400000, AVIS_NON_RECENT_MS = 7 * 86400000;
 // /5/ : vidée le 2026-11-04 avec la lecture des drapeaux et de l'année des fichiers de Lumio (The Mongoose, The Isolate
 // Thief : VF à tort) ; la mémoire commune reste.
@@ -982,6 +1016,8 @@ const avisCache = (cle) => new Request(`https://avis.cache/5/${cle}`);
 /** Un avis gardé ({ avis, t : lu à, depuis : vu sans VF depuis }) encore bon à l'instant now. */
 function avisFrais(d, now) {
   if (!d || !d.avis || typeof d.avis.vf !== "boolean" || !(d.t > 0)) return false;
+  // Un avis « VF » d'avant la lecture de la VFF dans les noms (vff) : relu, et gardé en secours (avisDuJour).
+  if (d.avis.vf && d.avis.l !== AVIS_FORMAT) return false;
   if (d.avis.vf) return now - d.t < AVIS_OUI_MS;
   return now - d.t < (now - (d.depuis || d.t) < AVIS_NON_RECENT_MS ? AVIS_NON_MS : AVIS_NON_VIEUX_MS);
 }
@@ -1024,12 +1060,12 @@ async function avisDuJour(env, cles, origine = "affiches") {
   for (const cle of cles) {
     const hit = await caches.default.match(avisCache(cle)).catch(() => null);
     const d = hit ? await hit.json().catch(() => null) : null;
-    if (avisFrais(d, now)) avis.set(cle, d.avis); else { manque.push(cle); if (d) vieux.set(cle, d); }
+    if (avisFrais(d, now)) avis.set(cle, sansFormat(d.avis)); else { manque.push(cle); if (d) vieux.set(cle, d); }
   }
   // La mémoire commune : un titre déjà demandé ailleurs (un autre centre de données) n'est pas redemandé.
   for (const [cle, d] of await lireAvisGardes(env, manque)) {
     vieux.set(cle, d);
-    if (avisFrais(d, now)) { avis.set(cle, d.avis); await garderAvisIci(cle, d); }
+    if (avisFrais(d, now)) { avis.set(cle, sansFormat(d.avis)); await garderAvisIci(cle, d); }
   }
   const aLire = manque.filter((c) => !avis.has(c)).slice(0, SF_MAX);
   // Lumio d'abord, dans son plafond ; StreamFusion pour le reste, dans le sien. SF_MAX appels au plus en tout (la
@@ -1043,10 +1079,14 @@ async function avisDuJour(env, cles, origine = "affiches") {
   // « Vu sans VF depuis » : gardé d'un avis à l'autre tant que la VF n'est pas là.
   const neufs = [...lus].map(([cle, a]) => {
     const v = vieux.get(cle);
-    return [cle, { avis: a, t: now, depuis: a.vf ? null : (v && v.avis && v.avis.vf === false && v.depuis) || now }];
+    return [cle, { avis: { ...a, l: AVIS_FORMAT }, t: now, depuis: a.vf ? null : (v && v.avis && v.avis.vf === false && v.depuis) || now }];
   });
-  for (const [cle, d] of neufs) avis.set(cle, d.avis);
+  for (const [cle, d] of neufs) avis.set(cle, sansFormat(d.avis));
   await garderAvis(env, neufs);
+  // Pas relu (plafond, panne) : un avis « VF » d'avant le format 2, encore dans ses 7 jours, plutôt que rien.
+  for (const [cle, d] of vieux) {
+    if (!avis.has(cle) && d && d.avis && d.avis.vf === true && d.t > 0 && now - d.t < AVIS_OUI_MS) avis.set(cle, sansFormat(d.avis));
+  }
   return { avis, plafond: reste.length > nSf && cles.some((c) => !avis.has(c)) };
 }
 
@@ -1119,7 +1159,7 @@ async function lireVfStreamFusion(env, cles) {
       // Des sources VF (celles qu'on peut lire, en cache chez le débrideur) : leur qualité aussi (« 4K DV » en VF).
       // Sans celles filmées dans une salle de cinéma (CAM, TS, TC) : pas une sortie (voir filmeEnSalle).
       const vraies = await duBonFilm(env, cle, streams.filter((s) => !filmeEnSalle(s)), texte);
-      return [cle, { vf: vraies.length > 0, sources: vraies.length, ...(vraies.length ? { qualite: qualiteDesSources(vraies.map(texte)) } : {}) }];
+      return [cle, vraies.length ? avisDesFichiers(vraies, texte) : { vf: false, sources: 0 }];
     } catch (e) { return null; }
   }));
   return new Map(lus.filter(Boolean));
@@ -1200,15 +1240,22 @@ async function routeStreamFusion(request, env, cle) {
 /**
  * La VF pour la photo du jour : Torrentio (lireVf), puis l'avis du jour (Lumio, sinon StreamFusion) pour ce dont il
  * n'est pas sûr. Sûr (vff : un fichier TRUEFRENCH, VFF… chez lui) : sa réponse suffit, avec la qualité de ses sources
- * VF (vfq) ; pas une demande de plus au compte AllDebrid. De même s'il ne voit que de la VFQ (quebec) : pas de VF, que
- * Lumio et StreamFusion auraient prise pour de la VF (Hope, N°5 le 28 octobre 2026).
+ * VF (vfq) ; pas une demande de plus au compte AllDebrid. S'il ne voit que de la VFQ (quebec), seule une VFF prouvée
+ * par les noms chez Lumio ou StreamFusion (vff) le contredit : sinon ils prennent la VFQ pour de la VF (Hope, N°5 le
+ * 28 octobre 2026).
  */
 export async function lireVfPhoto(env, cles) {
   const tr = cles.length ? await lireVf(env, cles) : new Map();
   for (const [cle, lu] of tr) if (lu.vff && lu.vfq) tr.set(cle, { ...lu, qualite: lu.vfq });
   const pris = cles.filter((c) => avisUtile(tr.get(c))).slice(0, SF_MAX);
   const avis = pris.length ? (await avisDuJour(env, pris, "photo")).avis : new Map();
-  return new Map([...tr, ...[...avis].map(([c, a]) => { const lu = tr.get(c) || {}; return [c, douteux({ ...a, ...(lu.vffImpossible ? { vffImpossible: true } : {}), ...(lu.vffLe ? { vffLe: lu.vffLe } : {}), ...(lu.vffVers ? { vffVers: true } : {}) })]; })]);
+  return new Map([...tr, ...[...avis].map(([c, a]) => {
+    const lu = tr.get(c) || {};
+    if (a.vff) return [c, { ...a, vf: true }];
+    // Une VFQ en vue chez Torrentio, sans VFF prouvée chez Lumio ou StreamFusion : Torrentio tel quel (Hope).
+    if (lu.quebec) return [c, lu];
+    return [c, douteux({ ...a, ...(lu.vffImpossible ? { vffImpossible: true } : {}), ...(lu.vffLe ? { vffLe: lu.vffLe } : {}), ...(lu.vffVers ? { vffVers: true } : {}) })];
+  })]);
 }
 
 /** Pour les tests : oublie les plafonds atteints et la table des avis déjà préparée. */

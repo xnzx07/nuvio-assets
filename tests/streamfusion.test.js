@@ -35,8 +35,8 @@ test("streamfusion_avis_cle_cache_et_plafond", async () => {
   assert.equal((await sf("movie/tt801", null)).status, 403);
   assert.equal((await sf("movie/tt801", "mauvaise")).status, 403);
   assert.equal(appels.length, 0);
-  assert.deepEqual(await (await sf("movie/tt801")).json(), { vf: true, sources: 1, qualite: { u: 1, x: "DV", p: 0, f: 0, a: 0 } });
-  assert.deepEqual(await (await sf("movie/tt801")).json(), { vf: true, sources: 1, qualite: { u: 1, x: "DV", p: 0, f: 0, a: 0 } });
+  assert.deepEqual(await (await sf("movie/tt801")).json(), { vf: true, sources: 1, qualite: { u: 1, x: "DV", p: 0, f: 0, a: 0 }, vff: true });
+  assert.deepEqual(await (await sf("movie/tt801")).json(), { vf: true, sources: 1, qualite: { u: 1, x: "DV", p: 0, f: 0, a: 0 }, vff: true });
   assert.equal(appels.length, 1, "gardé : pas redemandé");
   assert.deepEqual(await (await sf("series/tt802:1:1")).json(), { vf: false, sources: 4 });
   assert.deepEqual(await (await sf("movie/tt803")).json(), { plafond: true });
@@ -58,7 +58,7 @@ test("streamfusion_sans_les_flux_filmes_en_salle", async () => {
   };
   const e = { ...env, SF_PLAFOND: "10" };
   assert.deepEqual(await (await sf("movie/tt811", "cle-relais", e)).json(), { vf: false, sources: 0 });
-  assert.deepEqual(await (await sf("movie/tt812", "cle-relais", e)).json(), { vf: true, sources: 1, qualite: { u: 0, x: null, p: 0, f: 1, a: 0 } });
+  assert.deepEqual(await (await sf("movie/tt812", "cle-relais", e)).json(), { vf: true, sources: 1, qualite: { u: 0, x: null, p: 0, f: 1, a: 0 }, vff: true });
 });
 
 // « Aucun résultat » sans source écartée (film sorti en numérique la veille, pas encore de fichier : 空枪) : pas de VF,
@@ -114,8 +114,8 @@ test("lumio_d_abord_streamfusion_en_secours", async () => {
     return new Response("{}");
   };
   const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", SF_PLAFOND: "10" };
-  const parSf = { vf: true, sources: 1, qualite: { u: 0, x: null, p: 0, f: 1, a: 0 } };
-  assert.deepEqual(await (await sf("movie/tt831", "cle-relais", e)).json(), { vf: true, sources: 2, qualite: { u: 1, x: "DV", p: 0, f: 1, a: 0 } });
+  const parSf = { vf: true, sources: 1, qualite: { u: 0, x: null, p: 0, f: 1, a: 0 }, vff: true };
+  assert.deepEqual(await (await sf("movie/tt831", "cle-relais", e)).json(), { vf: true, sources: 2, qualite: { u: 1, x: "DV", p: 0, f: 1, a: 0 }, vff: true });
   assert.deepEqual(await (await sf("movie/tt832", "cle-relais", e)).json(), { vf: false, sources: 68 });
   assert.deepEqual(await (await sf("movie/tt835", "cle-relais", e)).json(), { vf: false, sources: 1 });
   assert.deepEqual(await (await sf("movie/tt836", "cle-relais", e)).json(), { vf: false, sources: 1 });
@@ -325,26 +325,31 @@ test("reserve_de_la_photo_liberee_le_matin", async () => {
   assert.equal(appels.length, 5);
 });
 
-// De la VFQ seulement chez Torrentio (quebec) : pas de VF, sans demander Lumio, qui la prend pour de la VF (Hope, N°5 des
-// Tendances le 28 octobre 2026) ; l'avis de la photo ne le contredit pas dans les rangées.
-test("vfq_seulement_pas_de_demande_au_debrideur", async () => {
+// De la VFQ seulement chez Torrentio (quebec) : Lumio est demandé, mais il prend la VFQ pour de la VF (Hope, N°5 des
+// Tendances le 28 octobre 2026) : seule une VFF prouvée par ses noms (TRUEFRENCH, VFF, VF2) change l'avis (Resident
+// Evil, le 11 novembre 2026 : « MULTi.VFQ » chez Torrentio, TRUEFRENCH chez Lumio).
+test("vfq_seulement_seule_la_vff_prouvee_la_change", async () => {
   globalThis.fetch = async (url) => {
     const u = String(url);
-    if (u.includes("/vf.json")) return Response.json({ "movie/tt891": { vf: false, sources: 9, langue: "vo", quebec: true } });
+    if (u.includes("/vf.json")) return Response.json({ "movie/tt891": { vf: false, sources: 9, langue: "vo", quebec: true },
+      "movie/tt892": { vf: true, sources: 9, langue: "multi", quebec: true, vfqPossible: true, vffLe: "2027-01-16", vffVers: true } });
     if (u.startsWith("https://lumio.test/p/stream/")) {
       appels.push(u);
-      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓", url: "https://lumio.test/play/x" }] });
+      const nom = u.includes("tt892") ? "Film.2026.MULTi.TRUEFRENCH.2160p.WEB-DL.mkv" : "Film.2026.MULTi.1080p.WEB.mkv";
+      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `1080p • WEB-DL | 🇫🇷 ✓ | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
     }
     return new Response("{}");
   };
-  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", AFFICHES_URL: "https://affiches.test" };
-  const lus = await lireVfPhoto(e, ["movie/tt891"]);
-  assert.equal(appels.length, 0);
-  assert.equal(lus.get("movie/tt891").vf, false);
-  const rangee = new Map([["tt891", { vf: false, sources: 9, quebec: true }]]);
-  await avecAvisDuJour(e, rangee, [["tt891", "movie/tt891"]]);
-  assert.equal(appels.length, 0);
-  assert.equal(rangee.get("tt891").vf, false);
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", AFFICHES_URL: "https://affiches.test", LIENS: fakeD1() };
+  const lus = await lireVfPhoto(e, ["movie/tt891", "movie/tt892"]);
+  assert.equal(lus.get("movie/tt891").vf, false, "VF sans preuve : la VFQ de Torrentio reste");
+  assert.equal(lus.get("movie/tt891").quebec, true);
+  assert.equal(lus.get("movie/tt892").vff, true, "TRUEFRENCH chez Lumio : la VFF");
+  assert.equal(lus.get("movie/tt892").vfqPossible, undefined);
+  const rangee = new Map([["tt891", { vf: false, sources: 9, quebec: true }], ["tt892", { vf: true, sources: 9, quebec: true, vfqPossible: true, vffLe: "2027-01-16" }]]);
+  await avecAvisDuJour(e, rangee, [["tt891", "movie/tt891"], ["tt892", "movie/tt892"]]);
+  assert.deepEqual(rangee.get("tt891"), { vf: false, sources: 9, quebec: true });
+  assert.deepEqual(rangee.get("tt892"), { vf: true, vff: true, sources: 1 });
 });
 
 // Le doute dans l'addon : Lumio est encore demandé pour vffImpossible (« non » : pas de VF ; « oui » : le doute).

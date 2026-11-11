@@ -293,6 +293,10 @@ test("avec_dates_vff", async () => {
 test("vfq_seulement_streamfusion_ne_la_change_pas", () => {
   const t = { uhd: false, extra: null, fhd: true, hdr10p: false, atmos: false, vf: true, sources: 5, langue: "multi", quebec: true, vfqPossible: true };
   assert.equal(avecStreamFusion(t, { vf: false, sources: 2 }), t);
+  assert.equal(avecStreamFusion(t, { vf: true, sources: 2 }), t, "VF sans preuve : la VFQ reste");
+  // La VFF prouvée par les noms chez Lumio (Resident Evil, le 11 novembre 2026 : TRUEFRENCH) : plus de doute.
+  const vff = avecStreamFusion({ ...t, vffLe: "2027-01-16", vffVers: true }, { vf: true, vff: true, sources: 8, qualite: { u: 1, x: "DV", p: 1, f: 1, a: 0 } });
+  assert.deepEqual(vff, { uhd: true, extra: "DV", fhd: true, hdr10p: true, atmos: false, vf: true, sources: 8, langue: "multi" });
 });
 
 // Le doute VFF ou VFQ d'un film récent : les noms et les dates ne le tranchent pas (2026-11-01).

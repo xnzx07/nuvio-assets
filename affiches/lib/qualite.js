@@ -269,16 +269,29 @@ export async function qualiteConnue(type, imdbId, lastSeason, fetchImpl = fetch,
 /**
  * La qualité de Torrentio corrigée par l'avis de StreamFusion ({ vf, sources, qualite? }, lu par l'addon : il lit les
  * sites français et écarte la VFQ) : la VF et la langue suivent StreamFusion ; 4K, DV, HDR… ceux de ses sources VF
- * s'il en a, sinon ceux de Torrentio. Sans avis, ou de la VFQ seulement chez Torrentio (quebec) : Torrentio tel quel.
+ * s'il en a, sinon ceux de Torrentio. Sans avis, ou de la VFQ seulement chez Torrentio (quebec) : Torrentio tel quel,
+ * sauf une VFF prouvée par les noms de l'avis (vff).
  */
 export function avecStreamFusion(t, avis) {
-  if (!avis || typeof avis.vf !== "boolean" || (t && t.quebec)) return t;
+  if (!avis || typeof avis.vf !== "boolean" || (t && t.quebec && !avis.vff)) return t;
   const base = t || { uhd: false, extra: null, fhd: false, hdr10p: false, atmos: false, vf: false, sources: 0, langue: null };
   const q = avis.qualite || null;
   const qualite = q ? { uhd: q.u === 1, extra: q.x === "DV" || q.x === "HDR" ? q.x : null, hdr10p: q.p === 1, fhd: q.f === 1, atmos: q.a === 1 } : {};
   const enVf = base.langue === "vf" || base.langue === "multi";
   const langue = avis.vf ? (enVf ? base.langue : "vf") : (enVf ? "vo" : base.langue);
-  return avecAvisDoute({ ...base, ...qualite, vf: avis.vf, sources: Math.max(base.sources || 0, avis.sources || 0, 1), langue });
+  const lu = { ...base, ...qualite, vf: avis.vf, sources: Math.max(base.sources || 0, avis.sources || 0, 1), langue };
+  return avis.vff ? vffProuvee(lu) : avecAvisDoute(lu);
+}
+
+/**
+ * La VFF prouvée par les noms des fichiers de Lumio ou StreamFusion (avis.vff : TRUEFRENCH, VFF, VF2…) : plus de doute,
+ * ni VFQ en vue (quebec), ni date de VFF à attendre (Resident Evil, le 11 novembre 2026 : un « MULTi.VFQ » chez
+ * Torrentio, huit fichiers TRUEFRENCH, VFF ou VF2 chez Lumio).
+ */
+export function vffProuvee(q) {
+  if (!q) return q;
+  const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, vfqDoute, ...reste } = q;
+  return { ...reste, vf: true };
 }
 
 /** Attente de StreamFusion (lu par l'addon), en plus de celle de Torrentio. */

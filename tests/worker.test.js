@@ -1852,6 +1852,36 @@ test("vfq_possible_dans_les_rangees_et_la_fiche", async () => {
   assert.doesNotMatch((await (await get("/meta/movie/tmdb:6.json")).json()).meta.description || "", /VFQ/);
 });
 
+// Une VFQ en vue chez Torrentio (quebec), mais la VFF prouvée par les noms chez Lumio (Resident Evil, le 11 novembre
+// 2026 : un « MULTi.VFQ » chez Torrentio, des fichiers TRUEFRENCH chez Lumio ; la fiche disait « VFQ possible · VFF le
+// 16 janv. »). Lumio est lu, et seule une VFF prouvée change l'avis : un « MULTi » 🇫🇷 seul laisse la VFQ en vue.
+test("vfq_en_vue_levee_par_la_vff_prouvee_chez_lumio", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const lancer = async (fichier) => {
+    oublierInfos(); store.clear();
+    let lumio = 0;
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.startsWith("https://lumio.test/p/stream/movie/tt903.json")) {
+        lumio++;
+        return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `4K • WEB-DL • DV / 🌍 🇫🇷 🇬🇧 / 🗂️ ${fichier}`, url: "https://lumio.test/play/a" }] });
+      }
+      if (u.includes("/vf.json")) return sourcesDe({ tt903: { vf: true, sources: 9, langue: "multi", quebec: true, vfqPossible: true, vffLe: jour(60), vffVers: true } })(u);
+      if (/\/movie\/3\?/.test(u)) return Response.json({ ...filmVod(3, "en", [["FR", 3, jour(-56)], ["US", 3, jour(-54)], ["US", 4, jour(-8)]]), title: "Resident Evil" });
+      return Response.json({ results: [] });
+    };
+    const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LIENS: fakeD1() };
+    const fiche = (await (await worker.fetch(new Request("https://x/meta/movie/tmdb:3.json"), e, ctx)).json()).meta;
+    return { description: fiche.description || "", lumio };
+  };
+  const prouvee = await lancer("Resident.Evil.2026.MULTi.TRUEFRENCH.2160p.WEB-DL.H265-Slay3R.mkv");
+  assert.ok(prouvee.lumio >= 1, "Lumio lu malgré la VFQ en vue");
+  assert.doesNotMatch(prouvee.description, /VFQ/);
+  const multi = await lancer("Resident.Evil.2026.MULTi.2160p.WEB.H265-SUPERFLU.mkv");
+  assert.match(multi.description, /VFQ possible/);
+});
+
 // « Les plus attendus » : la date de dispo chez soi après celle du cinéma (Scrooge, le 8 novembre 2026 : « Au cinéma le
 // 11 nov. » seulement, et l'Agenda d'AppTV le rangeait au jour du cinéma).
 test("plus_attendus_disent_aussi_la_dispo_chez_soi", async () => {
