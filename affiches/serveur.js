@@ -27,7 +27,7 @@ import { makeVf } from "./api/vf.js";
 import { makeQualite } from "./api/qualite.js";
 import { makeAnilist } from "./api/anilist.js";
 import { creerNotesDisque } from "./lib/notes-disque.js";
-import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, lireEtat, empreinte, contenuListe, lireListe } from "./lib/statiques.js";
+import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, lireEtat, empreinte, contenuListe, lireListe, ADRESSE, cheminValable, PREFIXE } from "./lib/statiques.js";
 import { definirSecours } from "./lib/qualite.js";
 import { lireReglages, ecrireReglages } from "./lib/lien-affiches.js";
 import { secondesAvantBascule } from "./lib/tendances.js";
@@ -54,6 +54,14 @@ export const envDesPassages = (env) => ({ ...env, RENDUS_MINUTE: "1000000000", R
  * elle, il sautait le soir (34 fois le 1er novembre 2026, ~6 000 par heure) : affiche d'origine, redemandée ensuite.
  */
 export const envDuWorker = (env) => ({ ...env, RENDUS_MINUTE: "600", RENDUS_HEURE: "20000" });
+/**
+ * Les affiches de Nuvio servies par ce serveur, pas par le Worker (lib/statiques.js, PREFIXE) : AFFICHES_PAR_SERVEUR=on
+ * ou off pour forcer l'un ou l'autre. Une affiche en ligne est renvoyée à son fichier statique, servi par Cloudflare.
+ */
+export const AFFICHES_PAR_LE_SERVEUR = false;
+const STATIQUES = "https://affiches.xnzxflix.workers.dev";
+// Une affiche de chaque Worker, pour savoir s'il renvoie au serveur (302) ou s'il sert lui-même.
+const TEMOIN = "/maison/movie/poster/tt0133093.jpg";
 
 export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = Date.now } = {}) {
   const PORT = Number(env.PORT) || 8080, BASE = `http://127.0.0.1:${PORT}`;
@@ -62,11 +70,14 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
   const affiche = makeHandler({ env: envService, fetchImpl: sansCompteur });
   const afficheDesPassages = makeHandler({ env: envDesPassages(envService), fetchImpl: sansCompteur });
   const afficheDuWorker = makeHandler({ env: envDuWorker(envService), fetchImpl: sansCompteur });
+  const parServeur = (env.AFFICHES_PAR_SERVEUR ? env.AFFICHES_PAR_SERVEUR === "on" : AFFICHES_PAR_LE_SERVEUR) && /^https:\/\/[^/]+$/.test(env.SERVEUR_URL || "")
+    ? env.SERVEUR_URL : null;
+  const statiques = env.AFFICHES_STATIQUES || STATIQUES;
   const notesDisque = creerNotesDisque({ chemin: env.NOTES_DISQUE || join(homedir(), "notes-mdblist.json"), horloge });
   const relais = { tendances: makeTendances({ env: envService, fetchImpl }), notes: makeNotes({ env: envService, fetchImpl, garde: notesDisque }), vf: makeVf({ env: envService, fetchImpl }),
     qualite: makeQualite({ env: envService, fetchImpl }), anilist: makeAnilist({ env: envService, fetchImpl }) };
   const cf = env.CLOUDFLARE_API_TOKEN && env.D1_AFFICHES
-    ? creerCloudflare({ jeton: env.CLOUDFLARE_API_TOKEN, compte: env.CLOUDFLARE_ACCOUNT_ID, base: env.D1_AFFICHES, worker: env.AFFICHES_WORKER || "affiches", fetchImpl })
+    ? creerCloudflare({ jeton: env.CLOUDFLARE_API_TOKEN, compte: env.CLOUDFLARE_ACCOUNT_ID, base: env.D1_AFFICHES, worker: env.AFFICHES_WORKER || "affiches", fetchImpl, parServeur })
     : null;
   // Le relais de Vercel ne répond pas (en pause, en panne) : la qualité de la nuit, lue par la machine GitHub (une ligne).
   if (cf) definirSecours(async (video) => {
@@ -116,6 +127,25 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
   const enAttente = new Map();
   const etat = { depuis: new Date(horloge()).toISOString(), dessinees: 0, publiees: 0, dernierePublication: null, erreur: null, liaisonsPosees: false };
 
+  const CORS_AFFICHE = { "Access-Control-Allow-Origin": "*" };
+  // Gardée peu de temps dans Nuvio : la version publiée (avec le badge, si Torrentio était en retard) la remplace.
+  const jpgDuServeur = (jpg, retard) => new Response(jpg, { headers: { ...CORS_AFFICHE, "Content-Type": "image/jpeg", "Cache-Control": `public, max-age=${retard ? 120 : 600}` } });
+  async function dessinerPourNuvio(chemin) {
+    const r = await dessinerStatique(afficheDuWorker, BASE, chemin);
+    if (!r.jpg) return new Response(null, { status: r.statut === 404 ? 404 : 503, headers: { ...CORS_AFFICHE, "Cache-Control": "no-store" } });
+    etat.dessinees++;
+    enAttente.set(chemin, { jpg: r.jpg, hash: empreinte(r.jpg), retard: r.retard });
+    return jpgDuServeur(r.jpg, r.retard);
+  }
+  /** Le Worker renvoie-t-il au serveur ? true, false, ou null (pas de réponse claire). */
+  async function renvoieAuServeur() {
+    try {
+      const r = await fetchImpl(statiques + TEMOIN, { redirect: "manual", signal: AbortSignal.timeout(10000) });
+      if (r.status === 302) return (r.headers.get("Location") || "").startsWith(parServeur || "\u0000");
+      return r.status === 200 ? false : null;
+    } catch { return null; }
+  }
+
   async function route(req) {
     const url = new URL(req.url, BASE);
     const p = url.pathname;
@@ -124,12 +154,20 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
       if (!cleOk(req)) return new Response(null, { status: 403 });
       let chemin;
       try { chemin = decodeURIComponent(st[1]); } catch { return new Response(null, { status: 404 }); }
-      const r = await dessinerStatique(afficheDuWorker, BASE, chemin);
-      if (!r.jpg) return new Response(null, { status: r.statut === 404 ? 404 : 503, headers: { "Cache-Control": "no-store" } });
-      etat.dessinees++;
-      enAttente.set(chemin, { jpg: r.jpg, hash: empreinte(r.jpg), retard: r.retard });
-      // Gardée peu de temps dans Nuvio : la version publiée (avec le badge, si Torrentio était en retard) la remplace.
-      return new Response(r.jpg, { headers: { "Content-Type": "image/jpeg", "Cache-Control": `public, max-age=${r.retard ? 120 : 600}` } });
+      return dessinerPourNuvio(chemin);
+    }
+    // Une affiche de Nuvio, renvoyée ici par le Worker (parServeur) : en ligne (ou liste pas encore lue), renvoyée à son
+    // fichier statique ; en attente de publication, servie d'ici ; sinon dessinée ici.
+    if (ADRESSE.test(p.replace(/%3A/gi, ":"))) {
+      let chemin;
+      try { chemin = decodeURIComponent(p); } catch { return new Response(null, { status: 404 }); }
+      if (!cheminValable(chemin)) return new Response("introuvable", { status: 404, headers: { ...CORS_AFFICHE, "Cache-Control": "public, max-age=3600" } });
+      const att = enAttente.get(chemin);
+      if (att) return jpgDuServeur(att.jpg, att.retard);
+      if (!enLigne.connu || enLigne.connu.has(chemin)) {
+        return new Response(null, { status: 302, headers: { ...CORS_AFFICHE, Location: `${statiques}${PREFIXE}${p}`, "Cache-Control": "public, max-age=300" } });
+      }
+      return dessinerPourNuvio(chemin);
     }
     const a = /^\/(movie|series)\/(poster|landscape)\/([^/]+)\.jpg$/.exec(p);
     if (a) {
@@ -168,7 +206,10 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
   });
 
   /** Publie ce qui attend, et prend la file (tout : redessine aussi tout ce qui est en ligne). */
-  let occupe = false, connu = null, prete = false;
+  // premiere : la première publication après un démarrage est forcée (les fichiers rangés comme le veut ce mode).
+  let occupe = false, prete = false, premiere = true;
+  // Ce qui est en ligne (Map chemin → fichier) : lu au premier passage, puis tenu à jour ici.
+  const enLigne = { connu: null };
   // La liste de ce qui est en ligne, sur le disque (LISTE_DISQUE) après chaque publication : relue au démarrage, sans
   // la base (lib/statiques.js, LISTE). liste : la dernière publiée avec les affiches.
   const disque = env.LISTE_DISQUE || join(homedir(), "liste-affiches.json"), liste = { entree: null, t: 0 };
@@ -185,8 +226,8 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
     try {
       await preparer();
       // La liste des fichiers en ligne : lue une fois (disque, sinon celle publiée), puis tenue à jour ici.
-      const { parChemin, aFaire } = await lireEtat(cf, { tout, connu, disque: lireDisque });
-      connu = parChemin;
+      const { parChemin, aFaire } = await lireEtat(cf, { tout, connu: enLigne.connu, disque: lireDisque });
+      enLigne.connu = parChemin;
       for (const c of enAttente.keys()) aFaire.delete(c);
       const fait = await dessinerTout([...aFaire], (c) => dessinerStatique(afficheDesPassages, BASE, c), parChemin, { enMemeTemps: Number(env.EN_MEME_TEMPS) || 4 });
       const pris = [...enAttente];
@@ -201,8 +242,14 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
       // Première publication : l'adresse du serveur et la clé pour le Worker (gardées ensuite d'une publication à l'autre).
       const liaisons = etat.liaisonsPosees || !env.SERVEUR_URL ? [] : [
         { type: "plain_text", name: "SERVEUR", text: env.SERVEUR_URL }, { type: "secret_text", name: "RELAIS_KEY", text: env.RELAIS_KEY }];
-      const pub = await publierEtEnregistrer(cf, parChemin, fait.nouveaux, { ...fait, liaisons, liste });
+      // Le Worker ne renvoie pas comme il faudrait (premier passage après un changement, machine GitHub passée par là) :
+      // republié, même sans rien de nouveau.
+      const renvoi = await renvoieAuServeur();
+      const forcer = premiere || (renvoi !== null && renvoi !== !!parServeur);
+      if (forcer) console.log(`affiches ${parServeur ? "renvoyées au serveur" : "servies par le Worker"} : republiées`);
+      const pub = await publierEtEnregistrer(cf, parChemin, fait.nouveaux, { ...fait, liaisons, liste, forcer });
       if (pub.publie) {
+        premiere = false;
         ecrireDisque(parChemin);
         etat.liaisonsPosees = true;
         etat.publiees += pub.envoyes;
@@ -220,7 +267,7 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
 
   const minuteries = [];
   return {
-    serveur, route, passage, etat, enAttente,
+    serveur, route, passage, etat, enAttente, enLigne,
     demarrer() {
       serveur.listen(PORT, "127.0.0.1", () => console.log(`affiches sur ${BASE}`));
       minuteries.push(setInterval(() => notesDisque.sauver(), 5 * 60000));
@@ -231,7 +278,8 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
           .then(() => { etat.liaisonsPosees = true; console.log(`Worker relié : ${env.SERVEUR_URL}`); })
           .catch((e) => console.error(`liaison du Worker : ${e.message}`));
       }
-      preparer().then(() => cf.signaler("serveur")).catch((e) => console.error(`base : ${e.message}`));
+      // Un passage tout de suite (sans attendre 3 minutes) : la première publication remet les fichiers à leur place.
+      preparer().then(() => cf.signaler("serveur")).then(() => passage()).catch((e) => console.error(`base : ${e.message}`));
       // Toutes les 5 minutes (la machine GitHub attend 15 minutes sans signe) : chaque signe est une écriture en base.
       minuteries.push(setInterval(() => cf.signaler("serveur").catch(() => {}), 5 * 60000));
       // Toutes les 3 minutes ce qui attend, et la file un tour sur cinq. Une fois par jour après 4 h 17 UTC (la photo des

@@ -37,6 +37,8 @@ export default {
     const url = new URL(request.url);
     let chemin = url.pathname;
     try { chemin = decodeURIComponent(chemin); } catch { return new Response("introuvable", { status: 404 }); }
+    // Sous /f : un fichier pas encore en ligne, demandé par le serveur des affiches (lib/statiques.js, PREFIXE).
+    if (chemin.startsWith("/f/")) chemin = chemin.slice(2);
     const m = ADRESSE.exec(chemin);
     if (!m || (m[1] ? !STYLES.has(m[1]) : !m[2])) return new Response("introuvable", { status: 404, headers: { "Cache-Control": "public, max-age=3600" } });
     const dessinee = await duServeur(env, chemin);

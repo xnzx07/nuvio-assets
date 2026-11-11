@@ -38,6 +38,18 @@ const INCONNUE_ESSAIS = 3;
 // stale-while-revalidate : AppTV (navigateur) ressert alors la copie de la veille, avec ses N° (1er novembre 2026).
 export const ENTETES = "/*\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=3600\n";
 
+/**
+ * Affiches servies par le serveur (parServeur : son adresse) : chaque demande de Nuvio au Worker coûtait une requête
+ * dans les 100 000 par jour du compte dès qu'elle manquait au stock (67 000 le 10 novembre 2026). Le Worker renvoie
+ * chaque style au serveur par son fichier _redirects (sans se lancer, hors quota) ; le serveur renvoie une affiche en
+ * ligne à son fichier, sous PREFIXE (Cloudflare suit une redirection même quand le fichier existe : sans ce dossier, la
+ * redirection tournerait en rond), et dessine les autres. La liste (LISTE) reste à sa place.
+ * Sans parServeur (machine GitHub, serveur absent) : comme avant, les fichiers à leur adresse et le Worker pour le reste.
+ */
+export const PREFIXE = "/f";
+export const reglesRedirection = (serveur) => [...Object.keys(STYLES), "perso"].map((s) => `/${s}/* ${serveur}/${s}/:splat 302`).join("\n") + "\n";
+const configAssets = (parServeur) => ({ not_found_handling: "none", _headers: ENTETES, ...(parServeur ? { _redirects: reglesRedirection(parServeur) } : {}) });
+
 // Empreinte d'un fichier statique : 32 caractères hexadécimaux, au choix de l'envoyeur (comme wrangler : contenu en
 // base64 suivi de l'extension).
 export const empreinte = (buf, ext = "jpg") => createHash("sha256").update(buf.toString("base64") + ext).digest("hex").slice(0, 32);
@@ -72,7 +84,8 @@ export const codeDuWorker = () => readFileSync(new URL("../statique/worker.js", 
  * L'accès à Cloudflare : { sql, ecrire, preparer, verrouiller, liberer, signaler, serveurRecent, publier }.
  * jeton : Workers Scripts et D1 en écriture ; compte : CLOUDFLARE_ACCOUNT_ID ; base : l'id de nuvio-affiches.
  */
-export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetchImpl = fetch }) {
+export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetchImpl = fetch, parServeur = null }) {
+  const enLigne = (chemin) => (parServeur && chemin !== LISTE ? PREFIXE + chemin : chemin);
   const API = `https://api.cloudflare.com/client/v4/accounts/${compte}`;
   async function cf(chemin, init = {}) {
     const res = await fetchImpl(API + chemin, { ...init, headers: { Authorization: `Bearer ${jeton}`, ...(init.headers || {}) } });
@@ -125,7 +138,7 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
       form.append("metadata", new Blob([JSON.stringify({
         main_module: "worker.js", compatibility_date: "2026-10-01",
         bindings: [{ type: "d1", name: "DB", id: base }, ...liaisons], keep_bindings: ["plain_text", "secret_text"],
-        keep_assets: true, assets: { config: { not_found_handling: "none", _headers: ENTETES } },
+        keep_assets: true, assets: { config: configAssets(parServeur) },
       })], { type: "application/json" }));
       form.append("worker.js", new Blob([codeDuWorker()], { type: "application/javascript+module" }), "worker.js");
       await cf(`/workers/scripts/${worker}`, { method: "PUT", body: form });
@@ -140,7 +153,7 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
     },
     async publier(fichiers, nouveaux, liaisons = []) {
       const manifest = {};
-      for (const f of fichiers) manifest[f.chemin] = { hash: f.hash, size: f.taille };
+      for (const f of fichiers) manifest[enLigne(f.chemin)] = { hash: f.hash, size: f.taille };
       const session = await cf(`/workers/scripts/${worker}/assets-upload-session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ manifest }) });
       let jeton2 = session.jwt;
       const cheminDe = new Map(fichiers.map((f) => [f.hash, f.chemin]));
@@ -151,7 +164,10 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
           let jpg = nouveaux.get(hash);
           if (!jpg) {
             sousDomaine = sousDomaine || (await cf("/workers/subdomain")).subdomain;
-            const r = await fetchImpl(`https://${worker}.${sousDomaine}.workers.dev${cheminDe.get(hash)}`);
+            // Sous PREFIXE ou à son adresse, selon la publication d'avant.
+            const lire = (c) => fetchImpl(`https://${worker}.${sousDomaine}.workers.dev${c}`, { redirect: "manual" });
+            let r = await lire(PREFIXE + cheminDe.get(hash));
+            if (!r.ok) r = await lire(cheminDe.get(hash));
             if (!r.ok) throw new Error(`fichier ${cheminDe.get(hash)} introuvable en ligne (${r.status})`);
             jpg = Buffer.from(await r.arrayBuffer());
           }
@@ -175,7 +191,7 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
         bindings: [{ type: "d1", name: "DB", id: base }, ...liaisons],
         // L'adresse du serveur et la clé restent d'une publication à l'autre (la machine GitHub ne les connaît pas).
         keep_bindings: ["plain_text", "secret_text"],
-        assets: { jwt: jeton2, config: { not_found_handling: "none", _headers: ENTETES } },
+        assets: { jwt: jeton2, config: configAssets(parServeur) },
       })], { type: "application/json" }));
       form.append("worker.js", new Blob([codeDuWorker()], { type: "application/javascript+module" }), "worker.js");
       await cf(`/workers/scripts/${worker}`, { method: "PUT", body: form });
@@ -250,13 +266,13 @@ export async function dessinerTout(liste, dessiner, parChemin, { enMemeTemps = 4
  * parChemin. liste : { entree, t } de la dernière liste publiée, tenu par l'appelant (null : refaite à chaque fois).
  * { publie, envoyes, retirees } ; publie false si le verrou était pris.
  */
-export async function publierEtEnregistrer(cf, parChemin, nouveaux, { faits = [], reessais = [], liaisons = [], maintenant = new Date().toISOString(), liste = null } = {}) {
+export async function publierEtEnregistrer(cf, parChemin, nouveaux, { faits = [], reessais = [], liaisons = [], forcer = false, maintenant = new Date().toISOString(), liste = null } = {}) {
   let tous = [...parChemin.values()].sort((a, b) => (a.cree < b.cree ? 1 : -1));
   const retirees = tous.slice(FICHIERS_MAX);
   tous = tous.slice(0, FICHIERS_MAX);
   const changees = tous.filter((f) => f.change);
   let envoyes = 0, publie = false;
-  if (changees.length || retirees.length || liaisons.length) {
+  if (changees.length || retirees.length || liaisons.length || forcer) {
     if (!(await cf.verrouiller("publication", 10 * 60000))) return { publie: false, envoyes: 0, retirees: 0 };
     try {
       let entree = liste && liste.entree && Date.now() - liste.t < LISTE_MS ? liste.entree : null;

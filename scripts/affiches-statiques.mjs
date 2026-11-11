@@ -33,6 +33,14 @@ const cf = creerCloudflare({ jeton: E.CLOUDFLARE_API_TOKEN, compte: E.CLOUDFLARE
 // lignes lues du jour).
 if (mode === "code") { await cf.mettreAJourCode(); console.log("code du Worker remis en ligne"); process.exit(0); }
 if (!essai) await cf.preparer();
+// coupe : la surveillance (serveur injoignable) remet les affiches dans le Worker, à leur adresse et sans renvoi au
+// serveur (cette machine publie toujours ainsi), même sans rien de nouveau.
+if (mode === "coupe") {
+  const { parChemin } = await lireEtat(cf, {});
+  const p = await publierEtEnregistrer(cf, parChemin, new Map(), { forcer: true });
+  console.log(p.publie ? `affiches remises dans le Worker (${parChemin.size})` : "pas publié : une autre publication en cours");
+  process.exit(p.publie ? 0 : 1);
+}
 if (mode === "sources") {
   // Les titres des affiches en ligne et demandées, une fois chacun (tous styles et formes confondus).
   const lignes = [...await chargerListe(cf), ...await cf.sql("SELECT chemin FROM demandes")];
