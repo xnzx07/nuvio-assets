@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.64.9";
+const VERSION = "5.64.10";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -2014,7 +2014,11 @@ async function classerTendances(env, kind, results) {
     ids = ids.slice(0, RANGS);
   } else {
     // La VF : StreamFusion s'il est réglé (lireVfPhoto), sinon Torrentio.
-    const garde = await seriesRegardables(env, released, today, RANGS, lireVfPhoto);
+    // Les talk-shows et journaux télévisés étrangers (genres 10767, 10763) : jamais doublés, et trop vieux pour qu'on lise
+    // leurs sources (seriesRegardables ne lit que les séries de moins d'un an). Jimmy Kimmel Live!, N°3 le 13 novembre
+    // 2026 : Kalyo le cachait, les affiches suivantes disaient N°4, N°5 sous ses grands 3, 4.
+    const tele = (it) => it.original_language !== "fr" && (it.genre_ids || []).some((g) => g === 10767 || g === 10763);
+    const garde = await seriesRegardables(env, released.filter((it) => !tele(it)), today, RANGS, lireVfPhoto);
     if ([...garde.infos.values()].some((info) => !info.lu)) throw new Error("fiches TMDB pas toutes lues");
     ids = garde.picked.map((it) => it.id);
     ({ vf, q, vfi } = avisVf(garde));

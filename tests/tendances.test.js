@@ -124,15 +124,16 @@ test("photo_renumerotee_comme_la_rangee", async () => {
 // écartée ; 2 : nouvelle, mêmes sources, mais sur Netflix en France (qui double) → gardée ; 3 : vieille série, dernière
 // saison sans VF → gardée ; 4 : nouvelle, sources VF → gardée ; 5 : pas encore diffusée → écartée ; 7 : nouvelle, sans
 // identifiant IMDb (Oh! My Guard, coréenne, N°10 le 25 octobre 2026) : aucune source à lire → écartée ; 8 : pareil, mais en
-// français (elle a sa VF) → gardée.
+// français (elle a sa VF) → gardée ; 9 : vieux talk-show américain (Jimmy Kimmel Live!, N°3 le 13 novembre 2026) →
+// écarté.
 test("photo_des_series_seulement_en_vf", async () => {
   const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
-  const premiere = { 1: jour(-20), 2: jour(-40), 3: "2009-01-01", 4: jour(-60), 5: jour(15), 6: jour(-2), 7: jour(-1), 8: jour(-5) };
-  const langue = { 1: "ja", 2: "ko", 3: "en", 4: "zh", 5: "en", 6: "zh", 7: "ko", 8: "fr" };
+  const premiere = { 1: jour(-20), 2: jour(-40), 3: "2009-01-01", 4: jour(-60), 5: jour(15), 6: jour(-2), 7: jour(-1), 8: jour(-5), 9: "2003-01-26" };
+  const langue = { 1: "ja", 2: "ko", 3: "en", 4: "zh", 5: "en", 6: "zh", 7: "ko", 8: "fr", 9: "en" };
   globalThis.fetch = async (url) => {
     const u = String(url);
     calls.push(u);
-    if (u.includes("/trending/tv/day")) return new Response(JSON.stringify({ results: new URL(u).searchParams.get("page") === "1" ? [1, 2, 3, 4, 5, 6, 7, 8].map((id) => ({ id, first_air_date: premiere[id], original_language: langue[id] })) : [] }));
+    if (u.includes("/trending/tv/day")) return new Response(JSON.stringify({ results: new URL(u).searchParams.get("page") === "1" ? [1, 2, 9, 3, 4, 5, 6, 7, 8].map((id) => ({ id, first_air_date: premiere[id], original_language: langue[id], genre_ids: id === 9 ? [10767, 35] : [18] })) : [] }));
     if (u.includes("/vf.json")) {
       const v = (new URL(u).searchParams.get("v") || "").split(",");
       // 6 : nouvelle aussi, aucune source du tout → écartée.
@@ -149,7 +150,7 @@ test("photo_des_series_seulement_en_vf", async () => {
   };
   const { ids } = await (await get("/tendances/series.json")).json();
   assert.deepEqual(ids.slice(0, 4), [2, 3, 4, 8]);
-  assert.ok(![1, 5, 6, 7].some((id) => ids.slice(0, 20).includes(id)));
+  assert.ok(![1, 5, 6, 7, 9].some((id) => ids.slice(0, 20).includes(id)));
 });
 
 // StreamFusion (STREAMFUSION_URL, réglé sans anglais ni VOSTFR) décide de la VF pour la photo : 1 a des sources (VF) ;
