@@ -455,6 +455,9 @@ test("vff_prouvee_par_deux_equipes_ou_un_tracker", async () => {
     tt972: [f("4K • WEB-DL\n🌍 🇫🇷 🇬🇧 • 💾 17,6 Go • 🔎 C411\n🎧 HEVC • AC3 5.1 • Slay3R\n🗂️ Resident.Evil.2026.MULTi.TRUEFRENCH.2160p.HDR.DV.WEB-DL.H265-Slay3R.mkv")],
     // deux équipes, en téléchargement direct seulement : prouvée
     tt973: [f("🇫🇷 ✓ • 🔎 Wawacity • 🔗 rapidgator\n🗂️ Film.2026.MULTi.VFF.1080p.WEB-AAA.mkv"), f("🇫🇷 ✓ • 🔎 Tirexo • 🔗 1fichier\n🗂️ Film.2026.MULTi.VF2.1080p.WEB-BBB.mkv")],
+    // L'Odyssée, le 12 novembre 2026 : un WEBRip d'une autre équipe sur C411, avec le VF2 de CZHD : une copie refaite,
+    // pas une preuve
+    tt974: [...odyssee, f("1080p • WEBRip\n🇫🇷 🇬🇧 ✓ • 💾 3 Go • 🔎 C411\n🎧 AAC 2.0 • FS\n🗂️ The.Odyssey.2026.MULTI.VFF.1080p.WEBRIP.AAC.2.0.x264-FS.mkv")],
   };
   globalThis.fetch = async (url) => {
     const u = String(url);
@@ -464,9 +467,11 @@ test("vff_prouvee_par_deux_equipes_ou_un_tracker", async () => {
     return new Response("{}");
   };
   const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", AFFICHES_URL: "https://affiches.test" };
-  const lus = await lireVfPhoto(e, ["movie/tt971", "movie/tt972", "movie/tt973"]);
+  const lus = await lireVfPhoto(e, ["movie/tt971", "movie/tt972", "movie/tt973", "movie/tt974"]);
   assert.equal(lus.get("movie/tt971").vf, true);
   assert.equal(lus.get("movie/tt971").vff, undefined, "L'Odyssée : un seul fichier CZHD, hors tracker");
   assert.equal(lus.get("movie/tt972").vff, true, "Slay3R sur C411");
   assert.equal(lus.get("movie/tt973").vff, true, "deux équipes");
+  assert.equal(lus.get("movie/tt974").vf, true);
+  assert.equal(lus.get("movie/tt974").vff, undefined, "un WEBRip ne prouve pas la VFF");
 });

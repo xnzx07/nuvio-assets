@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.64.5";
+const VERSION = "5.64.6";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -967,18 +967,25 @@ const VFF_NOM = /\b(TRUEFRENCH|VFF|VFI|VF2)\b/i;
 const TRACKERS = /\b(C411|V3X|Tr4ker|YggReborn|Ygg\w*|DMM|0xTorrent|Draupnirr|Nostradamus|Torrent9|1337x|Knaben|Sharewood|ABN|Torr9|TorrentGalaxy|Rutracker|Rutor|EXT|UIndex)\b/i;
 /** L'équipe d'un fichier (« …-Slay3R.mkv » → slay3r), sinon son nom entier : deux copies du même fichier comptent une fois. */
 function equipeDe(t) {
-  const nom = ((/🗂️\s*([^\n/]+)/u.exec(t) || [])[1] || t).trim();
+  // le nom du fichier : 🗂️ chez Lumio, sinon le premier nom de sortie (« The.Odyssey.2026.MULTI.VFF…x264-FS », StreamFusion)
+  const nom = ((/🗂️\s*([^\n/]+)/u.exec(t) || [])[1] || (/[\w.()[\]+-]*?\.(?:19|20)\d\d\.[\w.()[\]+-]+/.exec(t) || [])[0] || t).trim();
   const g = /-\[?([A-Za-z0-9]+)\]?(?:\.(?:mkv|mp4|avi))?\s*$/i.exec(nom);
   return (g ? g[1] : nom).toLowerCase();
 }
 /**
- * La VFF prouvée par les noms : au moins deux équipes différentes la donnent, ou une seule mais trouvée sur un tracker
+ * Une copie refaite, pas un fichier de plateforme : WEBRip (l'image filmée à l'écran puis réencodée), cinéma (CAM, TS,
+ * TC…), ou un son de salle (MD, LiNE). Une VF qu'on y colle n'est pas la VFF officielle : L'Odyssée, le 12 novembre 2026,
+ * « MULTI.VFF.1080p.WEBRIP.AAC.2.0.x264-FS » sur C411, trois jours avant sa date française ; pas une vraie VFF.
+ */
+const RIP = /\b(WEB-?RIP|HD-?CAM|CAM-?RIP|CAM|HD-?TS|TELESYNC|TS|HD-?TC|TELECINE|TC|MD|LiNE)\b/i;
+/**
+ * La VFF prouvée par les noms (jamais par une copie refaite, RIP) : au moins deux équipes différentes la donnent, ou une seule mais trouvée sur un tracker
  * torrent (ou chez StreamFusion, qui ne lit que des torrents : torrent). L'Odyssée, le 11 novembre 2026 : un seul
  * fichier « MULTI.VF2 » d'une petite équipe (CZHD), sur des sites de téléchargement direct seulement, avait suffi à
  * l'annoncer « VFF EN AVANCE ». Resident Evil, lui, en avait huit, de cinq équipes, sur C411 et V3X.
  */
 function vffProuvee(fichiers, texte, torrent = false) {
-  const vff = fichiers.filter((s) => VFF_NOM.test(texte(s)));
+  const vff = fichiers.filter((s) => VFF_NOM.test(texte(s)) && !RIP.test(texte(s)));
   if (!vff.length) return false;
   if (new Set(vff.map((s) => equipeDe(texte(s)))).size >= 2) return true;
   return torrent || vff.some((s) => { const src = (/🔎\s*([^\n•/]+)/u.exec(texte(s)) || [])[1] || ""; return TRACKERS.test(src) && !/🔗/u.test(texte(s)); });
@@ -1031,9 +1038,9 @@ async function lireVfLumio(env, cles) {
  */
 /**
  * Format des avis gardés (l) : 2 = avec vff (la VFF prouvée par les noms) ; 3 = la preuve par deux équipes ou un tracker
- * (vffProuvee). Un avis « VF » plus ancien est relu (avisDuJour).
+ * (vffProuvee) ; 4 = sans les copies refaites (RIP : WEBRip, CAM…). Un avis « VF » plus ancien est relu (avisDuJour).
  */
-const AVIS_FORMAT = 3;
+const AVIS_FORMAT = 4;
 /** L'avis sans son format (l), gardé seulement dans la mémoire. */
 const sansFormat = ({ l, ...a }) => a;
 const AVIS_OUI_MS = 7 * 86400000, AVIS_NON_MS = 3 * 3600000, AVIS_NON_VIEUX_MS = 86400000, AVIS_NON_RECENT_MS = 7 * 86400000;
