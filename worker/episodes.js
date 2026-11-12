@@ -53,6 +53,32 @@ export async function videosReduites(imdb, budget) {
 const ordre =(a, b) => a.season - b.season || a.episode - b.episode;
 
 /**
+ * Mêmes saisons des deux côtés, à un épisode ou deux près (La Villa des cœurs brisés : 55 épisodes en saison 2 chez
+ * TMDB, 56 chez Cinemeta) : mêmes numéros de saison (Cinemeta peut en avoir de plus à la fin, annoncées), au plus
+ * 2 épisodes d'écart par saison (10 % pour la dernière, qui se remplit) et des écarts tous dans le même sens. Mis bout
+ * à bout, l'épisode en moins décalait d'un cran tous ceux des saisons suivantes : on garde alors la numérotation de
+ * TMDB. Des écarts qui se compensent (Hunter x Hunter : 4 épisodes de la saison 2 de Cinemeta à la fin de la
+ * saison 1 chez TMDB) sont une frontière déplacée : le bout à bout reste. Les dates de saison de TMDB ne servent pas,
+ * elles sont parfois fausses (Hunter x Hunter : saison 2 datée du 15 décembre, son 1er épisode du 20 janvier).
+ */
+function memesSaisons(nos, leurs) {
+  const chez = new Map();
+  for (const v of leurs) chez.set(v.season, (chez.get(v.season) || 0) + 1);
+  const derniere = nos[nos.length - 1].season_number;
+  if ([...chez.keys()].some((n) => n < derniere && !nos.some((s) => s.season_number === n))) return false;
+  const ecarts = [];
+  for (const s of nos) {
+    const c = chez.get(s.season_number);
+    if (!c) return false;
+    const e = (s.episode_count || 0) - c;
+    const permis = s.season_number === derniere ? Math.max(2, 0.1 * Math.max(c, s.episode_count || 0)) : 2;
+    if (Math.abs(e) > permis) return false;
+    if (e) ecarts.push(e);
+  }
+  return ecarts.every((e) => Math.sign(e) === Math.sign(ecarts[0]));
+}
+
+/**
  * seasons = d.seasons de TMDB, videos = celles de Cinemeta → null (même découpage, ou Cinemeta trop incomplet
  * pour s'y fier), ou { place(saison, épisode) de TMDB → { season, episode }, restants : vidéos de Cinemeta sans
  * épisode TMDB, saisons : comme d.seasons, recomptées }.
@@ -72,6 +98,7 @@ export function decoupageCinemeta(seasons, videos) {
   }
   const n = Math.min(notre.length, leurs.length);
   if (notre.slice(0, n).every((x, i) => x.season === leurs[i].season && x.episode === leurs[i].episode)) return null;
+  if (memesSaisons(nos, leurs)) return null;
 
   const dernier = leurs[leurs.length - 1];
   const charniere = notre[leurs.length - 1];   // l'épisode TMDB placé sur le dernier de Cinemeta, s'il existe

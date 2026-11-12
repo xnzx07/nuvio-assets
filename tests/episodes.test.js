@@ -17,6 +17,18 @@ test("meme_decoupage_rien_a_faire", () => {
   assert.equal(decoupageCinemeta(tmdb(10), null), null);
 });
 
+test("memes_saisons_un_episode_d_ecart_on_garde_tmdb", () => {
+  // La Villa des cœurs brisés : un épisode de plus chez Cinemeta en saison 2 (56 contre 55), des épisodes annoncés en
+  // plus en saison 11. Mis bout à bout, tout glissait d'un cran dès la saison 3 (S11E58 de TMDB devenait :11:57).
+  assert.equal(decoupageCinemeta(tmdb(41, 55, 91, 70), cine(41, 56, 91, 73)), null);
+  assert.equal(decoupageAffiches(tmdb(41, 55, 91, 70), cine(41, 56, 91, 73)), null);
+  // Écarts qui se compensent (Hunter x Hunter : 62 + 74 chez TMDB, 58 + 78 chez Cinemeta) : frontière déplacée, le
+  // bout à bout reste.
+  assert.deepEqual(decoupageCinemeta(tmdb(62, 74, 12), cine(58, 78, 12)).place(1, 59), { season: 2, episode: 1 });
+  assert.deepEqual(decoupageCinemeta(tmdb(41, 57, 89), cine(41, 56, 90)).place(3, 1), { season: 3, episode: 2 });
+  assert.notEqual(decoupageAffiches(tmdb(41, 57, 89), cine(41, 56, 90)), null);
+});
+
 test("une_saison_tmdb_redecoupee_comme_cinemeta", () => {
   // Jujutsu Kaisen : une « saison 1 » de 59 épisodes chez TMDB, 24 + 23 + 12 et la saison 4 annoncée chez Cinemeta.
   const c = cine(24, 23, 12);
