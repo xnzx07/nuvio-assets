@@ -86,7 +86,8 @@ export async function lignesDeTexte(image) {
 }
 
 const IMG = "https://image.tmdb.org/t/p/w342";
-const DELAI_MS = 2500, MAX_MEMO = 5000;
+// mémoires assez grandes pour tout le stock (~10 000 titres, jusqu'à 6 images chacun) : plus rien recalculé chaque nuit
+const DELAI_MS = 2500, MAX_MEMO = Number(process.env.MEMO_MAX) || 60000;
 let memo = new Map();   // chemin TMDB → promesse de « a du texte » (true aussi pour une image absente ou illisible)
 export function resetMemo() { memo = new Map(); }
 

@@ -477,7 +477,7 @@ function calqueDegrades(content, [w, hgt], teinte) {
 async function bandeFloue(flouDe, [w, hgt], top, masque) {
   const haut = hgt - top;
   const floue = await sharp(await flouDe()).extract({ left: 0, top, width: w, height: haut }).toBuffer();
-  const input = masque ? await sharp(floue).ensureAlpha().composite([{ input: masque(w, haut), blend: "dest-in" }]).png().toBuffer() : floue;
+  const input = masque ? await sharp(floue).ensureAlpha().composite([{ input: masque(w, haut), blend: "dest-in" }]).png({ compressionLevel: 0 }).toBuffer() : floue;
   return { input, left: 0, top };
 }
 
@@ -534,7 +534,7 @@ async function titreEnImage(content, aGauche) {
     width: L, height: H, display: "flex", alignItems: "center", justifyContent: aGauche ? "flex-start" : "center",
     textAlign: aGauche ? "left" : "center", color: "#fff", fontFamily: police.nom, fontWeight: poids, fontSize: taille, lineHeight: 1.02,
   }, children: texte } };
-  return sharp(Buffer.from(await satori(racine, { width: L, height: H, fonts: FONTS }))).png().toBuffer();
+  return sharp(Buffer.from(await satori(racine, { width: L, height: H, fonts: FONTS }))).png({ compressionLevel: 0 }).toBuffer();
 }
 
 /** Le logo du titre, réduit dans sa boîte (selon la taille choisie) et centré au-dessus de la ligne. */
@@ -556,11 +556,11 @@ async function calqueLogo(content, [w, hgt], m, fetchImpl) {
     const { width } = await sharp(brut).metadata();
     options = { density: Math.min(300, Math.max(1, (72 * 2 * boiteL) / (width || 1))) };
   }
-  const source = await sharp(brut, options).ensureAlpha().png().toBuffer();
+  const source = await sharp(brut, options).ensureAlpha().png({ compressionLevel: 0 }).toBuffer();
   const zone = cadreVisible(await sharp(source).raw().toBuffer({ resolveWithObject: true }));
   const { data, info } = await sharp(source).extract(zone)
     .resize({ width: boiteL, height: boiteH, fit: "inside" })
-    .png().toBuffer({ resolveWithObject: true });
+    .png({ compressionLevel: 0 }).toBuffer({ resolveWithObject: true });
   // Placé d'après sa partie pleine (les lettres) : halos et traînées semi-transparents ne le décalent pas.
   const plein = cadreVisible(await sharp(data).raw().toBuffer({ resolveWithObject: true }), 128);
   // Hauteur du titre réglée à la main : le logo remonte d'une part de la hauteur de l'image.
@@ -584,16 +584,16 @@ async function calqueLogo(content, [w, hgt], m, fetchImpl) {
 async function avecEffet(calque, info, effet, [w, hgt]) {
   if (effet !== "ombre" && effet !== "halo") return calque;
   const pad = 18, couleur = effet === "halo" ? { r: 255, g: 255, b: 255 } : { r: 0, g: 0, b: 0 };
-  const etendu = await sharp(calque.input).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+  const etendu = await sharp(calque.input).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).png({ compressionLevel: 0 }).toBuffer();
   const W = info.width + 2 * pad, H = info.height + 2 * pad;
   const forme = await sharp({ create: { width: W, height: H, channels: 4, background: { ...couleur, alpha: effet === "halo" ? 0.8 : 1 } } })
-    .composite([{ input: etendu, blend: "dest-in" }]).png().toBuffer();
-  let silhouette = await sharp(forme).blur(effet === "halo" ? 9 : 4).png().toBuffer();
+    .composite([{ input: etendu, blend: "dest-in" }]).png({ compressionLevel: 0 }).toBuffer();
+  let silhouette = await sharp(forme).blur(effet === "halo" ? 9 : 4).png({ compressionLevel: 0 }).toBuffer();
   let left = calque.left - pad + (effet === "ombre" ? 4 : 0), top = calque.top - pad + (effet === "ombre" ? 6 : 0);
   // Recadrée dans l'affiche (sharp ne pose pas une image qui dépasse).
   const x0 = Math.max(0, -left), y0 = Math.max(0, -top), x1 = Math.min(W, w - left), y1 = Math.min(H, hgt - top);
   if (x1 - x0 < 1 || y1 - y0 < 1) return calque;
-  silhouette = await sharp(silhouette).extract({ left: x0, top: y0, width: x1 - x0, height: y1 - y0 }).png().toBuffer();
+  silhouette = await sharp(silhouette).extract({ left: x0, top: y0, width: x1 - x0, height: y1 - y0 }).png({ compressionLevel: 0 }).toBuffer();
   return { ...calque, sous: { input: silhouette, left: left + x0, top: top + y0 } };
 }
 
@@ -610,13 +610,13 @@ async function ajouterGrain(base) {
     const d = Math.round((x / 4294967296 - 0.5) * 28);
     for (let c = 0; c < 3; c++) { const k = i * info.channels + c; data[k] = Math.max(0, Math.min(255, data[k] + d)); }
   }
-  return sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } }).png().toBuffer();
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } }).png({ compressionLevel: 0 }).toBuffer();
 }
 
 /** Retouches de l'image, une étape après l'autre (sharp n'applique qu'un seul « linear » par passage). */
 async function retoucher(buf, rt) {
   // Entre deux étapes, l'image passe en PNG (sans perte), pas en JPEG.
-  const etape = async (f) => { buf = await f(sharp(buf)).png().toBuffer(); };
+  const etape = async (f) => { buf = await f(sharp(buf)).png({ compressionLevel: 0 }).toBuffer(); };
   if (rt.lum !== undefined || rt.satur !== undefined) await etape((x) => x.modulate({ brightness: rt.lum ?? 1, saturation: rt.satur ?? 1 }));
   if (rt.contraste !== undefined) await etape((x) => x.linear(rt.contraste, 128 * (1 - rt.contraste)));
   if (rt.filtre === "nb") await etape((x) => x.grayscale().toColourspace("srgb"));
@@ -659,7 +659,7 @@ function fondAnnonce(w, h) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><defs>`
     + `<radialGradient id="g" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#3a3f4f"/><stop offset="0.55" stop-color="#1c1f29"/><stop offset="1" stop-color="#0b0c10"/></radialGradient>`
     + `</defs><rect width="${w}" height="${h}" fill="url(#g)"/></svg>`;
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return sharp(Buffer.from(svg)).png({ compressionLevel: 0 }).toBuffer();
 }
 
 /** JPEG d'une affiche (400×600 en portrait, 800×450 en paysage). Lève une erreur si l'image de base manque. */

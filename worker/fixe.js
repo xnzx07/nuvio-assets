@@ -73,7 +73,18 @@ async function avecVu(env, requete) {
   try { return await requete(); } catch (e) { if (!noColumn(e)) throw e; await ajouteVu(env); return requete(); }
 }
 
-async function row(env, h) {
+// Une seule lecture à la fois par lien : Nuvio demande ~20 rangées d'un coup, elles attendent la même réponse.
+const lecturesEnCours = new Map();
+function row(env, h) {
+  let p = lecturesEnCours.get(h);
+  if (!p) {
+    p = lireLigne(env, h).finally(() => lecturesEnCours.delete(h));
+    lecturesEnCours.set(h, p);
+  }
+  return p;
+}
+
+async function lireLigne(env, h) {
   const hit = await caches.default.match(cacheKey(h)).then((r) => (r ? r.json() : null)).catch(() => null);
   // Lu il y a moins de 5 min (les lignes d'avant, sans heure, sont relues).
   if (hit && hit.lu && Date.now() - hit.lu < CACHE_S * 1000) return hit;

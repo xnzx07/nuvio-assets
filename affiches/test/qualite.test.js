@@ -1,3 +1,4 @@
+import { MAX_MEMO } from "../lib/qualite.js";
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { parseQuality, qualityOf, resetMemo, tailleMemo, avecStreamFusion, vffPossible, avecDatesVff } from "../lib/qualite.js";
@@ -103,8 +104,8 @@ test("relais en panne : null", async () => {
 
 test("mémoire plafonnée : les plus anciennes sortent", async () => {
   const f = async () => reponse([])();
-  for (let i = 0; i < 5005; i++) await qualityOf("movie", "tt" + (100000 + i), null, f);
-  assert.ok(tailleMemo() <= 5000, `taille ${tailleMemo()}`);
+  for (let i = 0; i < MAX_MEMO + 5; i++) await qualityOf("movie", "tt" + (100000 + i), null, f);
+  assert.ok(tailleMemo() <= MAX_MEMO, `taille ${tailleMemo()}`);
 });
 
 test("mémoire : un seul appel par titre", async () => {

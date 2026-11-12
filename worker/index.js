@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.64.8";
+const VERSION = "5.64.9";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -108,8 +108,11 @@ const SEASONS = {
 };
 
 /** Date du jour à Paris, au format AAAA-MM-JJ. */
+// formateurs construits une fois (en construire un coûte ~0,1 ms, et c'est appelé à chaque demande)
+const JOUR_PARIS = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" });
+const HEURE_PARIS = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" });
 function parisToday() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date());
+  return JOUR_PARIS.format(new Date());
 }
 
 function addDays(iso, days) {
@@ -1097,11 +1100,13 @@ async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
   const now = Date.now(), avis = new Map(), vieux = new Map();
   const manque = [];
   const bon = (d) => avisFrais(d, now) && !(opts.relire && d.avis.vf && !d.avis.vff);
-  for (const cle of cles) {
-    const hit = await caches.default.match(avisCache(cle)).catch(() => null);
-    const d = hit ? await hit.json().catch(() => null) : null;
+  // toutes les clés lues en même temps, puis traitées dans l'ordre (même résultat, sans 18 attentes à la suite)
+  const enCache = await Promise.all(cles.map((cle) => caches.default.match(avisCache(cle))
+    .then((hit) => (hit ? hit.json().catch(() => null) : null)).catch(() => null)));
+  cles.forEach((cle, i) => {
+    const d = enCache[i];
     if (bon(d)) avis.set(cle, sansFormat(d.avis)); else { manque.push(cle); if (d) vieux.set(cle, d); }
-  }
+  });
   // La mémoire commune : un titre déjà demandé ailleurs (un autre centre de données) n'est pas redemandé.
   for (const [cle, d] of await lireAvisGardes(env, manque)) {
     vieux.set(cle, d);
@@ -1232,7 +1237,7 @@ async function lireVfStreamFusion(env, cles) {
  * Réservée jusqu'à 7 h à Paris (4 h UTC plus une marge, été comme hiver) : ce qu'elle n'a pas pris sert ensuite au reste.
  */
 const RESERVE_PHOTO_JUSQUA = 7;
-const reservePhotoTenue = () => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" }).format(new Date(Date.now()))) < RESERVE_PHOTO_JUSQUA;
+const reservePhotoTenue = () => Number(HEURE_PARIS.format(new Date(Date.now()))) < RESERVE_PHOTO_JUSQUA;
 // sansvf : les films examinés chaque nuit pour la liste « SANS VF » (avisSansVf), une ou deux demandes par film, à part
 // des plafonds des rangées et des affiches.
 // vfq : la tournée de nuit des films « VFQ possible » (tourneeVfq), à part elle aussi.

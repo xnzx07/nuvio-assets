@@ -12,7 +12,8 @@ export const TORRENTIO = "https://torrentio.strem.fun";
 const DELAI_MS = 2500;
 // Un jour : la VF lue dans les sources (statut des affiches) arrive vite après la sortie.
 const GARDE_MS = 86400 * 1000, GARDE_ECHEC_MS = 3600 * 1000;
-const MAX_MEMO = 5000;
+// assez grande pour tout le stock (~10 000 titres) : rien n'est recalculé chaque nuit faute de place
+export const MAX_MEMO = Number(process.env.MEMO_MAX) || 60000;
 
 let memo = new Map();
 // Secours quand le relais ne répond pas (serveur des affiches : la qualité lue par la machine GitHub, chaque nuit, dans

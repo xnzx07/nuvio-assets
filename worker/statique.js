@@ -61,7 +61,7 @@ const empreinte = (nom) => {
     let h = 0x811c9dc5;
     const c = contenu(nom);
     if (typeof c === "string") for (let i = 0; i < c.length; i++) { h ^= c.charCodeAt(i); h = Math.imul(h, 0x01000193); }
-    else for (const b of new Uint8Array(c)) { h ^= b; h = Math.imul(h, 0x01000193); }
+    else { const u = new Uint8Array(c); for (let i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 0x01000193); } }
     empreintes[nom] = (h >>> 0).toString(36);
   }
   return empreintes[nom];

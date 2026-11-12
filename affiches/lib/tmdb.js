@@ -10,7 +10,8 @@ const ANIMATION = 16;   // genre TMDB
 
 // Correspondances « tt… » → identifiant TMDB, gardées en mémoire de l'instance (elles ne changent pas),
 // 5 000 au plus : les plus anciennes sortent.
-const MAX_MEMO = 5000;
+// assez grande pour tout le stock (~10 000 titres) : rien n'est recalculé chaque nuit faute de place
+export const MAX_MEMO = Number(process.env.MEMO_MAX) || 60000;
 let memoFind = new Map();
 export function resetMemo() { memoFind = new Map(); }
 export const tailleMemo = () => memoFind.size;

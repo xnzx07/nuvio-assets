@@ -1,3 +1,4 @@
+import { MAX_MEMO as MAX_MEMO_TMDB } from "../lib/tmdb.js";
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { titleFacts, tmdbIdDe, tailleMemo, resetMemo as resetTmdb } from "../lib/tmdb.js";
@@ -257,8 +258,8 @@ test("fin_et_avancement_serie", async () => {
 
 test("mémoire des correspondances plafonnée", async () => {
   const f = async (u) => json({ movie_results: [{ id: 1 }], tv_results: [] });
-  for (let i = 0; i < 5005; i++) await tmdbIdDe(env, "movie", "tt" + (200000 + i), f);
-  assert.ok(tailleMemo() <= 5000, `taille ${tailleMemo()}`);
+  for (let i = 0; i < MAX_MEMO_TMDB + 5; i++) await tmdbIdDe(env, "movie", "tt" + (200000 + i), f);
+  assert.ok(tailleMemo() <= MAX_MEMO_TMDB, `taille ${tailleMemo()}`);
 });
 
 test("inconnu : 404 → null, 500 → erreur", async () => {
