@@ -22,11 +22,15 @@ test("memes_saisons_un_episode_d_ecart_on_garde_tmdb", () => {
   // plus en saison 11. Mis bout à bout, tout glissait d'un cran dès la saison 3 (S11E58 de TMDB devenait :11:57).
   assert.equal(decoupageCinemeta(tmdb(41, 55, 91, 70), cine(41, 56, 91, 73)), null);
   assert.equal(decoupageAffiches(tmdb(41, 55, 91, 70), cine(41, 56, 91, 73)), null);
+  // Cinemeta en retard sur la saison en cours (sa copie gardée un jour : 69 contre 70 chez TMDB) : l'écart de la
+  // dernière saison est son remplissage, pas une frontière déplacée.
+  assert.equal(decoupageCinemeta(tmdb(41, 55, 91, 70), cine(41, 56, 91, 69)), null);
+  assert.equal(decoupageAffiches(tmdb(41, 55, 91, 70), cine(41, 56, 91, 69)), null);
   // Écarts qui se compensent (Hunter x Hunter : 62 + 74 chez TMDB, 58 + 78 chez Cinemeta) : frontière déplacée, le
   // bout à bout reste.
   assert.deepEqual(decoupageCinemeta(tmdb(62, 74, 12), cine(58, 78, 12)).place(1, 59), { season: 2, episode: 1 });
-  assert.deepEqual(decoupageCinemeta(tmdb(41, 57, 89), cine(41, 56, 90)).place(3, 1), { season: 3, episode: 2 });
-  assert.notEqual(decoupageAffiches(tmdb(41, 57, 89), cine(41, 56, 90)), null);
+  assert.deepEqual(decoupageCinemeta(tmdb(41, 57, 89, 20), cine(41, 56, 90, 20)).place(3, 1), { season: 3, episode: 2 });
+  assert.notEqual(decoupageAffiches(tmdb(41, 57, 89, 20), cine(41, 56, 90, 20)), null);
 });
 
 test("une_saison_tmdb_redecoupee_comme_cinemeta", () => {

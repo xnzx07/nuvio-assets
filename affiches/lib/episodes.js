@@ -38,7 +38,8 @@ const ordre = (a, b) => a.season - b.season || a.episode - b.episode;
 /**
  * Mêmes saisons des deux côtés, à un épisode ou deux près (La Villa des cœurs brisés : 55 épisodes en saison 2 chez
  * TMDB, 56 chez Cinemeta) : mêmes numéros de saison (Cinemeta peut en avoir de plus à la fin, annoncées), au plus
- * 2 épisodes d'écart par saison (10 % pour la dernière, qui se remplit) et des écarts tous dans le même sens. Mis bout
+ * 2 épisodes d'écart par saison (10 % pour la dernière, qui se remplit) et des écarts tous dans le même sens
+ * (hors dernière saison). Mis bout
  * à bout, l'épisode en moins décalait d'un cran tous ceux des saisons suivantes : on garde alors la numérotation de
  * TMDB. Des écarts qui se compensent (Hunter x Hunter : 4 épisodes de la saison 2 de Cinemeta à la fin de la
  * saison 1 chez TMDB) sont une frontière déplacée : le bout à bout reste. Les dates de saison de TMDB ne servent pas,
@@ -56,7 +57,8 @@ function memesSaisons(nos, leurs) {
     const e = (s.episode_count || 0) - c;
     const permis = s.season_number === derniere ? Math.max(2, 0.1 * Math.max(c, s.episode_count || 0)) : 2;
     if (Math.abs(e) > permis) return false;
-    if (e) ecarts.push(e);
+    // La dernière saison se remplit (Cinemeta, gardé un jour, peut être en retard) : son écart ne compte pas ici.
+    if (e && s.season_number !== derniere) ecarts.push(e);
   }
   return ecarts.every((e) => Math.sign(e) === Math.sign(ecarts[0]));
 }
