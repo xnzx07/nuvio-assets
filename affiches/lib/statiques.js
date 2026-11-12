@@ -151,15 +151,18 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
         return r.ok ? lireListe(Buffer.from(await r.arrayBuffer())) : null;
       } catch { return null; }
     },
-    async publier(fichiers, nouveaux, liaisons = []) {
+    // ecartes : rempli avec les chemins écartés faute de contenu (voir plus bas).
+    async publier(fichiers, nouveaux, liaisons = [], ecartes = []) {
       const manifest = {};
       for (const f of fichiers) manifest[enLigne(f.chemin)] = { hash: f.hash, size: f.taille };
       const session = await cf(`/workers/scripts/${worker}/assets-upload-session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ manifest }) });
       let jeton2 = session.jwt;
       const cheminDe = new Map(fichiers.map((f) => [f.hash, f.chemin]));
       let sousDomaine = null;
+      const absents = [];
       for (const lot of session.buckets || []) {
         const form = new FormData();
+        let dedans = 0;
         for (const hash of lot) {
           let jpg = nouveaux.get(hash);
           if (!jpg) {
@@ -168,11 +171,13 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
             const lire = (c) => fetchImpl(`https://${worker}.${sousDomaine}.workers.dev${c}`, { redirect: "manual" });
             let r = await lire(PREFIXE + cheminDe.get(hash));
             if (!r.ok) r = await lire(cheminDe.get(hash));
-            if (!r.ok) throw new Error(`fichier ${cheminDe.get(hash)} introuvable en ligne (${r.status})`);
+            if (!r.ok) { absents.push(hash); continue; }
             jpg = Buffer.from(await r.arrayBuffer());
           }
           form.append(hash, new File([jpg.toString("base64")], hash, { type: cheminDe.get(hash) === LISTE ? "application/json" : "image/jpeg" }));
+          dedans++;
         }
+        if (!dedans) continue;
         // Trois essais : Cloudflare refuse parfois un envoi (vu le 2026-10-25, le suivant passe).
         for (let essai = 1; ; essai++) {
           const res = await fetchImpl(`${API}/workers/assets/upload?base64=true`, { method: "POST", headers: { Authorization: `Bearer ${jeton2}` }, body: form });
@@ -183,6 +188,15 @@ export function creerCloudflare({ jeton, compte, base, worker = "affiches", fetc
           console.warn(`${erreur}, nouvel essai`);
           await new Promise((ok) => setTimeout(ok, 3000 * essai));
         }
+      }
+      // Ni dessiné ici ni lisible en ligne (dessin perdu par une publication ratée) : écarté, redessiné à la prochaine
+      // demande. Le 11 novembre 2026, un seul fichier ainsi (« introuvable en ligne ») bloquait toutes les publications
+      // pendant 20 heures : rien ne partait, et le serveur redessinait tout ce qu'on lui demandait.
+      if (absents.length) {
+        const ecarter = new Set(absents);
+        for (const f of fichiers) if (ecarter.has(f.hash)) ecartes.push(f.chemin);
+        console.warn(`publication : ${absents.length} fichiers sans contenu écartés (${ecartes.slice(0, 3).join(", ")})`);
+        return this.publier(fichiers.filter((f) => !ecarter.has(f.hash)), nouveaux, liaisons, ecartes);
       }
       const form = new FormData();
       form.append("metadata", new Blob([JSON.stringify({
@@ -281,8 +295,10 @@ export async function publierEtEnregistrer(cf, parChemin, nouveaux, { faits = []
         nouveaux.set(hash, buf);
         entree = { chemin: LISTE, hash, taille: buf.length };
       }
-      envoyes = await cf.publier([...tous, entree], nouveaux, liaisons);
+      const ecartes = [];
+      envoyes = await cf.publier([...tous, entree], nouveaux, liaisons, ecartes);
       publie = true;
+      for (const c of ecartes) parChemin.delete(c);
       if (liste && liste.entree !== entree) { liste.entree = entree; liste.t = Date.now(); }
       for (const f of changees) f.change = false;
       for (const f of retirees) parChemin.delete(f.chemin);

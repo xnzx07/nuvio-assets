@@ -81,3 +81,25 @@ test("serveur_aiguille_les_affiches", async () => {
   assert.equal((await s.route(req("/maison/movie/poster/tt3.jpg"))).status, 404);
   assert.equal((await s.route(req("/inconnu/movie/poster/tt3.jpg"))).status, 404);
 });
+
+// Un fichier que Cloudflare n'a pas et qu'on ne sait plus relire : écarté, la publication passe quand même (le 11 novembre
+// 2026, il les bloquait toutes pendant 20 heures).
+test("publication_ecarte_un_fichier_sans_contenu", async () => {
+  const sessions = [];
+  const fetchImpl = async (u, init = {}) => {
+    const s = String(u);
+    if (s.endsWith("/assets-upload-session")) {
+      const m = JSON.parse(init.body).manifest;
+      sessions.push(Object.keys(m));
+      return Response.json({ success: true, result: { jwt: "j", buckets: sessions.length === 1 ? [["a".repeat(32)]] : [] } });
+    }
+    if (s.endsWith("/workers/subdomain")) return Response.json({ success: true, result: { subdomain: "x" } });
+    if (s.includes(".workers.dev/")) return new Response("", { status: s.includes("/f/") ? 503 : 302 });
+    return Response.json({ success: true, result: {} });
+  };
+  const cf = creerCloudflare({ jeton: "j", compte: "c", base: "b", fetchImpl, parServeur: "https://srv.test" });
+  const ecartes = [];
+  await cf.publier([{ chemin: "/perso/Q0Hv/movie/poster/tt1.jpg", hash: "a".repeat(32), taille: 3 }, { chemin: "/maison/movie/poster/tt2.jpg", hash: "c".repeat(32), taille: 3 }], new Map(), [], ecartes);
+  assert.deepEqual(ecartes, ["/perso/Q0Hv/movie/poster/tt1.jpg"]);
+  assert.deepEqual(sessions[1], [`${PREFIXE}/maison/movie/poster/tt2.jpg`]);
+});
