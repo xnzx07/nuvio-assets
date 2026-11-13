@@ -122,6 +122,20 @@ const first = (list, langs) => {
 };
 
 /**
+ * L'affiche en français de TMDB (poster_path) est parfois celle du Québec, faute d'affiche de France (Runner devenu
+ * « Le Transport ») : alors celle de France ou sans pays, sinon l'anglaise, sinon sans texte (comme worker/index.js,
+ * afficheDeFrance). Le Québec seulement s'il n'y a rien d'autre.
+ */
+export function afficheDeFrance(posters, chosen) {
+  const it = chosen && (posters || []).find((x) => x.file_path === chosen);
+  if (!it || it.iso_639_1 !== "fr" || !it.iso_3166_1 || it.iso_3166_1 === "FR") return chosen || null;
+  const fr = (posters || []).filter((x) => x.iso_639_1 === "fr");
+  const best = fr.find((x) => x.iso_3166_1 === "FR") || fr.find((x) => !x.iso_3166_1)
+    || (posters || []).find((x) => x.iso_639_1 === "en") || (posters || []).find((x) => !x.iso_639_1);
+  return best ? best.file_path : chosen;
+}
+
+/**
  * Les faits d'un titre, ou null si TMDB ne le connaît pas. options : { plateforme, vo } pour demander aussi les
  * plateformes (réglage Plateforme) et les logos dans les langues d'origine (logo « d'origine ») ; sans eux, la
  * réponse de TMDB reste légère.
@@ -168,7 +182,7 @@ export async function titleFacts(env, { type, id, imdb }, fetchImpl = fetch, opt
     titre: d.title || d.name || null,
     year: /^\d{4}/.test(date) ? date.slice(0, 4) : null,
     vote: { average: d.vote_average || 0, count: d.vote_count || 0 },
-    poster: d.poster_path || null,
+    poster: afficheDeFrance(images.posters, d.poster_path),
     textlessPosters: sansLangue(images.posters, 2 / 3),
     textlessPoster: sansLangue(images.posters, 2 / 3)[0] || null,
     backdrop: d.backdrop_path || null,

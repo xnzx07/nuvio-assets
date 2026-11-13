@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.0";
+const VERSION = "5.65.1";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -422,6 +422,8 @@ async function lireInfo(env, kind, tmdbId, budget) {
     episode: movie ? null : { next: slimEpisode(j.next_episode_to_air), last: slimEpisode(j.last_episode_to_air), counts: seasonCounts(j.seasons), status: j.status },
     logo: logo ? `${IMG}w500${logo.file_path.replace(/\.svg$/, ".png")}` : undefined,
     backdrop: backdrop ? backdrop.file_path : null,
+    // Affiche du Québec remplacée (afficheDeFrance), pour les rangées en français de France (pas la région Québec)
+    posterFr: afficheDeFrance(j.images && j.images.posters, j.poster_path),
     trailers: trailersOf(j.videos && j.videos.results).slice(0, 2),
   };
 }
@@ -1513,7 +1515,8 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       imdb_id: ids[i] || undefined,
       type: kind,
       name: (it.title || it.name || "").replace(/^[‎‏\s]+|[‎‏\s]+$/g, ""),
-      poster: it.poster_path ? `${IMG}w500${it.poster_path}` : undefined,
+      poster: opts.region !== "CA" && infos[i].posterFr ? `${IMG}w500${infos[i].posterFr}`
+        : it.poster_path ? `${IMG}w500${it.poster_path}` : undefined,
       // Fond en Full HD (w1920) : aussi net que l'original sur une TV 1080p, mais 2 à 5 fois plus léger
       // (l'original est souvent en 4K, plusieurs Mo par image). Le w1280 paraît flou en plein écran.
       background: infos[i].backdrop || it.backdrop_path ? `${IMG}w1920${infos[i].backdrop || it.backdrop_path}` : undefined,
@@ -2550,6 +2553,19 @@ function bestImage(list, lang) {
     rang(a) - rang(b) || (b.iso_3166_1 === "FR") - (a.iso_3166_1 === "FR") || (b.vote_average || 0) - (a.vote_average || 0))[0];
 }
 
+/**
+ * L'affiche en français de TMDB (poster_path en fr-FR) est parfois celle du Québec : sans affiche de France, TMDB prend
+ * celle du Canada (Runner devenu « Le Transport », You Can See Everything « Vous pouvez tout voir », novembre 2026).
+ * Alors la règle des logos (bestImage) : de France ou sans pays, sinon en anglais, sinon sans texte ; le Québec en dernier.
+ * Rend le chemin à mettre à la place, ou null pour garder celle de TMDB.
+ */
+export function afficheDeFrance(posters, chosen) {
+  const it = chosen && (posters || []).find((x) => x.file_path === chosen);
+  if (!it || it.iso_639_1 !== "fr" || !it.iso_3166_1 || it.iso_3166_1 === "FR") return null;
+  const best = bestImage(posters, "fr");
+  return best && best.file_path !== chosen ? best.file_path : null;
+}
+
 // Vraie VF : TMDB classe aussi en « fr » les VOSTFR (son original, sous-titres français).
 const isVf = (lang, name) => lang === "fr" && !/\bVOST/i.test(name || "");
 
@@ -2709,6 +2725,8 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
   const logo = bestImage(d.images && d.images.logos, short);
   const backdrop = bestImage((d.images && d.images.backdrops || []).filter((b) => !b.iso_639_1), short);
   const runtime = movie ? d.runtime : (d.episode_run_time || [])[0];
+  // Affiche du Québec remplacée en français de France (afficheDeFrance) ; la région Québec garde la sienne
+  const affiche = (lang === "fr-FR" && afficheDeFrance(d.images && d.images.posters, d.poster_path)) || d.poster_path;
   const endYear = !movie && d.status !== "Returning Series" && d.last_air_date ? d.last_air_date.slice(0, 4) : "";
 
   const m = {
@@ -2716,7 +2734,7 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
     imdb_id: imdb || undefined,
     type: kind,
     name: (d.title || d.name || "").trim(),
-    poster: d.poster_path ? `${IMG}w500${d.poster_path}` : undefined,
+    poster: affiche ? `${IMG}w500${affiche}` : undefined,
     background: backdrop ? `${IMG}w1920${backdrop.file_path}` : d.backdrop_path ? `${IMG}w1920${d.backdrop_path}` : undefined,
     logo: logo ? `${IMG}w500${logo.file_path.replace(/\.svg$/, ".png")}` : undefined,
     description: [note ? `${movie ? "📅" : "📺"} ${dot(note)}` : "", d.overview || ""].filter(Boolean).join("\n") || undefined,

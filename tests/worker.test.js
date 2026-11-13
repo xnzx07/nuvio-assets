@@ -1,7 +1,7 @@
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import worker, { oublierInfos, oublierBandesAnnonces, oublierAvis, ageFinal, oublierAgesCnc, oublierFillers, creditsScene } from "../worker/index.js";
+import worker, { oublierInfos, oublierBandesAnnonces, oublierAvis, ageFinal, oublierAgesCnc, oublierFillers, creditsScene, afficheDeFrance } from "../worker/index.js";
 import { fakeD1 } from "./support/d1.mjs";
 import { resetFails } from "../worker/hote.js";
 
@@ -1976,4 +1976,16 @@ test("tendances_de_la_photo_disent_vfq_possible_comme_la_fiche", async () => {
   const [hope] = (await (await get("/catalog/movie/accueil-top10.json")).json()).metas;
   assert.equal(hope.name, "Hope");
   assert.match(hope.description, /^📅 VFQ possible · VFF le/);
+});
+
+test("affiche du Québec (TMDB faute d'affiche de France) : celle de France, sinon l'anglaise, sinon sans texte", () => {
+  const ca = { file_path: "/ca.jpg", iso_639_1: "fr", iso_3166_1: "CA" };
+  const en = { file_path: "/en.jpg", iso_639_1: "en", iso_3166_1: "US" };
+  const nul = { file_path: "/nul.jpg", iso_639_1: null };
+  const fr = { file_path: "/fr.jpg", iso_639_1: "fr", iso_3166_1: "FR" };
+  assert.equal(afficheDeFrance([ca, nul, en, fr], "/ca.jpg"), "/fr.jpg");
+  assert.equal(afficheDeFrance([ca, nul, en], "/ca.jpg"), "/en.jpg");
+  assert.equal(afficheDeFrance([ca, nul], "/ca.jpg"), "/nul.jpg");
+  assert.equal(afficheDeFrance([ca], "/ca.jpg"), null);
+  assert.equal(afficheDeFrance([fr, ca], "/fr.jpg"), null);
 });

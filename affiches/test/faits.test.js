@@ -470,3 +470,11 @@ test("logo_quebecois_marque_france_ecarte", async () => {
   assert.equal(facts.logo, "/en.png");
   assert.equal(facts.logos.fr, null);
 });
+
+import { afficheDeFrance } from "../lib/tmdb.js";
+test("affiche du Québec remplacée : France, sinon anglais, sinon sans texte", () => {
+  const ca = { file_path: "/ca.jpg", iso_639_1: "fr", iso_3166_1: "CA" };
+  assert.equal(afficheDeFrance([ca, { file_path: "/en.jpg", iso_639_1: "en" }], "/ca.jpg"), "/en.jpg");
+  assert.equal(afficheDeFrance([ca], "/ca.jpg"), "/ca.jpg");
+  assert.equal(afficheDeFrance([{ file_path: "/fr.jpg", iso_639_1: "fr", iso_3166_1: "FR" }], "/fr.jpg"), "/fr.jpg");
+});
