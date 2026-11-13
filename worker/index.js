@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.64.10";
+const VERSION = "5.65.0";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -2217,6 +2217,12 @@ function trierRangeeVf(def, today, metas) {
     || (future || m._vfLu ? m._guess : "");
   // « Bientôt dispo » : à la fin, ceux dont on ne sait pas quand la VF viendra (pas encore en VF, doute sans date française).
   const sansDate = (m) => (m._vo && !m._voVff) || (m._vfq && !m._vffLe);
+  // « Sorties en VOSTFR » (rangée à cocher) : l'inverse de « Dispo depuis peu », les films déjà chez soi dont les sources
+  // n'ont pas la VF (_vo), du plus récent au plus ancien ; ceux qui l'ont reçue depuis en sortent d'eux-mêmes.
+  if (def.vostfr) {
+    const chezSoi = (m) => m._digital || m._guess || "";
+    return metas.filter((m) => m._vo && chezSoi(m) >= from).sort((a, b) => (chezSoi(a) === chezSoi(b) ? 0 : chezSoi(a) > chezSoi(b) ? -1 : 1)).map(sansInternes);
+  }
   return metas
     .filter((m) => (when(m) && when(m) >= from && when(m) <= to) || (future && (m._vo || m._vfq)))
     .filter((m) => future || (m._vf && !m._vfq))   // « Dispo depuis peu » : seulement ceux qui ont sûrement une VF
@@ -2417,7 +2423,8 @@ async function catalog(env, ctx, type, id, extra, today, cfg, prefixe = "") {
   const bilan = { vus: 0, rates: 0 };
   const lues = await catalogPage(env, ctx, type, id, extra, today, cfg, bilan, prefixe);
   // Les vieux films et séries sans VF (sansVfListe) : hors des rangées, trouvables par la recherche seulement.
-  const sansVfConnus = !extra.search ? await sansVfListe() : new Set();
+  // Sauf de « Sorties en VOSTFR », faite pour eux.
+  const sansVfConnus = !extra.search && id !== "accueil-vostfr" ? await sansVfListe() : new Set();
   const metas = sansVfConnus.size ? lues.filter((m) => !sansVfConnus.has(m.imdb_id || m.id)) : lues;
   metas.partial = lues.partial;
   // Plus d'une sur dix sans ses infos (IMDb, dates, logo, bande-annonce) : page incomplète, gardée 5 min seulement.

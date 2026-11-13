@@ -24,6 +24,7 @@ const ROW_HINTS = {
   "accueil-vod-semaine": "Films sortis en numérique ces deux dernières semaines : regardables maintenant",
   "accueil-vod-bientot": "Films qui deviennent regardables dans les six prochaines semaines, avec la date",
   "accueil-attendus": "Les films pas encore sortis dont tout le monde parle, avec leur date au cinéma",
+  "accueil-vostfr": "Films sortis chez soi ces trois derniers mois en VO seulement : à voir en VOSTFR sans attendre la VF",
 };
 
 

@@ -10,6 +10,13 @@ import { LOGO_V } from "./reglages.js";
 
 export const NOUVEAUTES = [
   {
+    date: "2026-11-13",
+    titre: "Une rangée « Sorties en VOSTFR », à cocher",
+    points: [
+      "Nouvelle rangée facultative, décochée au départ : les films sortis chez soi ces trois derniers mois qui n'existent qu'en VO, du plus récent au plus ancien. Pour qui regarde aussi en VOSTFR sans attendre la VF. Elle se coche dans « Rangées », profil par profil.",
+    ],
+  },
+  {
     date: "2026-11-11",
     titre: "Les films déjà en VFF avant leur date",
     points: [

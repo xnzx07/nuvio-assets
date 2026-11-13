@@ -1891,6 +1891,21 @@
    "defaultHome": true,
    "homeRank": 67,
    "upcoming": true
+  },
+  {
+   "id": "accueil-vostfr",
+   "type": "movie",
+   "name": "Sorties en VOSTFR",
+   "optional": true,
+   "vostfr": true,
+   "digital": [
+    -90,
+    0
+   ],
+   "discover": {
+    "sort_by": "popularity.desc",
+    "vote_count.gte": 10
+   }
   }
  ],
  "folders": {
