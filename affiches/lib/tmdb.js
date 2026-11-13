@@ -13,18 +13,45 @@ const ANIMATION = 16;   // genre TMDB
 // assez grande pour tout le stock (~10 000 titres) : rien n'est recalculé chaque nuit faute de place
 export const MAX_MEMO = Number(process.env.MEMO_MAX) || 60000;
 let memoFind = new Map();
-export function resetMemo() { memoFind = new Map(); }
+export function resetMemo() { memoFind = new Map(); gardees = new Map(); pauseJusqua = 0; }
 export const tailleMemo = () => memoFind.size;
+
+/**
+ * Réponses gardées une heure (TMDB_GARDE=on : le serveur des affiches, sans CDN devant lui). Il dessine un même titre
+ * dans chaque style demandé et le redemandait chaque fois : 270 refus de TMDB (429) le 13 novembre 2026, pour ~70 000
+ * dessins par jour. Une heure au plus, comme le paramètre frais de la fiche (une plateforme arrivée se voit vite).
+ */
+const GARDE_MS = 3600 * 1000, GARDE_MAX = 4000;
+let gardees = new Map();   // adresse → { texte (promesse : JSON en texte, ou null pour 404), fin }
+// Après un refus (429) : les appels suivants attendent la reprise donnée par TMDB (10 s au plus), au lieu d'insister.
+let pauseJusqua = 0;
 
 /** Appel TMDB : objet JSON, null si 404, erreur levée pour tout autre échec (réseau, 5xx…). */
 export async function tmdbGet(env, path, params, fetchImpl) {
   const url = new URL(TMDB + path);
   url.searchParams.set("api_key", env.TMDB_API_KEY || "");
   for (const [k, v] of Object.entries(params || {})) url.searchParams.set(k, v);
-  const res = await fetchImpl(url.toString(), { signal: AbortSignal.timeout(DELAI_MS) });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`TMDB ${res.status} sur ${path}`);
-  return res.json();
+  const cle = url.toString(), garder = env.TMDB_GARDE === "on", now = Date.now();
+  const hit = garder && gardees.get(cle);
+  if (hit && hit.fin > now) { const t = await hit.texte; return t === null ? null : JSON.parse(t); }
+  const texte = (async () => {
+    const attente = pauseJusqua - Date.now();
+    if (attente > 0) await new Promise((ok) => setTimeout(ok, Math.min(attente, 10000)));
+    const res = await fetchImpl(cle, { signal: AbortSignal.timeout(DELAI_MS) });
+    if (res.status === 429) pauseJusqua = Date.now() + Math.min(Number(res.headers.get("Retry-After")) || 2, 10) * 1000;
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`TMDB ${res.status} sur ${path}`);
+    return res.text();
+  })();
+  if (garder) {
+    const entree = { texte, fin: now + GARDE_MS };
+    gardees.set(cle, entree);
+    while (gardees.size > GARDE_MAX) gardees.delete(gardees.keys().next().value);
+    // Un échec n'est pas gardé : redemandé au prochain dessin.
+    texte.catch(() => { if (gardees.get(cle) === entree) gardees.delete(cle); });
+  }
+  const t = await texte;
+  return t === null ? null : JSON.parse(t);
 }
 
 function retenir(key, id) {
