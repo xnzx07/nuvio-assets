@@ -103,3 +103,29 @@ test("publication_ecarte_un_fichier_sans_contenu", async () => {
   assert.deepEqual(ecartes, ["/perso/Q0Hv/movie/poster/tt1.jpg"]);
   assert.deepEqual(sessions[1], [`${PREFIXE}/maison/movie/poster/tt2.jpg`]);
 });
+
+// Les films passés en VFF dans la journée (/vff/nouvelles.json de l'addon, avec la clé) : leurs affiches en ligne
+// redessinées tout de suite, chacun une fois ; pas les autres. L'Odyssée, le 13 novembre 2026.
+test("serveur_redessine_les_nouvelles_vff", async () => {
+  const appels = [];
+  const fetchImpl = async (u, init = {}) => {
+    const s = String(u);
+    appels.push(s);
+    if (s === "https://addon.test/vff/nouvelles.json") {
+      assert.equal(init.headers["X-Relais-Cle"], "cle");
+      return Response.json({ nouvelles: [{ cle: "movie/tt5", t: 1 }, { cle: "series/tt7:1:1", t: 1 }] });
+    }
+    return new Response("{}", { status: 404 });
+  };
+  const s = creerServeur({ env: { TMDB_API_KEY: "x", PORT: "8797", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test" }, fetchImpl });
+  assert.equal(await s.nouvellesVff(), 0, "liste en ligne pas encore lue : rien");
+  s.enLigne.connu = new Map(["/maison/movie/poster/tt5.jpg", "/maison/movie/landscape/tt5.jpg", "/maison/movie/poster/tt6.jpg", "/maison/movie/poster/tt55.jpg"].map((c) => [c, {}]));
+  appels.length = 0;
+  await s.nouvellesVff();
+  const dessins = appels.filter((u) => !u.startsWith("https://addon.test"));
+  assert.ok(dessins.some((u) => /tt5\b/.test(u)), "tt5 redessiné");
+  assert.ok(!dessins.some((u) => /tt6\b|tt55\b|tt7\b/.test(u)), "seulement tt5");
+  appels.length = 0;
+  await s.nouvellesVff();
+  assert.deepEqual(appels, ["https://addon.test/vff/nouvelles.json"], "une fois seulement");
+});

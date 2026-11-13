@@ -27,6 +27,8 @@ import { makeVf } from "./api/vf.js";
 import { makeQualite } from "./api/qualite.js";
 import { makeAnilist } from "./api/anilist.js";
 import { creerNotesDisque } from "./lib/notes-disque.js";
+import { oublierAvisDuJour } from "./lib/qualite.js";
+import { ADDON_URL } from "./lib/tendances.js";
 import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, lireEtat, empreinte, contenuListe, lireListe, ADRESSE, cheminValable, PREFIXE } from "./lib/statiques.js";
 import { definirSecours } from "./lib/qualite.js";
 import { lireReglages, ecrireReglages } from "./lib/lien-affiches.js";
@@ -265,9 +267,40 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
     }
   }
 
+  /**
+   * Les films passés en VFF dans la journée (tournées « VFQ possible » de l'addon, /vff/nouvelles.json) : toutes leurs
+   * affiches en ligne redessinées tout de suite, publiées au passage suivant, sans attendre la nuit (L'Odyssée, en VFF
+   * vers 18 h le 13 novembre 2026). Chacun une fois (faitesVff, oublié au bout de 3 jours par l'addon).
+   */
+  const faitesVff = new Set();
+  async function nouvellesVff() {
+    if (!env.RELAIS_KEY || !enLigne.connu) return 0;
+    let nouvelles = [];
+    try {
+      const r = await fetchImpl(`${env.ADDON_URL || ADDON_URL}/vff/nouvelles.json`, { headers: { "X-Relais-Cle": env.RELAIS_KEY }, signal: AbortSignal.timeout(10000) });
+      nouvelles = r.ok ? ((await r.json()) || {}).nouvelles || [] : [];
+    } catch { return 0; }
+    let n = 0;
+    for (const { cle, t } of nouvelles) {
+      const m = /^movie\/(tt\d{1,10})$/.exec(cle || "");
+      if (!m || faitesVff.has(`${cle}@${t}`)) continue;
+      faitesVff.add(`${cle}@${t}`);
+      oublierAvisDuJour(cle);
+      const fin = `/movie/poster/${m[1]}.jpg`, finPaysage = `/movie/landscape/${m[1]}.jpg`;
+      for (const chemin of [...enLigne.connu.keys()].filter((c) => c.endsWith(fin) || c.endsWith(finPaysage))) {
+        const r = await dessinerStatique(afficheDesPassages, BASE, chemin).catch(() => ({}));
+        if (!r.jpg) continue;
+        enAttente.set(chemin, { jpg: r.jpg, hash: empreinte(r.jpg), retard: r.retard });
+        etat.dessinees++; n++;
+      }
+    }
+    if (n) console.log(`nouvelles VFF : ${n} affiches redessinées`);
+    return n;
+  }
+
   const minuteries = [];
   return {
-    serveur, route, passage, etat, enAttente, enLigne,
+    serveur, route, passage, etat, enAttente, enLigne, nouvellesVff,
     demarrer() {
       serveur.listen(PORT, "127.0.0.1", () => console.log(`affiches sur ${BASE}`));
       minuteries.push(setInterval(() => notesDisque.sauver(), 5 * 60000));
@@ -292,8 +325,12 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
         const d = new Date(horloge()), jour = d.toISOString().slice(0, 10);
         const nuit = derniereNuit !== jour && (d.getUTCHours() > 4 || (d.getUTCHours() === 4 && d.getUTCMinutes() >= 17));
         if (nuit && !occupe) { derniereNuit = jour; await passage({ tout: true }); }
-        // La file ne se remplit que si le serveur n'a pas répondu au Worker : un tour sur cinq suffit (15 minutes).
-        else if (enAttente.size || tour % 5 === 0) await passage();
+        // La file ne se remplit que si le serveur n'a pas répondu au Worker : un tour sur cinq suffit (15 minutes). Les
+        // films passés en VFF dans la journée aussi (nouvellesVff).
+        else {
+          if (tour % 5 === 0 && !occupe) await nouvellesVff().catch((e) => console.warn(`nouvelles VFF : ${e.message}`));
+          if (enAttente.size || tour % 5 === 0) await passage();
+        }
       }, 3 * 60000));
     },
     arreter() { for (const m of minuteries) clearInterval(m); serveur.close(); },

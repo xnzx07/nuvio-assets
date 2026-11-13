@@ -312,6 +312,9 @@ export const qualiteDeQ = (q) => (q && typeof q === "object"
  */
 let avisMemo = new Map();
 const AVIS_MEMO_MS = 3 * 3600000, AVIS_MEMO_NON_MS = 3600000;
+/** Oublie l'avis gardé d'un titre (« movie/tt… ») : redemandé à l'addon au prochain dessin (une VFF trouvée en journée). */
+export const oublierAvisDuJour = (video) => avisMemo.delete(video);
+
 export function avisDuJour(addon, video, cle, fetchImpl = fetch) {
   const hit = avisMemo.get(video);
   if (hit && Date.now() < hit.until) return hit.promesse;

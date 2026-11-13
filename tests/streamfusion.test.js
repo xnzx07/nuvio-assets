@@ -403,10 +403,23 @@ test("tournee_vfq_relit_lumio_pour_trouver_la_vff", async () => {
   vff = true;
   assert.deepEqual(await tourneeVfq(e, lire), { vus: 1, relus: 1, vff: ["movie/tt951"] });
   assert.equal(appels.length, 2);
+  // Noté pour le serveur des affiches, qui redessine tout de suite ses affiches (/vff/nouvelles.json, avec la clé).
+  const nouvelles = async (cle) => worker.fetch(new Request("https://x/vff/nouvelles.json", { headers: cle ? { "X-Relais-Cle": cle } : {} }), e, ctx).then((r) => r.json());
+  assert.deepEqual((await nouvelles("cle-relais")).nouvelles.map((n) => n.cle), ["movie/tt951"]);
+  assert.equal((await nouvelles(null)).nouvelles, undefined, "sans la clé : refusé");
   assert.ok(!appels.some((u) => u.startsWith("https://sf.test")), "pas StreamFusion");
   // Une VFF prouvée gardée : pas relue.
   await tourneeVfq(e, lire);
   assert.equal(appels.length, 2);
+});
+
+// Les adresses de la tournée et des nouvelles VFF ne sont pas prises pour un lien de configuration : « vfq » l'était,
+// et la tournée répondait « Configuration illisible » sans jamais tourner (vu le 13 novembre 2026).
+test("adresses_vfq_et_vff_pas_une_configuration", async () => {
+  const r = await worker.fetch(new Request("https://x/vfq/tournee", { method: "POST", headers: { "x-tri": "faux" } }), env, ctx);
+  assert.deepEqual(await r.json(), { error: "interdit" });
+  const n = await worker.fetch(new Request("https://x/vff/nouvelles.json", { headers: { "X-Relais-Cle": "faux" } }), env, ctx);
+  assert.deepEqual(await n.json(), { error: "refusé" });
 });
 
 // Le jour où la VFF prouvée arrive (vffDepuis) : vu seulement après un avis qui disait autre chose ; un premier avis

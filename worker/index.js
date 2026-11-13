@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.2";
+const VERSION = "5.65.3";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1341,7 +1341,36 @@ export async function tourneeVfq(env, lire) {
   const uniques = [...new Set(cles)].slice(0, SF_MAX);
   if (!uniques.length) return { vus: 0, relus: 0, vff: [] };
   const { avis } = await avisDuJour(env, uniques, "vfq", { budget: "vfq", relire: true });
-  return { vus: uniques.length, relus: avis.size, vff: uniques.filter((c) => avis.get(c) && avis.get(c).vff) };
+  const vff = uniques.filter((c) => avis.get(c) && avis.get(c).vff);
+  await noterNouvellesVff(env, vff).catch((e) => console.warn(`nouvelles VFF : ${e && e.message}`));
+  return { vus: uniques.length, relus: avis.size, vff };
+}
+
+/**
+ * Les films passés en VFF à une tournée (« VFQ possible » jusque-là) : notés dans une petite table, que le serveur des
+ * affiches lit toutes les 15 minutes (/vff/nouvelles.json) pour les redessiner tout de suite, sans attendre la nuit.
+ * Gardés 3 jours ; un film n'y est noté qu'une fois.
+ */
+const NOUVELLES_VFF_MS = 3 * 86400000;
+let nouvellesPret = null;
+const preparerNouvelles = (env) => (nouvellesPret = nouvellesPret || env.LIENS.prepare(
+  "CREATE TABLE IF NOT EXISTS vff_nouvelles (cle TEXT PRIMARY KEY, t INTEGER NOT NULL)").run()
+  .catch((e) => { nouvellesPret = null; throw e; }));
+async function noterNouvellesVff(env, cles) {
+  if (!env.LIENS || !cles.length) return;
+  await preparerNouvelles(env);
+  const now = Date.now();
+  await env.LIENS.batch([
+    env.LIENS.prepare("DELETE FROM vff_nouvelles WHERE t < ?").bind(now - NOUVELLES_VFF_MS),
+    ...cles.map((c) => env.LIENS.prepare("INSERT OR IGNORE INTO vff_nouvelles (cle, t) VALUES (?, ?)").bind(c, now)),
+  ]);
+}
+/** /vff/nouvelles.json (clé du relais) : { nouvelles: [{ cle: "movie/tt…", t }] }, les 3 derniers jours. */
+export async function nouvellesVff(env) {
+  if (!env.LIENS) return [];
+  await preparerNouvelles(env);
+  const { results } = await env.LIENS.prepare("SELECT cle, t FROM vff_nouvelles WHERE t >= ?").bind(Date.now() - NOUVELLES_VFF_MS).all();
+  return (results || []).map((r) => ({ cle: r.cle, t: r.t }));
 }
 
 /** Pour les tests : oublie les plafonds atteints et la table des avis déjà préparée. */
@@ -3197,7 +3226,7 @@ function json(data, maxAge) {
   });
 }
 
-const RESERVED = new Set(["manifest.json", "catalog", "configure", "collections.json", "accueil.json", "guide", "tv", "trailer", "lien", "meta", "logo.png", "debug", "affiche", "prefetch", "dossier", "hote", "statique", "copie", "lien-fixe", "tendances", "sf", "avis", "rangee", "sans-vf", "saison.json", "seance", "diagnostic", "nouveautes", "cpu", "reserve", "compte-nuvio"]);
+const RESERVED = new Set(["manifest.json", "catalog", "configure", "collections.json", "accueil.json", "guide", "tv", "trailer", "lien", "meta", "logo.png", "debug", "affiche", "prefetch", "dossier", "hote", "statique", "copie", "lien-fixe", "tendances", "sf", "avis", "rangee", "sans-vf", "saison.json", "seance", "diagnostic", "nouveautes", "cpu", "reserve", "compte-nuvio", "vfq", "vff"]);
 
 async function loadCollections() {
   const res = await fetch(`${ASSETS}/collections/collections.json`, { cf: { cacheTtl: 600, cacheEverything: true } });
@@ -3621,6 +3650,11 @@ const app = {
         return res.ok ? res.json() : null;
       };
       return json(await tourneeVfq(env, lire), 0);
+    }
+    // Les films passés en VFF à une tournée, pour le serveur des affiches (avec la clé du relais).
+    if (path === "/vff/nouvelles.json") {
+      if (!env.RELAIS_KEY || !same(await sha256(request.headers.get("X-Relais-Cle") || ""), await sha256(env.RELAIS_KEY))) return json({ error: "refusé" }, 0);
+      return json({ nouvelles: await nouvellesVff(env) }, 0);
     }
     if (path === "/tendances/tri" && request.method === "POST") {
       if (!same(request.headers.get("x-tri") || "", await triCle(env))) return json({ error: "interdit" }, 0);
