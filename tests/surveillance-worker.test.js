@@ -74,6 +74,21 @@ test("le_cron_des_5_minutes_ne_lance_pas_la_nuit", async () => {
   assert.deepEqual(self, []);
 });
 
+// Sauf la tournée des films « VFQ possible », toutes les 3 heures en journée (à l'heure pile) : une VFF sortie
+// l'après-midi n'attend plus la nuit (L'Odyssée, le 13 novembre 2026).
+test("le_cron_des_5_minutes_lance_la_tournee_vfq_de_jour", async () => {
+  const lancer = async (h, m) => {
+    const self = [], attentes = [];
+    const envW = { SELF: { fetch: async (r) => { self.push(String(r.url || r)); return new Response("{}"); } } };
+    await worker.scheduled({ cron: CRON_SURVEILLANCE, scheduledTime: Date.UTC(2026, 10, 13, h, m) }, envW, { waitUntil: (p) => attentes.push(p) });
+    await Promise.all(attentes);
+    return self;
+  };
+  assert.deepEqual(await lancer(18, 0), ["https://self/vfq/tournee"]);
+  assert.deepEqual(await lancer(18, 5), []);
+  assert.deepEqual(await lancer(17, 0), []);
+});
+
 test("le_cron_est_declare", async () => {
   const toml = (await import("node:fs")).readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
   assert.ok(toml.includes(`crons = ["0 4 * * *", "${CRON_SURVEILLANCE}"]`));

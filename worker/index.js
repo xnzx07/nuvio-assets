@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.1";
+const VERSION = "5.65.2";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1242,9 +1242,9 @@ const RESERVE_PHOTO_JUSQUA = 7;
 const reservePhotoTenue = () => Number(HEURE_PARIS.format(new Date(Date.now()))) < RESERVE_PHOTO_JUSQUA;
 // sansvf : les films examinés chaque nuit pour la liste « SANS VF » (avisSansVf), une ou deux demandes par film, à part
 // des plafonds des rangées et des affiches.
-// vfq : la tournée de nuit des films « VFQ possible » (tourneeVfq), à part elle aussi.
+// vfq : les tournées des films « VFQ possible » (tourneeVfq, la nuit et toutes les 3 h le jour), à part elles aussi.
 const PLAFONDS = { sf: ["SF_PLAFOND", 300, "", 0.4], lumio: ["LUMIO_PLAFOND", 50, "lumio:", 0.6], sansvf: ["SANSVF_PLAFOND", 15, "sansvf:", 0],
-  vfq: ["VFQ_PLAFOND", 20, "vfq:", 0] };
+  vfq: ["VFQ_PLAFOND", 40, "vfq:", 0] };
 const plafondsAtteints = new Set();
 const plafondCache = (cle) => new Request(`https://avis.cache/plafond/${cle}`);
 let budgetPret = null;
@@ -1321,7 +1321,7 @@ export async function lireVfPhoto(env, cles) {
 }
 
 /**
- * La tournée de nuit des films « VFQ possible » de « Bientôt dispo » : Lumio relu pour chacun (VFQ_PLAFOND, 20 par
+ * La tournée de nuit des films « VFQ possible » de « Bientôt dispo » : Lumio relu pour chacun (VFQ_PLAFOND, 40 par
  * nuit, à part des autres plafonds), même avec un avis « VF » gardé, pour trouver une VFF prouvée par les noms
  * (TRUEFRENCH, VFF, VF2) dès qu'elle sort. Sans elle, un film que personne n'ouvre restait « VFQ possible » jusqu'à la
  * date française (Resident Evil, le 11 novembre 2026 : en VFF bien avant le 16 janvier). L'avis trouvé est gardé comme
@@ -3344,20 +3344,32 @@ export default {
   },
   // Tâche planifiée de 4 h UTC (wrangler.toml) : la photo du jour des tendances.
   async scheduled(event, env, ctx) {
-    if (event.cron === CRON_SURVEILLANCE) { ctx.waitUntil(surveiller(env).catch((e) => console.warn(`surveillance : ${e && e.message}`))); return; }
+    if (event.cron === CRON_SURVEILLANCE) {
+      ctx.waitUntil(surveiller(env).catch((e) => console.warn(`surveillance : ${e && e.message}`)));
+      // La tournée des films « VFQ possible » aussi en journée, toutes les 3 heures (TOURNEES_JOUR_UTC) : une VFF sortie
+      // l'après-midi (L'Odyssée, le 13 novembre 2026, vers 18 h) n'attend plus la nuit.
+      const t = new Date(event.scheduledTime || Date.now());
+      if (t.getUTCMinutes() < 5 && TOURNEES_JOUR_UTC.includes(t.getUTCHours())) lancerTourneeVfq(env, ctx);
+      return;
+    }
     // Une demande à soi-même par photo (liaison SELF : chacune son budget de 50 appels sortants), sinon ici.
     ctx.waitUntil(env.SELF
       ? Promise.all(["movie", "series"].map((k) => env.SELF.fetch(`https://self/tendances/${k}.json`).catch(() => null)))
       : prendrePhotos(env, event.scheduledTime, classerTendances));
     ctx.waitUntil(nettoyerReserve(env, event.scheduledTime));
     ctx.waitUntil(prendreTops(env, event.scheduledTime).catch((e) => console.warn(`tops : ${e && e.message}`)));
-    // Les films « VFQ possible » : une VFF sortie depuis (tourneeVfq). Par SELF : son propre budget d'appels.
-    if (env.SELF) {
-      ctx.waitUntil(triCle(env).then((cle) => env.SELF.fetch(new Request("https://self/vfq/tournee", { method: "POST", headers: { "x-tri": cle } })))
-        .catch((e) => console.warn(`tournée VFQ : ${e && e.message}`)));
-    }
+    lancerTourneeVfq(env, ctx);
   },
 };
+
+/** Heures (UTC) des tournées « VFQ possible » de la journée, en plus de celle de 4 h : de 7 h à 22 h à Paris. */
+const TOURNEES_JOUR_UTC = [6, 9, 12, 15, 18, 21];
+/** Les films « VFQ possible » : une VFF sortie depuis (tourneeVfq). Par SELF : son propre budget d'appels. */
+function lancerTourneeVfq(env, ctx) {
+  if (!env.SELF) return;
+  ctx.waitUntil(triCle(env).then((cle) => env.SELF.fetch(new Request("https://self/vfq/tournee", { method: "POST", headers: { "x-tri": cle } })))
+    .catch((e) => console.warn(`tournée VFQ : ${e && e.message}`)));
+}
 
 // Le site et l'addon (sans les en-têtes de sécurité, ajoutés ci-dessus).
 const app = {
