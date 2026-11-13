@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { DEFAUT_REGLAGES, PALETTE } from "./lien-affiches.js";
 import { etatSortie, suiteSerie, libelleSuite } from "./statut.js";
-import { prochaineVff, vffEstimee } from "./qualite.js";
+import { filmRecent, prochaineVff, vffEstimee } from "./qualite.js";
 import { jourParis } from "./jour.js";
 import { policePour } from "./polices.js";
 
@@ -124,7 +124,7 @@ const ilYa = (today, n) => new Date(Date.parse(`${today}T12:00:00Z`) - n * 86400
 /** La VFF prouvée arrivée il y a moins de 7 jours (quality.vffDepuis, AAAA-MM-JJ). Film étranger, pas sur une plateforme qui le double. */
 export function nouveauEnVff(facts, quality, today) {
   if (!quality || !quality.vff || quality.vf === false || !facts || facts.type === "series") return false;
-  if (facts.originalLanguage === "fr" || facts.abonnementVf) return false;
+  if (facts.originalLanguage === "fr" || facts.abonnementVf || !filmRecent(facts.releases, today)) return false;
   const d = quality.vffDepuis;
   return /^\d{4}-\d{2}-\d{2}$/.test(d || "") && d <= today && d > ilYa(today, 7);
 }
@@ -136,7 +136,9 @@ export function nouveauEnVff(facts, quality, today) {
  */
 export function vffEnAvance(facts, quality, today) {
   if (!quality || !quality.vff || quality.vf === false || !facts || facts.type === "series") return null;
-  if (facts.originalLanguage === "fr" || facts.abonnementVf) return null;
+  // Un film récent seulement (sorti il y a moins d'un an), comme la fiche de l'addon : Les Visiteurs en Amérique (2001)
+  // était « VFF EN AVANCE » le 13 novembre 2026, pour un passage à la télévision française annoncé le 20.
+  if (facts.originalLanguage === "fr" || facts.abonnementVf || !filmRecent(facts.releases, today)) return null;
   const le = prochaineVff(facts.releases || [], today);
   if (le) return { date: le, vers: false };
   const estimee = vffEstimee(facts.releases || [], today);

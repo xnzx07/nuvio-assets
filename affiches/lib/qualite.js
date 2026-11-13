@@ -150,7 +150,7 @@ function sortieMondiale(releases) {
   return [...parJour.values()].some((p) => p.size >= PAYS_MONDIALE);
 }
 const ilYaUnAn = (today) => new Date(Date.parse(today) - 365 * 86400000).toISOString().slice(0, 10);
-const filmRecent = (releases, today) => {
+export const filmRecent = (releases, today) => {
   const d = (releases || []).flatMap((r) => r.release_dates || []).filter((r) => [2, 3, 4, 5, 6].includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter(Boolean).sort()[0];
   return !d || d >= ilYaUnAn(today);
 };

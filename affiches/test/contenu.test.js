@@ -598,4 +598,10 @@ test("contenu_vff_en_avance", () => {
   assert.notEqual(posterContent(faits, { quality: q }, "poster", undefined, "2027-02-01").statut, "VFF EN AVANCE");
   assert.notEqual(posterContent({ ...faits, originalLanguage: "fr" }, { quality: q }, "poster", undefined, today).statut, "VFF EN AVANCE");
   assert.notEqual(posterContent({ ...faits, abonnementVf: true }, { quality: q }, "poster", undefined, today).statut, "VFF EN AVANCE");
+  // Un vieux film qui a une date française à venir (un passage à la télévision) : rien. Les Visiteurs en Amérique (2001),
+  // le 13 novembre 2026.
+  const visiteurs = { ...faits, title: "Les Visiteurs en Amérique", year: "2001",
+    releases: sorties(["FR", 3, "2001-04-11"], ["FR", 5, "2001-11-07"], ["FR", 5, "2025-10-29"], ["FR", 6, "2026-11-20"], ["US", 3, "2001-04-06"]) };
+  assert.equal(posterContent(visiteurs, { quality: q }, "poster", undefined, "2026-11-13").statut, null);
+  assert.notEqual(posterContent(visiteurs, { quality: { ...q, vffDepuis: "2026-11-12" } }, "poster", undefined, "2026-11-13").statut, "NOUVEAU EN VFF");
 });
