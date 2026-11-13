@@ -247,9 +247,9 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
       }
       // Le jour à Paris, le même pour tout le calcul (statut, sources utiles).
       const aujourdhui = jourParis();
-      // Vieux film (ni récent, ni à venir) en langue étrangère : peut-être dans la liste des films sans VF. Liste pas lue à
-      // temps : l'affiche habituelle, et le cache court pour la marquer ensuite.
-      if (type === "movie" && facts.imdbId && facts.originalLanguage && !["fr", "en"].includes(facts.originalLanguage) && !sourcesUtiles(facts, aujourdhui)) {
+      // Vieux film (ni récent, ni à venir) pas français : peut-être dans la liste des films sans VF (anglais compris depuis
+      // le 2026-11-08, Bad Genius). Liste pas lue à temps : l'affiche habituelle, et le cache court pour la marquer ensuite.
+      if (type === "movie" && facts.imdbId && facts.originalLanguage && facts.originalLanguage !== "fr" && !sourcesUtiles(facts, aujourdhui)) {
         const { films, manque } = await chrono.mesure("sans-vf", lireSansVf(fetchImpl, ATTENTE_ESTIMATIONS_MS));
         facts = { ...facts, sansVf: films.has(facts.imdbId) };
         estimationManque = estimationManque || manque;
