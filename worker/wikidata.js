@@ -17,7 +17,11 @@ import { norm } from "./search.js";
 const API = "https://www.wikidata.org/w/api.php";
 const SPARQL = "https://query.wikidata.org/sparql";
 const ENTETES = { "User-Agent": "CatalogueFR/1.0 (+https://github.com/xnzx07/nuvio-assets)" };
-const WAIT_MS = 3000;
+// 6 s : depuis le serveur Oracle, la requête SPARQL met souvent plus de 3 s (388 abandons par jour en novembre 2026).
+const WAIT_MS = 6000;
+// Après un refus (429), plus rien pendant une minute : la recherche continue sans Wikidata.
+const PAUSE_MS = 60000;
+let pauseJusqua = 0;
 const MIN_LETTRES = 3;      // « got », « twd » ; Nuvio cherche à chaque lettre, mais Wikidata ne compte pas ses appels
 const OEUVRES = 4;           // œuvres d'un personnage gardées
 const GARDE_S = 7 * 86400, GARDE_VIDE_S = 86400;
@@ -75,7 +79,11 @@ export function referencesDe(elements, lignes) {
 }
 
 const lire = (url) => fetch(url, { headers: ENTETES, signal: AbortSignal.timeout(WAIT_MS) })
-  .then((r) => { if (!r.ok) throw new Error(`wikidata ${r.status}`); return r.json(); });
+  .then((r) => {
+    if (r.status === 429) pauseJusqua = Date.now() + PAUSE_MS;
+    if (!r.ok) throw new Error(`wikidata ${r.status}`);
+    return r.json();
+  });
 
 /** Références TMDB pour cette requête (gardées), [] si rien, null si Wikidata ne répond pas. */
 export async function wikidataDe(query) {
@@ -84,6 +92,7 @@ export async function wikidataDe(query) {
   const cle = new Request(`https://cache.local/wikidata-v1/${encodeURIComponent(q)}`);
   const hit = await caches.default.match(cle).catch(() => null);
   if (hit) return hit.json();
+  if (Date.now() < pauseJusqua) return null;
   let refs;
   try {
     const [noms, texte] = await Promise.all([

@@ -14,3 +14,14 @@ test("recherche_par_nom_sans_liste", async (t) => {
   });
   assert.deepEqual(await wikidataDe("mot inconnu"), []);
 });
+
+// Wikidata refuse (429) : plus rien pendant une minute, la recherche continue sans lui.
+test("pause_apres_refus", async (t) => {
+  globalThis.caches = { default: { match: async () => undefined, put: async () => {} } };
+  let appels = 0;
+  t.mock.method(globalThis, "fetch", async () => { appels++; return new Response("", { status: 429 }); });
+  assert.equal(await wikidataDe("un titre"), null);
+  const avant = appels;
+  assert.equal(await wikidataDe("autre titre"), null);
+  assert.equal(appels, avant);
+});
