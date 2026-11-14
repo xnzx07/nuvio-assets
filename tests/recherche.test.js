@@ -77,6 +77,9 @@ const TITLES = {
   bleach: [film(9100, "Bleach", 2018, 599), film(9101, "Bleach : Memories of Nobody", 2006, 239)],
   jojo: [serie(45790, "JoJo's Bizarre Adventure", 2012, 1686)],
   hitchcock: [film(112336, "Hitchcock", 2012, 1677), film(9102, "Hitchcock : la face cachée du maître du suspense", 2022, 20)],
+  // la suite annoncée pour l'an prochain : 0 vote, mais on en parle
+  beekeeper: [film(866398, "The Beekeeper", 2024, 3500), film(1300001, "The Beekeeper 2", 2099, 0, { popularity: 6 }),
+    film(1300002, "Beekeeper inconnu", 2099, 0, { popularity: 0.3 })],
 };
 
 const HORREUR_80 = [film(4488, "Vendredi 13", 1980, 3500, { genre_ids: [27] }), film(694, "Shining", 1980, 18000, { genre_ids: [27] }),
@@ -442,4 +445,12 @@ test("addon_personnage_par_wikidata", async () => {
   const res = await worker.fetch(new Request(`https://x/catalog/series/recherche-series/search=${encodeURIComponent("walter white")}.json`), { TMDB_API_KEY: "tmdb" }, { waitUntil: () => {} });
   const { metas } = await res.json();
   assert.equal(metas[0] && metas[0].name, "Breaking Bad");
+});
+
+test("un_film_a_venir_dont_on_parle_est_trouve", async () => {
+  const { names } = await cherche("beekeeper");
+  assert.ok(names.includes("The Beekeeper"), names.join(", "));
+  assert.ok(names.includes("The Beekeeper 2"), names.join(", "));
+  // à venir mais dont personne ne parle : toujours écarté
+  assert.ok(!names.includes("Beekeeper inconnu"), names.join(", "));
 });

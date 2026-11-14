@@ -729,7 +729,15 @@ const FAMOUS = 300;       // un titre exact avec autant de votes l'emporte sur u
 const STRONG_VOTES = 100; // titre qui correspond à la requête gardé devant les titres d'un genre ou de plusieurs personnes
 const HEAD_MAX = 15;
 
-const usable = (list) => (list || []).filter((it) => it && it.poster_path && it.vote_count > 0);
+/**
+ * Un titre montrable : une affiche, et des votes, ou bien pas encore sorti mais dont on parle un peu (« The Beekeeper 2 »,
+ * annoncé pour l'an prochain : 0 vote, il disparaissait de la recherche ; même seuil que sansObscurs).
+ */
+const aVenir = (it) => {
+  const date = it.release_date || it.first_air_date || "";
+  return !!date && date > new Date().toISOString().slice(0, 10) && (it.popularity || 0) >= OBSCUR_NEUF_POPULARITE;
+};
+const usable = (list) => (list || []).filter((it) => it && it.poster_path && (it.vote_count > 0 || aVenir(it)));
 const byPop = (a, b) => (b.popularity || 0) - (a.popularity || 0);
 const dedupe = (list) => { const seen = new Set(); return list.filter((it) => it && !seen.has(it.id) && seen.add(it.id)); };
 /** Notoriété : surtout le nombre de votes (stable), un peu la popularité du moment. */
