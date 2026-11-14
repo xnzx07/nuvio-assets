@@ -20,6 +20,19 @@ for (let i = 0, id = 0; i < count; i++) {
 }
 const NOTES = bytes.subarray(pos, pos + count);
 
+/**
+ * Notes IMDb de plusieurs titres (« tt1,tt2 », 60 au plus) : { tt1: 7.3 } ; un titre sans note IMDb n'y est pas.
+ * Lu par l'Explorer de Kalyo (titres venus de TMDB), pour la même note que les rangées et les affiches.
+ */
+export function notesImdb(liste, lire = imdbRating) {
+  const out = {};
+  for (const id of String(liste || "").split(",").slice(0, 60)) {
+    const n = lire(id.trim());
+    if (n !== undefined) out[id.trim()] = Number(n);
+  }
+  return out;
+}
+
 /** Note IMDb (« 7.9 ») d'un identifiant « tt… », ou undefined si IMDb n'en a pas. */
 export function imdbRating(imdbId) {
   const m = /^tt(\d+)$/.exec(imdbId || "");

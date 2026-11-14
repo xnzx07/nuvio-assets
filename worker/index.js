@@ -53,7 +53,7 @@ import { routeJeu } from "./jeu.js";
 import { routeEtat } from "./etat.js";
 import { statique } from "./statique.js";
 import { smartSearch, prepareWords, isExact, norm, capQuery, genreQuery, filmography, sansObscurs } from "./search.js";
-import { imdbRating } from "./ratings.js";
+import { imdbRating, notesImdb } from "./ratings.js";
 import { ROWS as FAC_ROWS, facultativeCatalogs, laureats, SAGA_IDS, SAGA_CATALOGS, sagaCatalog, inReleaseOrder } from "./facultatives.js";
 import { isCopy, addonId, hostRoute, hasAlerts, pendingUpdate, updateInfo, updateCard, same, UPDATE_CATALOG, SOURCE_HOST } from "./hote.js";
 import { SEANCE_ID, carteSeance, rechercheSeance, routeSeance } from "./seance.js";
@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.3";
+const VERSION = "5.65.4";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -3410,6 +3410,8 @@ const app = {
     let path = url.pathname.replace(/\/+$/, "");
     // Galerie des styles d'affiches de la régie (salle 2) : jamais derrière une config (voir galerie.js).
     if (path.startsWith("/galerie/")) return galerieRoute(request, env, url, path);
+    // Notes IMDb de plusieurs titres (Explorer de Kalyo) : le fichier embarqué, aucun appel réseau ; avec ou sans config.
+    if (path === "/notes.json" || path.endsWith("/notes.json")) return json(notesImdb(url.searchParams.get("ids")), 21600);
     // Compteur de calcul du service d'affiches (offre Hobby de Vercel : 4 h de CPU par mois, voir cpu.js).
     if (path === "/cpu") return routeCpu(request, env, url);
     // Réserve des affiches déjà dessinées, lue par le service d'affiches avant de dessiner (voir reserve.js).

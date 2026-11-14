@@ -1989,3 +1989,19 @@ test("affiche du Québec (TMDB faute d'affiche de France) : celle de France, sin
   assert.equal(afficheDeFrance([ca], "/ca.jpg"), null);
   assert.equal(afficheDeFrance([fr, ca], "/fr.jpg"), null);
 });
+
+test("notes.json : les notes IMDb de plusieurs titres, celles des rangées ; un titre inconnu absent, 60 au plus", async () => {
+  const { notesImdb } = await import("../worker/ratings.js");
+  const lire = (id) => ({ tt1: "7.3", tt2: "6.9" })[id];
+  assert.deepEqual(notesImdb("tt1, tt2,tt3,pas-un-id", lire), { tt1: 7.3, tt2: 6.9 });
+  assert.deepEqual(notesImdb(undefined, lire), {});
+  const vus = [];
+  notesImdb(Array.from({ length: 80 }, (_, i) => `tt${i}`).join(","), (id) => void vus.push(id));
+  assert.equal(vus.length, 60);
+  // la route, avec ou sans config, lisible depuis une autre origine (fichier vide dans les tests : rien)
+  const res = await get("/notes.json?ids=tt0111161");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Access-Control-Allow-Origin"), "*");
+  assert.deepEqual(await res.json(), {});
+  assert.equal((await get("/abc/notes.json?ids=tt1")).status, 200);
+});
