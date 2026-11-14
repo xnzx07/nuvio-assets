@@ -413,6 +413,33 @@ test("tournee_vfq_relit_lumio_pour_trouver_la_vff", async () => {
   assert.equal(appels.length, 2);
 });
 
+// Une VFF trouvée par la tournée dans un centre de données : un autre, qui garde encore l'avis « VF sans preuve de VFF »
+// (7 jours), relit la mémoire commune au lieu de s'y fier. L'Odyssée, le 14 novembre 2026 : VFF en base depuis 19 h,
+// fiche encore « VFQ possible » le lendemain, l'avis gardé près d'Oracle.
+test("vf_sans_vff_gardee_ailleurs_relue_dans_la_memoire_commune", async () => {
+  let vff = false;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.startsWith("https://lumio.test/p/stream/")) {
+      appels.push(u);
+      const nom = vff ? "Film.2026.MULTi.TRUEFRENCH.2160p.WEB-DL.mkv" : "Film.2026.MULTi.2160p.WEB.mkv";
+      return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: `4K • WEB-DL | 🇫🇷 🇨🇦 ✓ | 🔎 C411 | 🗂️ ${nom}`, url: "https://lumio.test/play/x" }] });
+    }
+    return new Response("{}");
+  };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", VFQ_PLAFOND: "5" };
+  assert.equal((await (await sf("movie/tt971", "cle-relais", e)).json()).vff, undefined);
+  const ailleurs = new Map(store);
+  vff = true;
+  const rangee = { metas: [{ id: "tt971", description: "📅 VFQ possible\nRésumé" }] };
+  assert.deepEqual((await tourneeVfq(e, async () => rangee)).vff, ["movie/tt971"]);
+  store = ailleurs;
+  const n = appels.length;
+  assert.equal((await (await sf("movie/tt971", "cle-relais", e)).json()).vff, true);
+  assert.equal(appels.length, n, "lu dans la mémoire commune, Lumio pas redemandé");
+  assert.equal(JSON.parse(store.get("https://avis.cache/5/movie/tt971")).avis.vff, true, "copie d'ici remise à jour");
+});
+
 // Les adresses de la tournée et des nouvelles VFF ne sont pas prises pour un lien de configuration : « vfq » l'était,
 // et la tournée répondait « Configuration illisible » sans jamais tourner (vu le 13 novembre 2026).
 test("adresses_vfq_et_vff_pas_une_configuration", async () => {

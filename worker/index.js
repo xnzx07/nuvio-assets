@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.5";
+const VERSION = "5.65.6";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1105,15 +1105,23 @@ async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
   // toutes les clés lues en même temps, puis traitées dans l'ordre (même résultat, sans 18 attentes à la suite)
   const enCache = await Promise.all(cles.map((cle) => caches.default.match(avisCache(cle))
     .then((hit) => (hit ? hit.json().catch(() => null) : null)).catch(() => null)));
+  // Une copie d'ici « VF sans VFF prouvée » (gardée 7 jours) : vérifiée dans la mémoire commune, où la tournée a pu
+  // écrire la VFF depuis un autre centre de données (L'Odyssée, le 14 novembre 2026 : VFF en base depuis la veille
+  // à 19 h, fiche encore « VFQ possible », l'avis gardé près du serveur Oracle). Une VFF ou un « non » : pris tel quel.
+  const aVerifier = new Map();
   cles.forEach((cle, i) => {
     const d = enCache[i];
-    if (bon(d)) avis.set(cle, sansFormat(d.avis)); else { manque.push(cle); if (d) vieux.set(cle, d); }
+    if (bon(d) && (d.avis.vff || !d.avis.vf)) avis.set(cle, sansFormat(d.avis));
+    else { manque.push(cle); if (d) vieux.set(cle, d); if (bon(d)) aVerifier.set(cle, d); }
   });
   // La mémoire commune : un titre déjà demandé ailleurs (un autre centre de données) n'est pas redemandé.
   for (const [cle, d] of await lireAvisGardes(env, manque)) {
+    const ici = aVerifier.get(cle);
+    if (ici && !(d.t > ici.t && bon(d))) continue;
     vieux.set(cle, d);
     if (bon(d)) { avis.set(cle, sansFormat(d.avis)); await garderAvisIci(cle, d); }
   }
+  for (const [cle, d] of aVerifier) if (!avis.has(cle)) avis.set(cle, sansFormat(d.avis));
   const aLire = manque.filter((c) => !avis.has(c)).slice(0, SF_MAX);
   // Lumio d'abord, dans son plafond ; StreamFusion pour le reste, dans le sien. SF_MAX appels au plus en tout (la
   // limite de 50 appels sortants par requête).
