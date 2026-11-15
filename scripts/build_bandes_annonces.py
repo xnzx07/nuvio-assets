@@ -52,6 +52,10 @@ PLATEFORMES = {"UCroNr00O68n25IqSNapMK8w", "UC4YtyYW5RpGBgQqChMyjfIg", "UCfrLPVj
                "UCguBmD8D2uN6Sn6Ch-cVk_g"}
 REVOIR_TMDB = 30
 REVOIR_RECHERCHE = 30
+# Série sans VF chez TMDB : ses saisons sont lues (TMDB range parfois la VF dans une saison : Pokémon, « les voyages
+# d'un Maître », saison 24 ; rien sur la série). La saison 1 d'abord : la bande-annonce de la saison 3 d'une série pas
+# encore commencée en dévoilerait la suite. Au plus SAISONS_LUES saisons.
+SAISONS_LUES = 30
 # Les VOSTFR sont gardées depuis ce jour-là : une recherche plus ancienne restée sans rien est refaite (une fois).
 VOST_DEPUIS = "2026-11-10"
 # Chaînes YouTube officielles en France (distributeurs, plateformes, FilmsActu qui reprend leurs bandes-annonces).
@@ -236,23 +240,48 @@ def titres_des_rangees() -> list[dict]:
     return out
 
 
-def vf_chez_tmdb(t: dict, tmdb_ids: dict) -> tuple[bool, int | None]:
+def vf_tmdb(v: dict, france: bool = False) -> bool:
+    """Vidéo TMDB qui est une bande-annonce (ou un teaser) VF sur YouTube : en français, pas VOST ; france : pas d'un
+    autre pays (Québec), pour celles des saisons que l'addon reçoit telles quelles."""
+    return (v.get("site") == "YouTube" and v.get("type") in ("Trailer", "Teaser") and v.get("iso_639_1") == "fr"
+            and (not france or v.get("iso_3166_1") in (None, "", "FR"))
+            and not re.search(r"\bVOST", v.get("name") or "", re.I))
+
+
+def vf_des_saisons(tid: int, saisons: list) -> dict | None:
+    """La bande-annonce VF qu'une série n'a que dans une saison ({ "k", "t" }, ou None) : la première saison qui en a
+    une (la 1 si possible, pour ne rien dévoiler de la suite), une bande-annonce avant un teaser. Un appel par saison
+    lue (SAISONS_LUES au plus, sans les épisodes spéciaux)."""
+    nums = sorted(s.get("season_number") for s in saisons or [] if isinstance(s.get("season_number"), int)
+                  and s["season_number"] >= 1)[:SAISONS_LUES]
+    for n in nums:
+        vids = [v for v in (tmdb(f"/tv/{tid}/season/{n}/videos", include_video_language="fr").get("results") or [])
+                if vf_tmdb(v, france=True)]
+        if vids:
+            v = sorted(vids, key=lambda v: (v.get("type") != "Trailer", not v.get("official")))[0]
+            return {"k": v["key"], "t": v.get("name") or ""}
+    return None
+
+
+def vf_chez_tmdb(t: dict, tmdb_ids: dict) -> tuple[bool, int | None, dict | None]:
     """(TMDB a-t-il une bande-annonce VF, pas VOST, sur YouTube ? l'addon la prend alors chez lui ; dernière année de
-    diffusion d'une série terminée, None sinon). Un seul appel : la fiche avec ses vidéos."""
+    diffusion d'une série terminée, None sinon ; pour une série sans VF, celle d'une de ses saisons, vf_des_saisons).
+    La fiche avec ses vidéos, plus les vidéos des saisons d'une série sans VF."""
     tid = tmdb_ids.get(t["cle"])
     if not tid:
         r = tmdb(f"/find/{t['imdb']}", external_source="imdb_id")
         hit = (r.get("movie_results" if t["type"] == "movie" else "tv_results") or [{}])[0]
         tid = hit.get("id")
     if not tid:
-        return False, None
+        return False, None, None
     d = tmdb(f"/{'movie' if t['type'] == 'movie' else 'tv'}/{tid}", append_to_response="videos")
     vids = (d.get("videos") or {}).get("results") or []
     fin = None
     if t["type"] == "series" and d.get("status") in ("Ended", "Canceled") and (d.get("last_air_date") or "")[:4].isdigit():
         fin = int(d["last_air_date"][:4])
-    return any(v.get("site") == "YouTube" and v.get("type") in ("Trailer", "Teaser") and v.get("iso_639_1") == "fr"
-               and not re.search(r"\bVOST", v.get("name") or "", re.I) for v in vids), fin
+    vf = any(vf_tmdb(v) for v in vids)
+    saison = vf_des_saisons(tid, d.get("seasons")) if t["type"] == "series" and not vf else None
+    return vf, fin, saison
 
 
 def hd(vid: str) -> bool:
@@ -293,11 +322,16 @@ def main() -> None:
 
     def a_revoir(t):
         x = vu_tmdb.get(t["cle"])
-        return not x or len(x) < 3 or (dt.date.fromisoformat(x[0]) + dt.timedelta(days=REVOIR_TMDB * (3 if x[1] else 1))) <= jour
+        # Une série lue avant la lecture des saisons (sans 4e case) : relue une fois.
+        return (not x or len(x) < 3 or (t["type"] == "series" and not x[1] and len(x) < 4)
+                or (dt.date.fromisoformat(x[0]) + dt.timedelta(days=REVOIR_TMDB * (3 if x[1] else 1))) <= jour)
     revoir = [t for t in titres if a_revoir(t)]
+    saisons_vf = {}
     with ThreadPoolExecutor(8) as ex:
-        for t, (vf, fin) in zip(revoir, ex.map(lambda t: vf_chez_tmdb(t, tmdb_ids), revoir)):
-            vu_tmdb[t["cle"]] = [jour.isoformat(), vf, fin]
+        for t, (vf, fin, saison) in zip(revoir, ex.map(lambda t: vf_chez_tmdb(t, tmdb_ids), revoir)):
+            vu_tmdb[t["cle"]] = [jour.isoformat(), vf, fin] + ([1] if t["type"] == "series" else [])
+            if saison:
+                saisons_vf[t["cle"]] = saison
     a_trouver = [t for t in titres if not vu_tmdb[t["cle"]][1]]
     print(f"{len(titres)} titres, {len(revoir)} relus chez TMDB, {len(a_trouver)} sans VF chez TMDB")
 
@@ -316,6 +350,11 @@ def main() -> None:
     except (urllib.error.URLError, TimeoutError, ValueError) as e:
         print(f"chaînes YouTube : panne ({e})", file=sys.stderr)
         code = 1
+    # La VF d'une saison chez TMDB, si les chaînes n'ont pas trouvé de VF pour toute la série (pas de recherche ensuite).
+    for k, v in saisons_vf.items():
+        if k not in trouves or trouves[k].get("l"):
+            trouves[k] = v
+    print(f"saisons TMDB : {len(saisons_vf)} séries avec une VF dans une saison")
 
     # 3. Recherches pour les titres encore sans VF, les plus en vue d'abord (aussi ceux qui n'ont qu'une VOSTFR : la VF
     # sort parfois après).

@@ -99,6 +99,47 @@ class Series(unittest.TestCase):
         self.assertFalse(ba.convient('BATMAN Bande Annonce VF ("Batman : The Movie " - 1966)', "Batman", 1966, True))
 
 
+class Saisons(unittest.TestCase):
+    """Série sans VF chez TMDB, mais une VF rangée dans une saison (Pokémon : saison 24)."""
+
+    def setUp(self):
+        self.appels = []
+        self.videos = {
+            25: [{"site": "YouTube", "type": "Trailer", "iso_639_1": "fr", "iso_3166_1": "CA", "key": "qc", "name": "BA"}],
+            24: [{"site": "YouTube", "type": "Teaser", "iso_639_1": "fr", "iso_3166_1": "FR", "key": "teaser", "name": "Teaser"},
+                 {"site": "YouTube", "type": "Trailer", "iso_639_1": "fr", "iso_3166_1": "FR", "key": "gXYvzmdR6Rs",
+                  "name": "Pokémon, les voyages d’un Maître | Bande-annonce officielle"}],
+            23: [{"site": "YouTube", "type": "Trailer", "iso_639_1": "fr", "iso_3166_1": "FR", "key": "vieille", "name": "BA"}],
+        }
+
+        def faux(path, **params):
+            self.appels.append(path)
+            n = int(path.split("/season/")[1].split("/")[0])
+            return {"results": self.videos.get(n, [])}
+        self.vrai, ba.tmdb = ba.tmdb, faux
+
+    def tearDown(self):
+        ba.tmdb = self.vrai
+
+    def test_la_premiere_de_france_et_bande_annonce_avant_teaser(self):
+        del self.videos[23]
+        saisons = [{"season_number": n} for n in range(0, 26)]
+        self.assertEqual(ba.vf_des_saisons(60572, saisons),
+                         {"k": "gXYvzmdR6Rs", "t": "Pokémon, les voyages d’un Maître | Bande-annonce officielle"})
+        self.assertEqual(self.appels[0], "/tv/60572/season/1/videos")
+        self.assertEqual(self.appels[-1], "/tv/60572/season/24/videos")
+
+    def test_jamais_la_suite_quand_une_saison_plus_ancienne_en_a_une(self):
+        """Série pas encore commencée : la bande-annonce de la saison 23 plutôt que celle de la 24 (ni du Québec en 25)."""
+        self.assertEqual(ba.vf_des_saisons(60572, [{"season_number": n} for n in range(1, 26)])["k"], "vieille")
+
+    def test_rien_et_nombre_de_saisons_lues(self):
+        self.videos = {}
+        self.assertIsNone(ba.vf_des_saisons(1, [{"season_number": n} for n in range(0, 40)]))
+        self.assertEqual(len(self.appels), ba.SAISONS_LUES)
+        self.assertNotIn("/tv/1/season/0/videos", self.appels)
+
+
 class Divers(unittest.TestCase):
     def test_norm_comme_l_addon(self):
         self.assertEqual(ba.norm("L'Été & Moi"), "l ete and moi")
