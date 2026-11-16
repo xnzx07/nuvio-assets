@@ -16,6 +16,7 @@ RestartSec=5
 StateDirectory=affiches
 Environment=LISTE_DISQUE=/var/lib/affiches/liste-affiches.json
 Environment=NOTES_DISQUE=/var/lib/affiches/notes-mdblist.json
+Environment=GUIDE_DISQUE=/var/lib/affiches/guide-tv.json
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

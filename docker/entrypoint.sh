@@ -20,7 +20,7 @@ fi
 # Une ligne NOM=valeur par variable, entre guillemets simples (rien n'y est interprété) ; si la valeur en
 # contient, entre accents graves, sinon entre guillemets doubles.
 (umask 077; : > "$VARS")
-for name in TMDB_API_KEY GEMINI_API_KEY GEMINI_PUBLIC ADMIN_PASSWORD HOTE_SECRET INSTALLATION DEPOT; do
+for name in TMDB_API_KEY GEMINI_API_KEY GEMINI_PUBLIC TOP_10_KEY ADMIN_PASSWORD HOTE_SECRET INSTALLATION DEPOT; do
   eval "value=\${$name:-}"
   [ -n "$value" ] || continue
   case "$value" in
@@ -64,6 +64,12 @@ if [ "$(id -u)" = "0" ] && id node >/dev/null 2>&1 && command -v setpriv >/dev/n
   chown node:node "$VARS"
   run="setpriv --reuid=node --regid=node --init-groups --"
   export HOME=/home/node
+fi
+# Avec TOP_10_KEY : la tâche de 4 h UTC (classements Top des plateformes) que Cloudflare lance seul, ici lancée par
+# planifie.js sur /__scheduled (--test-scheduled). Sans la clé, rien de plus.
+if [ -n "${TOP_10_KEY:-}" ] && [ -f "$APP_DIR/docker/planifie.js" ]; then
+  set -- "$@" --test-scheduled
+  $run node "$APP_DIR/docker/planifie.js" &
 fi
 # --log-level warn : pas une ligne par requête (les adresses contiennent les réglages, parfois une clé Gemini).
 exec $run wrangler dev --local --ip 0.0.0.0 --port 8787 --persist-to "$DATA_DIR" --show-interactive-dev-session=false --log-level warn "$@"

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, delimiter } from "node:path";
 
@@ -11,6 +11,7 @@ function run(vars) {
   const dir = mkdtempSync(join(tmpdir(), "ep-")), app = mkdtempSync(join(tmpdir(), "app-")), data = mkdtempSync(join(tmpdir(), "data-"));
   writeFileSync(join(dir, "wrangler"), '#!/bin/sh\nfor a in "$@"; do printf "%s\n" "$a"; done\n');
   chmodSync(join(dir, "wrangler"), 0o755);
+  mkdirSync(join(app, "docker")); writeFileSync(join(app, "docker", "planifie.js"), "");
   const r = spawnSync("sh", ["docker/entrypoint.sh"], { env: { ...process.env, ...vars, APP_DIR: app, DATA_DIR: data, PATH: dir + delimiter + process.env.PATH }, encoding: "utf8" });
   return { args: r.stdout.trim().split(/\r?\n/), devVars: readFileSync(join(app, ".dev.vars"), "utf8"), data, stderr: r.stderr };
 }
@@ -45,6 +46,20 @@ test("secrets_hors_ligne_de_commande", () => {
 test("secrets_tels_quels", () => {
   assert.match(run({ ADMIN_PASSWORD: 'a "b" #c: d $HOME' }).devVars, /^ADMIN_PASSWORD='a "b" #c: d \$HOME'$/m);
   assert.match(run({ ADMIN_PASSWORD: `l'été "x"` }).devVars, /^ADMIN_PASSWORD=`l'été "x"`$/m);
+});
+
+// Une copie Docker n'a pas le cron de Cloudflare : avec TOP_10_KEY, la clé passe au Worker et la tâche de 4 h est
+// lançable (/__scheduled, par docker/planifie.js) ; sans la clé, rien de plus.
+test("top_10_key_et_tache_planifiee", () => {
+  const avec = run({ TMDB_API_KEY: "x", TOP_10_KEY: "cle-top" });
+  assert.match(avec.devVars, /^TOP_10_KEY='cle-top'$/m);
+  assert.ok(avec.args.includes("--test-scheduled"));
+  assert.ok(!avec.args.some((a) => a.includes("cle-top")));
+  assert.ok(!run({ TMDB_API_KEY: "x" }).args.includes("--test-scheduled"));
+});
+
+test("planifie_copie_dans_l_image", () => {
+  assert.match(readFileSync("Dockerfile", "utf8"), /^COPY docker\/entrypoint\.sh docker\/planifie\.js \.\/docker\/$/m);
 });
 
 test("secret_hote_tire_au_hasard_et_garde", () => {

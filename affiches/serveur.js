@@ -6,6 +6,7 @@
  *   GET /{type}/{shape}/{id}.jpg?s=…               comme sur Vercel
  *   GET /affiche/{type}/{shape}/{id}?imdb=…&s=…     les aperçus des pages du site (comme /affiche/… de l'addon, sans lui)
  *   GET /qualite/… /tendances/… /notes/… /vf.json /anilist.json   les relais de l'addon, comme sur Vercel
+ *   GET /guide/index.json  /guide/<id>.json         le guide TV public (XML-TV-Fr) pour la page TV de Kalyo (lib/guide-tv.js)
  *   GET /etat                                      le bilan du serveur
  *   GET /passage?tout=1                            (clé X-Relais-Cle) tout redessiner maintenant, après une nuit ratée
  * Il prend aussi la file des affiches demandées pendant son absence (toutes les 5 minutes) et redessine tout chaque
@@ -33,6 +34,7 @@ import { creerCloudflare, dessinerStatique, dessinerTout, publierEtEnregistrer, 
 import { definirSecours } from "./lib/qualite.js";
 import { lireReglages, ecrireReglages } from "./lib/lien-affiches.js";
 import { secondesAvantBascule } from "./lib/tendances.js";
+import { creerGuide } from "./lib/guide-tv.js";
 
 // Aperçus gardés en mémoire (les mêmes pour tous les visiteurs du site : les rangées du hall, la galerie) ; ~100 Ko chacun.
 const APERCUS_MAX = 400;
@@ -65,8 +67,10 @@ const STATIQUES = "https://affiches.xnzxflix.workers.dev";
 // Une affiche de chaque Worker, pour savoir s'il renvoie au serveur (302) ou s'il sert lui-même.
 const TEMOIN = "/maison/movie/poster/tt0133093.jpg";
 
-export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = Date.now } = {}) {
+export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = Date.now, guide = null } = {}) {
   const PORT = Number(env.PORT) || 8080, BASE = `http://127.0.0.1:${PORT}`;
+  // le guide TV public : lu une fois par jour, en mémoire et sur le disque (GUIDE_DISQUE)
+  const guideTv = guide || creerGuide({ fetch: fetchImpl, horloge, disque: env.GUIDE_DISQUE || join(homedir(), "guide-tv.json") });
   const envService = envDuService(env);
   const sansCompteur = (url, init) => (/\/cpu\?/.test(String(url)) ? Promise.resolve(Response.json({ ms: 0 })) : fetchImpl(url, init));
   const affiche = makeHandler({ env: envService, fetchImpl: sansCompteur });
@@ -148,6 +152,9 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
     } catch { return null; }
   }
 
+  // lu par la page de Kalyo, sur un autre site : CORS ouvert, lecture seule, gardé 30 minutes
+  const guideReponse = (corps) => Response.json(corps, { headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=1800" } });
+
   async function route(req) {
     const url = new URL(req.url, BASE);
     const p = url.pathname;
@@ -194,6 +201,14 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
       if (!cleOk(req)) return new Response(null, { status: 403 });
       passage({ tout: url.searchParams.get("tout") === "1" });
       return new Response(null, { status: 202 });
+    }
+    if (p === "/guide/index.json") return guideReponse(guideTv.index());
+    const gm = /^\/guide\/([^/]{1,120})\.json$/.exec(p);
+    if (gm) {
+      let id;
+      try { id = decodeURIComponent(gm[1]); } catch { return new Response(null, { status: 404 }); }
+      const liste = guideTv.chaine(id);
+      return liste ? guideReponse(liste) : new Response("introuvable", { status: 404, headers: { "Access-Control-Allow-Origin": "*" } });
     }
     if (p === "/etat") return Response.json({ ...etat, enAttente: enAttente.size, memoire: Math.round(process.memoryUsage().rss / 1e6) }, { headers: { "Cache-Control": "no-store" } });
     return new Response("introuvable", { status: 404 });
@@ -300,9 +315,10 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
 
   const minuteries = [];
   return {
-    serveur, route, passage, etat, enAttente, enLigne, nouvellesVff,
+    serveur, route, passage, etat, enAttente, enLigne, nouvellesVff, guide: guideTv,
     demarrer() {
       serveur.listen(PORT, "127.0.0.1", () => console.log(`affiches sur ${BASE}`));
+      guideTv.demarrer();
       minuteries.push(setInterval(() => notesDisque.sauver(), 5 * 60000));
       if (!cf) { console.warn("pas de publication : CLOUDFLARE_API_TOKEN ou D1_AFFICHES manquant"); return; }
       // Son adresse et la clé pour le Worker, dès le démarrage : sans lire la base (elle peut être bloquée pour la journée).
@@ -333,7 +349,7 @@ export function creerServeur({ env = process.env, fetchImpl = fetch, horloge = D
         }
       }, 3 * 60000));
     },
-    arreter() { for (const m of minuteries) clearInterval(m); serveur.close(); },
+    arreter() { for (const m of minuteries) clearInterval(m); guideTv.arreter(); serveur.close(); },
   };
 }
 
