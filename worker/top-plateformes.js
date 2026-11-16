@@ -18,9 +18,11 @@ const PLATEFORMES = [
   { service: "hbo", provider: "1899", nom: "HBO Max" },
   { service: "paramount", provider: "531", nom: "Paramount+" },
 ];
+// Le type est dans le nom : « Afficher le type de catalogue » désactivé (réglage du guide), Nuvio n'écrit plus « (Films) »
+// et les deux onglets d'une plateforme s'appelleraient pareil.
 export const TOPS = PLATEFORMES.flatMap(({ service, provider, nom }) => [
-  { id: `top-${service}-films`, type: "movie", service, provider, name: `Top ${nom}` },
-  { id: `top-${service}-series`, type: "series", service, provider, name: `Top ${nom}` },
+  { id: `top-${service}-films`, type: "movie", service, provider, name: `Top ${nom} Films` },
+  { id: `top-${service}-series`, type: "series", service, provider, name: `Top ${nom} Séries` },
 ]);
 
 /**
