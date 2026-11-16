@@ -41,6 +41,11 @@ test("un titre sorti depuis peu, encore peu noté, reste s'il fait parler", () =
   assert.deepEqual(noms(sansObscurs(l, "the bear", TODAY)), ["The Bear", "I Kill the Bear"]);
 });
 
+test("« pitfall » : le film de 2025, encore peu noté, reste à côté de celui de 1962 ; un vieux titre peu noté part", () => {
+  const l = [{ ...film("Le Traquenard", "1962-07-01", 140, 1.5, "ja"), en_title: "Pitfall" }, film("Pitfall", "2025-03-14", 9, 0.8), film("Pitfall", "1998-01-01", 4, 0.2)];
+  assert.deepEqual(sansObscurs(l, "pitfall", TODAY).map((it) => it.release_date.slice(0, 4)), ["1962", "2025"]);
+});
+
 test("tous obscurs : rien n'est retiré ; sans nombre de votes : gardé", () => {
   const obscurs = [film("Zorglub", "1971-01-01", 3), film("Zorglub 2", "1973-01-01", 0)];
   assert.deepEqual(sansObscurs(obscurs, "zorglub", TODAY), obscurs);

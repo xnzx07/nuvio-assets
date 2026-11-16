@@ -1020,12 +1020,16 @@ const OBSCUR_FR_VOTES = 10;
 /** Pas encore sorti (ou sorti dans l'année) : gardé si on en parle un peu (« Avatar 4 », popularité 2,7). */
 const OBSCUR_NEUF_POPULARITE = 2;
 const AN_MS = 365 * 24 * 3600 * 1000;
+/** Un titre sorti ces trois dernières années, déjà un peu noté, reste (« Pitfall », 2025, derrière celui de 1962). */
+const OBSCUR_RECENT_MS = 3 * AN_MS;
+const OBSCUR_RECENT_VOTES = 3;
 
 /**
  * Les résultats d'une recherche sans les titres obscurs, quand un titre connu porte le nom cherché (« avatar » : plus
  * le film espagnol de 2006, 60 votes, à côté de celui de 2009). Sans titre connu de ce nom, rien ne change : « ichigo »
  * garde Ichigo 100% (17 votes), c'est peut-être lui qu'on cherche ; « avatar 2006 » aussi. Gardés : au moins
  * OBSCUR_MIN_VOTES votes, un titre français un peu noté, un titre sorti depuis moins d'un an ou à venir dont on parle,
+ * un titre des trois dernières années déjà un peu noté,
  * un titre sans nombre de votes connu. Une recherche ne se vide jamais à cause de ce tri.
  */
 export function sansObscurs(results, query, today) {
@@ -1038,7 +1042,9 @@ export function sansObscurs(results, query, today) {
     const date = it.release_date || it.first_air_date || "";
     if (it.original_language === "fr" && votes >= OBSCUR_FR_VOTES) return true;
     const sortie = Date.parse(date);
-    return !!date && sortie > maintenant - AN_MS && (it.popularity || 0) >= OBSCUR_NEUF_POPULARITE;
+    if (!date) return false;
+    if (sortie > maintenant - AN_MS && (it.popularity || 0) >= OBSCUR_NEUF_POPULARITE) return true;
+    return sortie > maintenant - OBSCUR_RECENT_MS && votes >= OBSCUR_RECENT_VOTES;
   };
   const gardes = results.filter(garde);
   return gardes.length ? gardes : results;
