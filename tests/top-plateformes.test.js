@@ -183,3 +183,45 @@ test("chaque_top_est_en_tete_de_sa_tuile", async () => {
     assert.ok(f.sources.slice(2).every((s) => s.provider === "tmdb"), f.id);
   }
 });
+
+// Copie sans clé TOP_10_KEY : les listes de l'addon d'origine (/tops.json), une fois par jour, sans appel à l'API.
+test("copie_sans_cle_lit_l_addon_d_origine", async () => {
+  const origine = { tops: { ...uneListe([5, 6, 7], AUJOURDHUI), "top-inconnu": { j: AUJOURDHUI, ids: [1] }, "top-apple-films": { j: AUJOURDHUI, ids: ["x", -1, 4.5] } } };
+  const appels = [];
+  const fetchAvant = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { const u = new URL(String(url)); if (u.pathname === "/tops.json") { appels.push(u.hostname); return rep(origine); } return fetchAvant(url, init); };
+  const e = { LIENS: baseTops() };
+  await prendreTops(e, Date.now());
+  await prendreTops(e, Date.now() + 60000);
+  assert.deepEqual(appels, ["nuvio-assets.xnzxflix.workers.dev"], "une seule lecture par jour");
+  assert.equal(api.length, 0, "jamais l'API des classements");
+  assert.deepEqual(await listeDuTop(e, "top-netflix-films"), [5, 6, 7]);
+  assert.deepEqual(await listeDuTop(e, "top-apple-films"), [], "identifiants invalides écartés");
+  assert.equal(JSON.parse(e.LIENS.lignes.get(AUJOURDHUI))["top-inconnu"], undefined);
+});
+
+test("copie_origine_en_panne_rien_de_lu", async () => {
+  const fetchAvant = globalThis.fetch;
+  globalThis.fetch = async (url, init) => (String(url).endsWith("/tops.json") ? new Response("{}", { status: 500 }) : fetchAvant(url, init));
+  const e = { LIENS: baseTops() };
+  await prendreTops(e, Date.now());
+  assert.equal(e.LIENS.lignes.size, 0);
+});
+
+test("tops_json_publie_les_listes", async () => {
+  const e = env(duJour([9, 8]));
+  const r = await worker.fetch(new Request(`${SOURCE}/tops.json`), e, ctx);
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.deepEqual(d.tops["top-netflix-films"], { j: AUJOURDHUI, ids: [9, 8] });
+  assert.equal(Object.keys(d.tops).length, 12);
+});
+
+test("tache_tops_seule", async () => {
+  const attentes = [];
+  const e = env();
+  await worker.scheduled({ cron: "tops", scheduledTime: JOUR }, e, { waitUntil: (p) => attentes.push(p) });
+  await Promise.all(attentes);
+  assert.equal(api.length, 12);
+  assert.equal(attentes.length, 1, "pas de photos ni de tournée");
+});

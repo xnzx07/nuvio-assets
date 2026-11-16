@@ -65,9 +65,9 @@ if [ "$(id -u)" = "0" ] && id node >/dev/null 2>&1 && command -v setpriv >/dev/n
   run="setpriv --reuid=node --regid=node --init-groups --"
   export HOME=/home/node
 fi
-# Avec TOP_10_KEY : la tâche de 4 h UTC (classements Top des plateformes) que Cloudflare lance seul, ici lancée par
-# planifie.js sur /__scheduled (--test-scheduled). Sans la clé, rien de plus.
-if [ -n "${TOP_10_KEY:-}" ] && [ -f "$APP_DIR/docker/planifie.js" ]; then
+# Les listes Top des plateformes (avec TOP_10_KEY ou, sans clé, celles de l'addon d'origine) : la tâche que Cloudflare
+# lance seul, ici lancée par planifie.js sur /__scheduled (--test-scheduled).
+if [ -f "$APP_DIR/docker/planifie.js" ]; then
   set -- "$@" --test-scheduled
   $run node "$APP_DIR/docker/planifie.js" &
 fi

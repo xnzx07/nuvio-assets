@@ -1,11 +1,13 @@
 /**
  * Le top de chaque plateforme en France (Streaming Availability API, classements donnés par les plateformes). Une seule
  * lecture par jour, tâche planifiée de 4 h UTC, pour tout le monde : 12 appels sur les 1 000 par mois de l'offre gratuite.
- * Une demande de Nuvio n'appelle jamais l'API. Sans le secret TOP_10_KEY (copies) : rien de lu, les rangées restent vides.
+ * Une demande de Nuvio n'appelle jamais l'API. Sans le secret TOP_10_KEY (copies) : les listes déjà lues par l'addon
+ * d'origine (/tops.json), une fois par jour, sans clé ni compte à créer ; si elles ne sont pas joignables, rien de lu.
  * Une liste que l'API ne rend pas ce jour-là : celle d'avant, entière, jamais un mélange de deux jours ; au-delà de
  * GARDE_JOURS, plus rien plutôt qu'un vieux classement. Les plateformes sans classement gardent leurs rangées « populaires ».
  */
 import { jourTendances, secondesAvantBascule } from "./tendances.js";
+import { SOURCE_HOST } from "./hote.js";
 
 const API = "https://api.movieofthenight.com/v4";
 const GARDE_JOURS = 7;
@@ -50,16 +52,36 @@ async function lireListe(env, { service, type }) {
   } catch (e) { console.warn(`top ${service} ${type} : ${e && e.message}`); return null; }
 }
 
+/**
+ * Les listes d'un autre addon (/tops.json de l'addon d'origine), pour une copie sans clé : seulement les listes connues,
+ * des identifiants entiers, un jour bien écrit ; chacune garde son jour. null si rien d'utilisable.
+ */
+async function lireOrigine(now) {
+  try {
+    const res = await fetch(`https://${SOURCE_HOST}/tops.json`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) { console.warn(`tops d'origine : HTTP ${res.status}`); return null; }
+    const d = await res.json(), tops = {};
+    for (const t of TOPS) {
+      const l = d && d.tops && d.tops[t.id];
+      if (!l || !/^\d{4}-\d{2}-\d{2}$/.test(l.j || "") || l.j < limite(now) || !Array.isArray(l.ids)) continue;
+      const ids = l.ids.filter((n) => Number.isInteger(n) && n > 0).slice(0, MAX);
+      if (ids.length) tops[t.id] = { j: l.j, ids };
+    }
+    return Object.keys(tops).length ? tops : null;
+  } catch (e) { console.warn(`tops d'origine : ${e && e.message}`); return null; }
+}
+
 const dernierJour = (env) => env.LIENS.prepare("SELECT j, tops FROM tops ORDER BY j DESC LIMIT 1").first();
 const limite = (now) => jourTendances(now - GARDE_JOURS * 86400000);
 
 /** Tâche planifiée de 4 h UTC : les listes du jour, une seule fois (déjà prises : aucun appel de plus). */
 export async function prendreTops(env, now = Date.now()) {
-  if (!env.TOP_10_KEY || !env.LIENS) return;
+  if (!env.LIENS) return;
   const jour = jourTendances(now);
   await env.LIENS.prepare("CREATE TABLE IF NOT EXISTS tops (j TEXT PRIMARY KEY, tops TEXT NOT NULL)").run();
   const avant = await dernierJour(env);
   if (avant && avant.j === jour) return;
+  if (!env.TOP_10_KEY) return prendreChezOrigine(env, avant, now);
   const anciens = avant ? JSON.parse(avant.tops) : {};
   const lues = await Promise.all(TOPS.map((t) => lireListe(env, t)));
   // Rien de lu (API en panne, quota du mois atteint) : pas de ligne, on reste sur la précédente.
@@ -70,6 +92,16 @@ export async function prendreTops(env, now = Date.now()) {
     if (lues[i]) tops[t.id] = { j: jour, ids: lues[i] };
     else if (ancien && ancien.j >= limite(now)) tops[t.id] = ancien;
   });
+  await env.LIENS.prepare("INSERT OR IGNORE INTO tops (j, tops) VALUES (?, ?)").bind(jour, JSON.stringify(tops)).run();
+  await env.LIENS.prepare("DELETE FROM tops WHERE j < ?").bind(limite(now)).run();
+}
+
+/** Copie sans clé : les listes de l'addon d'origine, rangées au jour de la plus récente ; rien de plus récent qu'en base : rien. */
+async function prendreChezOrigine(env, avant, now) {
+  const tops = await lireOrigine(now);
+  if (!tops) return;
+  const jour = Object.values(tops).map((l) => l.j).sort().pop();
+  if (avant && avant.j >= jour) return;
   await env.LIENS.prepare("INSERT OR IGNORE INTO tops (j, tops) VALUES (?, ?)").bind(jour, JSON.stringify(tops)).run();
   await env.LIENS.prepare("DELETE FROM tops WHERE j < ?").bind(limite(now)).run();
 }
@@ -93,4 +125,11 @@ async function lireTops(env, now) {
 export async function listeDuTop(env, id, now = Date.now()) {
   const l = (await lireTops(env, now))[id];
   return l && l.j >= limite(now) ? l.ids : [];
+}
+
+/** Les listes du jour (id → { j, ids }) que les copies sans clé lisent chez nous ; sans celles trop vieilles. */
+export async function listesPubliees(env, now = Date.now()) {
+  const tops = await lireTops(env, now), sortie = {};
+  for (const [id, l] of Object.entries(tops)) if (l && l.j >= limite(now)) sortie[id] = l;
+  return sortie;
 }

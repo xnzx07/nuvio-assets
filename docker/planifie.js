@@ -1,15 +1,15 @@
-// Tâche de 4 h UTC d'une copie Docker. Sur Cloudflare c'est le cron de wrangler.toml ; ici wrangler dev --test-scheduled
-// expose /__scheduled, appelé une fois au démarrage puis chaque jour à partir de 4 h UTC (les classements Top des
-// plateformes, la photo du jour des tendances). Une tâche déjà faite ce jour-là ne refait aucun appel (prendreTops).
-const URL_TACHE = "http://127.0.0.1:8787/__scheduled?cron=0+4+*+*+*";
+// Lecture des listes Top d'une copie Docker. Sur Cloudflare c'est le cron de wrangler.toml ; ici wrangler dev
+// --test-scheduled expose /__scheduled, appelé une fois au démarrage puis chaque jour à partir de 4 h UTC, avec la tâche
+// « tops » seule. Déjà lues ce jour-là : aucun appel de plus (prendreTops).
+const URL_TACHE = "http://127.0.0.1:8787/__scheduled?cron=tops";
 let dernierJour = "";
 
 async function lancer() {
   try {
     const r = await fetch(URL_TACHE, { signal: AbortSignal.timeout(120000) });
-    console.warn(`tâche de 4 h : HTTP ${r.status}`);
+    console.warn(`tâche tops : HTTP ${r.status}`);
     return r.ok;
-  } catch (e) { console.warn(`tâche de 4 h : ${e && e.message}`); return false; }
+  } catch (e) { console.warn(`tâche tops : ${e && e.message}`); return false; }
 }
 
 async function attendreLeServeur() {

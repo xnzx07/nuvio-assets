@@ -63,12 +63,12 @@ import { sha256 } from "./outils-serveur.js";
 import { programmationPublique } from "./soiree.js";
 import { galerieRoute } from "./galerie.js";
 import { secondesAvantBascule, jourTendances, routeTendances, prendrePhotos } from "./tendances.js";
-import { TOPS, topCatalogs, prendreTops, listeDuTop } from "./top-plateformes.js";
+import { TOPS, topCatalogs, prendreTops, listeDuTop, listesPubliees } from "./top-plateformes.js";
 import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.8";
+const VERSION = "5.65.9";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -3234,7 +3234,7 @@ function json(data, maxAge) {
   });
 }
 
-const RESERVED = new Set(["manifest.json", "catalog", "configure", "collections.json", "accueil.json", "guide", "tv", "trailer", "lien", "meta", "logo.png", "debug", "affiche", "prefetch", "dossier", "hote", "statique", "copie", "lien-fixe", "tendances", "sf", "avis", "rangee", "sans-vf", "saison.json", "seance", "diagnostic", "nouveautes", "cpu", "reserve", "compte-nuvio", "vfq", "vff"]);
+const RESERVED = new Set(["manifest.json", "catalog", "configure", "collections.json", "accueil.json", "guide", "tv", "trailer", "lien", "meta", "logo.png", "debug", "affiche", "prefetch", "dossier", "hote", "statique", "copie", "lien-fixe", "tendances", "sf", "avis", "rangee", "sans-vf", "saison.json", "seance", "diagnostic", "nouveautes", "cpu", "reserve", "compte-nuvio", "vfq", "vff", "tops.json"]);
 
 async function loadCollections() {
   const res = await fetch(`${ASSETS}/collections/collections.json`, { cf: { cacheTtl: 600, cacheEverything: true } });
@@ -3381,6 +3381,8 @@ export default {
   },
   // Tâche planifiée de 4 h UTC (wrangler.toml) : la photo du jour des tendances.
   async scheduled(event, env, ctx) {
+    // Copie Docker (docker/planifie.js) : seulement la lecture des listes Top, sans le reste de la tâche de 4 h.
+    if (event.cron === CRON_TOPS) { ctx.waitUntil(prendreTops(env, event.scheduledTime).catch((e) => console.warn(`tops : ${e && e.message}`))); return; }
     if (event.cron === CRON_SURVEILLANCE) {
       ctx.waitUntil(surveiller(env).catch((e) => console.warn(`surveillance : ${e && e.message}`)));
       // La tournée des films « VFQ possible » aussi en journée, toutes les 3 heures (TOURNEES_JOUR_UTC) : une VFF sortie
@@ -3398,6 +3400,8 @@ export default {
     lancerTourneeVfq(env, ctx);
   },
 };
+
+const CRON_TOPS = "tops";
 
 /** Heures (UTC) des tournées « VFQ possible » de la journée, en plus de celle de 4 h : de 7 h à 22 h à Paris. */
 const TOURNEES_JOUR_UTC = [6, 9, 12, 15, 18, 21];
@@ -3661,6 +3665,9 @@ const app = {
       };
       return json(await tourneeVfq(env, lire), 0);
     }
+    // Les listes Top du jour, lues une fois par jour par les copies sans clé TOP_10_KEY (prendreTops) : les mêmes que
+    // celles des rangées, rien de personnel.
+    if (path === "/tops.json") return json({ tops: await listesPubliees(env) }, 3600);
     // Les films passés en VFF à une tournée, pour le serveur des affiches (avec la clé du relais).
     if (path === "/vff/nouvelles.json") {
       if (!env.RELAIS_KEY || !same(await sha256(request.headers.get("X-Relais-Cle") || ""), await sha256(env.RELAIS_KEY))) return json({ error: "refusé" }, 0);
