@@ -317,9 +317,14 @@ test("reserve_de_la_photo_liberee_le_matin", async () => {
   });
   // 6 h 30 à Paris (5 h 30 UTC) : la photo n'est peut-être pas finie, la réserve tient.
   await aHeure("2026-11-01T05:30:00Z", async () => assert.deepEqual(await demander("tt904"), { plafond: true }));
-  // 7 h à Paris : le reste est libre, jusqu'au plafond total.
+  // 7 h à Paris : le reste est libre, sauf la part gardée aux films déjà vus sans VF (1 sur 5, jusqu'à 20 h).
   await aHeure("2026-11-01T06:00:00Z", async () => {
-    for (const id of ["tt905", "tt906", "tt907"]) assert.equal((await demander(id)).vf, true);
+    for (const id of ["tt905", "tt906"]) assert.equal((await demander(id)).vf, true);
+    assert.deepEqual(await demander("tt907"), { plafond: true }, "la part des relectures");
+  });
+  // 20 h à Paris : jusqu'au plafond total.
+  await aHeure("2026-11-01T19:00:00Z", async () => {
+    assert.equal((await demander("tt907")).vf, true);
     assert.deepEqual(await demander("tt908"), { plafond: true }, "jamais plus que le total");
   });
   assert.equal(appels.length, 5);
@@ -514,4 +519,37 @@ test("vff_prouvee_par_deux_equipes_ou_un_tracker", async () => {
   assert.equal(lus.get("movie/tt973").vff, true, "deux équipes");
   assert.equal(lus.get("movie/tt974").vf, true);
   assert.equal(lus.get("movie/tt974").vff, undefined, "un WEBRip ne prouve pas la VFF");
+});
+
+// Un film déjà vu sans VF est relu même quand les rangées ont pris le plafond du jour : une part lui est gardée (The
+// Social Reckoning, le 24 novembre 2026 : sorti en VF avant sa date, avis « non » du 20 jamais relu, les rangées
+// prenaient tout chaque jour). Le soir, la part gardée est rendue aux autres.
+test("relecture_des_films_vus_sans_vf_gardee", async () => {
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (!u.startsWith("https://lumio.test/p/stream/")) return new Response("{}");
+    appels.push(u);
+    return Response.json({ streams: [{ name: "[AD⚡️] Lumio", description: "1080p • WEB-DL | 🇫🇷 ✓", url: "https://lumio.test/play/x" }] });
+  };
+  const e = { ...env, LUMIO_URL: "https://lumio.test/p/manifest.json", LUMIO_PLAFOND: "8", STREAMFUSION_URL: "" };
+  const midi = Date.parse("2026-11-24T11:00:00Z");
+  // L'avis « non » d'il y a quatre jours, périmé.
+  store.set("https://avis.cache/5/movie/tt950", JSON.stringify({ avis: { vf: false, sources: 1, l: 4 }, t: midi - 4 * 86400000, depuis: midi - 20 * 86400000 }));
+  const rangee = (ids) => { const m = new Map(ids.map((i) => [i, { vf: false, sources: 1 }])); return avecAvisDuJour(e, m, ids.map((i) => [i, `movie/${i}`])); };
+  await aHeure("2026-11-24T11:00:00Z", async () => {
+    // Des titres jamais lus : 6 sur 8 (2 gardés).
+    await rangee(["tt941", "tt942", "tt943", "tt944", "tt945", "tt946", "tt947", "tt948"]);
+    assert.equal(appels.length, 6, "les titres jamais lus : 6 sur 8");
+    // Le film vu sans VF, demandé ensuite (seul, puis avec d'autres jamais lus) : relu, et passe devant.
+    appels.length = 0;
+    const lus = await rangee(["tt949", "tt950"]);
+    assert.deepEqual(appels, ["https://lumio.test/p/stream/movie/tt950.json"]);
+    assert.equal(lus.get("tt950").vf, true);
+  });
+  // 20 h à Paris : la part gardée qui reste est rendue.
+  await aHeure("2026-11-24T19:00:00Z", async () => {
+    appels.length = 0;
+    await rangee(["tt951", "tt952"]);
+    assert.deepEqual(appels, ["https://lumio.test/p/stream/movie/tt951.json"], "le dernier du jour, pas plus que le total");
+  });
 });

@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.9";
+const VERSION = "5.65.10";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1122,15 +1122,31 @@ async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
     if (bon(d)) { avis.set(cle, sansFormat(d.avis)); await garderAvisIci(cle, d); }
   }
   for (const [cle, d] of aVerifier) if (!avis.has(cle)) avis.set(cle, sansFormat(d.avis));
-  const aLire = manque.filter((c) => !avis.has(c)).slice(0, SF_MAX);
+  // Un titre déjà vu sans VF passe avant les titres jamais lus (le plus ancien d'abord), avec sa part du plafond du jour :
+  // un film peut sortir en VF plus tôt que prévu (The Social Reckoning, le 24 novembre 2026 : avis « non » du 20, jamais
+  // relu, les rangées prenaient tout le plafond chaque jour).
+  const dejaNon = (c) => { const v = vieux.get(c); return !!(v && v.avis && v.avis.vf === false); };
+  const aRelire = manque.filter((c) => !avis.has(c) && dejaNon(c)).sort((a, b) => (vieux.get(a).t || 0) - (vieux.get(b).t || 0));
+  const jamaisLus = manque.filter((c) => !avis.has(c) && !dejaNon(c));
+  const aLire = [...aRelire, ...jamaisLus].slice(0, SF_MAX);
+  // La part gardée ne vaut que pour les rangées, fiches et affiches : ni la photo du jour (sa propre part), ni la tournée
+  // de nuit (son propre plafond, et elle relit des avis « VF »).
+  const garde = origine === "photo" || opts.relire ? 0 : GARDE_RELECTURES;
+  const prise = async (source, liste) => {
+    const rel = liste.filter(dejaNon), neufsLus = liste.filter((c) => !dejaNon(c));
+    const a = await reserver(env, source, rel.length, origine);
+    const b = await reserver(env, source, neufsLus.length, origine, garde);
+    return [...rel.slice(0, a), ...neufsLus.slice(0, b)];
+  };
   // Lumio d'abord, dans son plafond ; StreamFusion pour le reste, dans le sien. SF_MAX appels au plus en tout (la
   // limite de 50 appels sortants par requête).
   const lus = new Map();
-  const nLumio = env.LUMIO_URL ? await reserver(env, opts.budget || "lumio", aLire.length, origine) : 0;
-  if (nLumio) (await lireVfLumio(env, aLire.slice(0, nLumio))).forEach((v, k) => lus.set(k, v));
-  const reste = opts.relire ? [] : aLire.filter((c) => !lus.has(c)).slice(0, Math.max(0, SF_MAX - nLumio));
-  const nSf = reste.length && env.STREAMFUSION_URL ? await reserver(env, "sf", reste.length, origine) : 0;
-  if (nSf) (await lireVfStreamFusion(env, reste.slice(0, nSf))).forEach((v, k) => lus.set(k, v));
+  const choisisLumio = env.LUMIO_URL ? await prise(opts.budget || "lumio", aLire) : [];
+  if (choisisLumio.length) (await lireVfLumio(env, choisisLumio)).forEach((v, k) => lus.set(k, v));
+  const reste = opts.relire ? [] : aLire.filter((c) => !lus.has(c)).slice(0, Math.max(0, SF_MAX - choisisLumio.length));
+  const choisisSf = reste.length && env.STREAMFUSION_URL ? await prise("sf", reste) : [];
+  if (choisisSf.length) (await lireVfStreamFusion(env, choisisSf)).forEach((v, k) => lus.set(k, v));
+  const nSf = choisisSf.length;
   // « Vu sans VF depuis » : gardé d'un avis à l'autre tant que la VF n'est pas là.
   const neufs = [...lus].map(([cle, a]) => {
     const v = vieux.get(cle);
@@ -1255,12 +1271,18 @@ const PLAFONDS = { sf: ["SF_PLAFOND", 300, "", 0.4], lumio: ["LUMIO_PLAFOND", 50
   vfq: ["VFQ_PLAFOND", 40, "vfq:", 0] };
 const plafondsAtteints = new Set();
 const plafondCache = (cle) => new Request(`https://avis.cache/plafond/${cle}`);
+const GARDE_RELECTURES = 0.25;   // part de chaque plafond du jour gardée aux titres déjà vus sans VF (avisDuJour)
+const GARDE_JUSQUA = 20;          // jusqu'à 20 h à Paris ; ensuite, tout le reste du jour à qui le demande
+const reserveRelecturesTenue = () => Number(HEURE_PARIS.format(new Date(Date.now()))) < GARDE_JUSQUA;
 let budgetPret = null;
-async function reserver(env, source, n, origine = "affiches") {
+async function reserver(env, source, n, origine = "affiches", garde = 0) {
   if (!env.LIENS || !(n > 0)) return 0;
   const [variable, defaut, prefixe, partPhoto] = PLAFONDS[source];
   const total = Number(env[variable]) > 0 ? Number(env[variable]) : defaut;
-  const plafond = origine === "photo" || !reservePhotoTenue() ? total : total - Math.floor(total * partPhoto);
+  const base = origine === "photo" || !reservePhotoTenue() ? total : total - Math.floor(total * partPhoto);
+  // garde : la part laissée aux relectures (titres vus sans VF), que les titres jamais lus ne peuvent pas prendre ; prise
+  // sur ce qui reste après la photo, et rendue le soir (GARDE_JUSQUA) pour ne rien perdre de la journée.
+  const plafond = garde && reserveRelecturesTenue() ? base - Math.floor(base * garde) : base;
   const jour = prefixe + parisToday(), atteint = `${jour}/${plafond}`;
   if (plafondsAtteints.has(atteint)) return 0;
   if (await caches.default.match(plafondCache(atteint)).catch(() => null)) { plafondsAtteints.add(atteint); return 0; }
