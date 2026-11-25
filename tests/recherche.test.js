@@ -25,6 +25,7 @@ const NOLAN = personne(525, "Christopher Nolan", "Directing", 35000);
 const JULIAN_BLEACH = { ...personne(5000, "Julian Bleach", "Acting", 25000), popularity: 0.99 };
 // La chanteuse JoJo (popularité 1,67) et Alfred Hitchcock (3,98).
 const JOJO = { ...personne(5001, "JoJo", "Acting", 1854), popularity: 1.67 };
+const R_MADDEN = { ...personne(1337, "Richard Madden", "Acting", 28238), popularity: 2.65 };
 const HITCHCOCK = { ...personne(2636, "Alfred Hitchcock", "Directing", 11367), popularity: 3.98 };
 
 const HEAT = film(949, "Heat", 1995, 8800);
@@ -51,6 +52,7 @@ const CREDITS = {
   "5344/movie": { cast: [{ ...SEATTLE, order: 1 }, { ...MESSAGE, order: 1 }, { ...film(639, "Quand Harry rencontre Sally", 1989, 4000), order: 1 }] },
   "5000/movie": { cast: [{ ...film(99861, "Avengers : L'Ère d'Ultron", 2015, 25000), order: 30 }, { ...film(14784, "The Fall", 2008, 1600), order: 5 }] },
   "5001/tv": { cast: [{ ...serie(9103, "Une série de JoJo", 2010, 300), episode_count: 10 }] },
+  "1337/movie": { cast: [{ ...film(1771, "Les Éternels", 2021, 7000), order: 0 }, { ...film(530915, "1917", 2019, 13000), order: 1 }] },
   "2636/movie": { crew: [{ ...film(539, "Psychose", 1960, 11367), job: "Director" }, { ...film(426, "Sueurs froides", 1958, 6572), job: "Director" }] },
   "11108/movie": { cast: [{ ...film(4638, "Hot Fuzz", 2007, 7000), order: 1 }, { ...film(9999, "Un film ensemble", 2015, 400), order: 2 }] },
   "38025/movie": { cast: [{ ...film(9999, "Un film ensemble", 2015, 400), order: 0 }] },
@@ -63,7 +65,7 @@ const CREDITS = {
 
 const PEOPLE = {
   pacino: [PACINO], "de niro": [DE_NIRO], scorsese: [SCORSESE], "tom hanks": [HANKS], "meg ryan": [RYAN],
-  frost: [FROST], nixon: [NIXON], nolan: [NOLAN], bleach: [JULIAN_BLEACH], jojo: [JOJO], hitchcock: [HITCHCOCK],
+  frost: [FROST], nixon: [NIXON], nolan: [NOLAN], bleach: [JULIAN_BLEACH], jojo: [JOJO], hitchcock: [HITCHCOCK], madden: [R_MADDEN],
 };
 
 // Résultats des recherches de titres (requête sans accents → résultats).
@@ -76,6 +78,8 @@ const TITLES = {
   "tom et jerry": [film(15602, "Tom et Jerry, le film", 1992, 600)],
   bleach: [film(9100, "Bleach", 2018, 599), film(9101, "Bleach : Memories of Nobody", 2006, 239)],
   jojo: [serie(45790, "JoJo's Bizarre Adventure", 2012, 1686)],
+  // « madden » : le film du 18 novembre 2026, 62 votes mais très en vue, devant Richard Madden
+  madden: [film(1131943, "Madden", 2026, 62, { popularity: 68.3 }), film(1076167, "Madden", 2023, 3, { popularity: 0.6 })],
   hitchcock: [film(112336, "Hitchcock", 2012, 1677), film(9102, "Hitchcock : la face cachée du maître du suspense", 2022, 20)],
   // la suite annoncée pour l'an prochain : 0 vote, mais on en parle
   beekeeper: [film(866398, "The Beekeeper", 2024, 3500), film(1300001, "The Beekeeper 2", 2099, 0, { popularity: 6 }),
@@ -266,6 +270,13 @@ test("titre_proche_et_personne", async () => {
   const h = await cherche("hitchcock");
   assert.deepEqual(h.names.slice(0, 3), ["Hitchcock", "Psychose", "Sueurs froides"]);
   assert.equal(h.trace.head, "titre puis personne Alfred Hitchcock");
+});
+
+test("titre_tout_juste_sorti_devant_la_personne", async () => {
+  const r = await cherche("madden");
+  assert.equal(r.names[0], "Madden");
+  assert.ok(r.names.includes("Les Éternels") && r.names.includes("1917"));
+  assert.equal(r.trace.head, "titre puis personne Richard Madden");
 });
 
 test("une_seule_personne_inchangee", async () => {

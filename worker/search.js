@@ -728,6 +728,8 @@ const PERSON_MAX = 15;    // films de la personne en tête, puis les titres qui 
 const FAMOUS = 300;       // un titre exact avec autant de votes l'emporte sur un studio (ou une personne peu connue)
 const STRONG_VOTES = 100; // titre qui correspond à la requête gardé devant les titres d'un genre ou de plusieurs personnes
 const HEAD_MAX = 15;
+const HOT_POP = 20;       // popularité d'un titre exact très en vue du moment, même avec peu de votes…
+const HOT_RATIO = 5;      // …et au moins autant de fois celle de la personne du même nom
 
 /**
  * Un titre montrable : une affiche, et des votes, ou bien pas encore sorti mais dont on parle un peu (« The Beekeeper 2 »,
@@ -962,7 +964,11 @@ export async function smartSearch(query, page, search, kind, api, opts = {}) {
     if (person) {
       const credits = await api(`/person/${person.id}/${kind === "series" ? "tv" : "movie"}_credits`);
       const films = dedupe(usable(filmography(person, credits, kind))).slice(0, PERSON_MAX);
-      const avant = titres < Math.max(FAMOUS, 0.1 * renom(person)) ? []
+      // Un titre exact tout juste sorti, encore peu voté mais dont tout le monde parle (« Madden », 2026 : 62 votes,
+      // popularité 68, contre 2,6 pour Richard Madden) reste en tête, la filmographie derrière.
+      const chaud = pool.filter((it) => isExact(main, it) && (it.popularity || 0) >= HOT_POP
+        && (it.popularity || 0) >= HOT_RATIO * (person.popularity || 0)).sort(byPop);
+      const avant = titres < Math.max(FAMOUS, 0.1 * renom(person)) ? chaud
         : pool.filter((it) => isExact(main, it)).sort((a, b) => fame(b) - fame(a));
       if (films.length) { head = dedupe([...avant, ...films]); headKind = `${avant.length ? "titre puis " : ""}personne ${person.name}`; personId = person.id; }
     }
