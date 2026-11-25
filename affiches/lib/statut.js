@@ -35,7 +35,7 @@ function releaseDates(releases, types, pays) {
  * l'affiche disent le même jour (Malfaisante : « DISPO VERS LE 14 FÉVR. »). Jamais sorti en France : null.
  */
 export function vffApresVo(releases, today) {
-  const numerique = releaseDates(releases, [4, 5, 6], ["FR"]).find((d) => d > today);
+  const numerique = releaseDates(releases, [4], ["FR"]).find((d) => d > today);
   if (numerique) return { date: numerique, vers: false };
   const salle = releaseDates(releases, [2, 3], ["FR"])[0];
   if (!salle) return null;

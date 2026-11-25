@@ -104,7 +104,9 @@ export function vffPossible(releases, langue, today) {
   if (langue === "fr") return true;
   const dates = (types, pays) => (releases || []).filter((r) => r.iso_3166_1 === pays).flatMap((r) => r.release_dates || [])
     .filter((r) => types.includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter(Boolean).sort();
-  const frNumerique = dates([4, 5, 6], "FR")[0];
+  // Numérique seulement (type 4) : un DVD/Blu-ray (5) ou un passage télé (6) en France ne met pas la VFF dans les
+  // fichiers du store américain (Runner : physique en France le 17 nov., que du MULTi.LAT ensuite, marqué dispo à tort).
+  const frNumerique = dates([4], "FR")[0];
   if (frNumerique && frNumerique <= today) return true;
   // Sortie en salle en France avant le fichier américain : ne suffit plus (2026-11-06). Le fichier du store américain
   // porte souvent la VFQ même quand une VFF existe pour les salles (Primetime, Your Mother Your Mother Your Mother : en
@@ -119,7 +121,7 @@ export function vffPossible(releases, langue, today) {
 /** La prochaine sortie numérique en France, annoncée (AAAA-MM-JJ) : la VFF arrive avec elle. Sinon null. */
 export function prochaineVff(releases, today) {
   return (releases || []).filter((r) => r.iso_3166_1 === "FR").flatMap((r) => r.release_dates || [])
-    .filter((r) => [4, 5, 6].includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter((d) => d > today).sort()[0] || null;
+    .filter((r) => [4].includes(r.type)).map((r) => (r.release_date || "").slice(0, 10)).filter((d) => d > today).sort()[0] || null;
 }
 
 /**

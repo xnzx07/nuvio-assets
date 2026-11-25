@@ -267,6 +267,7 @@ test("vff_possible_d_apres_les_dates", () => {
   assert.equal(vffPossible(AU_29_OCT.coyote, "en", jour), true, "sortie numérique en France");
   assert.equal(vffPossible(AU_29_OCT.coyote, "en", "2026-10-21"), false, "pas encore");
   assert.equal(vffPossible([], "fr", jour), true, "film français");
+  assert.equal(vffPossible([sortie("US", ["2026-10-13", 4]), sortie("FR", ["2026-10-17", 5])], "en", jour), false, "DVD en France : pas une VFF (Runner)");
 });
 
 // Une VFQ en vue sans VFF sûre : l'affiche coupée en deux (vfqPossible), sans avis de Lumio (quebec), que les dates

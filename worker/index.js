@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.11";
+const VERSION = "5.65.12";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -699,7 +699,7 @@ const VOD_FR_MOIS = 4;
  * plus visible). Jamais sorti en France (Crawlers, El despertar) : rien, pas de date inventée. { date, vers } ou null.
  */
 export function vffApresVo(releases, today) {
-  const numerique = releaseDates(releases, [4, 5, 6], ["FR"]).find((d) => d > today);
+  const numerique = releaseDates(releases, [4], ["FR"]).find((d) => d > today);
   if (numerique) return { date: numerique, vers: false };
   const salle = releaseDates(releases, [2, 3], ["FR"])[0];
   if (!salle) return null;
