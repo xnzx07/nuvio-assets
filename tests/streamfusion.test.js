@@ -206,6 +206,38 @@ test("vf_gardee_sept_jours_pas_de_vf_trois_heures_puis_un_jour", async () => {
   } finally { horloge.mock.restore(); }
 });
 
+// Une VFF prouvée (vff) ne disparaît pas parce qu'on ne peut pas la relire : passé ses 7 jours, plafond atteint ou
+// débrideur muet, l'ancien avis reste (I Want Your Sex, le 27 novembre 2026 : VFF vue par Lumio, avis périmé, plafond
+// pris à minuit, la fiche retombait sur Torrentio, « Dispo vers le 29 nov. », et l'Agenda d'AppTV la rangeait au 29).
+// Une VF sans preuve, elle, n'est gardée que 7 jours ; et une VFF qu'on relit pour de bon suit la nouvelle réponse.
+test("vff_prouvee_gardee_quand_on_ne_peut_pas_la_relire", async () => {
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (!u.startsWith("https://sf.test/c/stream/")) return new Response("{}");
+    appels.push(u);
+    return Response.json({ streams: [{ name: "instant / AllDebrid / (1080p)", title: "Film.2026.MULTi.VFF.1080p.WEB" }] });
+  };
+  const e = { ...env, SF_PLAFOND: "100" }, muet = { ...e, STREAMFUSION_URL: "" };
+  const j = 86400000, debut = Date.parse("2026-11-10T10:00:00Z");
+  const horloge = mock.method(Date, "now", () => debut);
+  const lire = async (jours, x = e, video = "movie/tt881") => {
+    horloge.mock.mockImplementation(() => debut + jours * j);
+    return (await sf(video, "cle-relais", x)).json();
+  };
+  try {
+    assert.equal((await lire(0)).vff, true);
+    store.clear(); // le cache du centre de données a expiré : seule la mémoire commune reste
+    const plusTard = await lire(17, muet);
+    assert.equal(plusTard.vf, true, "VFF prouvée gardée sans relecture possible");
+    assert.equal(plusTard.vff, true);
+    // Une VF sans preuve de VFF (tt882 : FRENCH, sans TRUEFRENCH ni VFF) : 7 jours, pas plus.
+    globalThis.fetch = async () => Response.json({ streams: [{ name: "instant / AllDebrid / (1080p)", title: "Film.2026.FRENCH.1080p.WEB" }] });
+    assert.equal((await lire(0, e, "movie/tt882")).vf, true);
+    store.clear();
+    assert.deepEqual(await lire(17, muet, "movie/tt882"), { plafond: true }, "VF sans preuve : périmée");
+  } finally { horloge.mock.restore(); }
+});
+
 // Lumio a son plafond (LUMIO_PLAFOND, 50 par défaut) : au-delà, StreamFusion, dans le sien. Un plafond atteint est
 // retenu : plus de demande ni d'écriture en base pour rien.
 test("lumio_plafonne_et_plafond_retenu", async () => {
