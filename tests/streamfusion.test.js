@@ -206,11 +206,11 @@ test("vf_gardee_sept_jours_pas_de_vf_trois_heures_puis_un_jour", async () => {
   } finally { horloge.mock.restore(); }
 });
 
-// Une VFF prouvée (vff) ne disparaît pas parce qu'on ne peut pas la relire : passé ses 7 jours, plafond atteint ou
-// débrideur muet, l'ancien avis reste (I Want Your Sex, le 27 novembre 2026 : VFF vue par Lumio, avis périmé, plafond
-// pris à minuit, la fiche retombait sur Torrentio, « Dispo vers le 29 nov. », et l'Agenda d'AppTV la rangeait au 29).
-// Une VF sans preuve, elle, n'est gardée que 7 jours ; et une VFF qu'on relit pour de bon suit la nouvelle réponse.
-test("vff_prouvee_gardee_quand_on_ne_peut_pas_la_relire", async () => {
+// Une VF (VFF prouvée ou non) ne disparaît pas parce qu'on ne peut pas la relire : passé ses 7 jours, plafond atteint
+// ou débrideur muet, l'ancien avis reste un an (I Want Your Sex, le 27 novembre 2026 : VFF vue par Lumio, avis périmé,
+// plafond pris à minuit, la fiche retombait sur Torrentio, « Dispo vers le 29 nov. », et l'Agenda d'AppTV la rangeait
+// au 29). Un avis qu'on relit pour de bon suit la nouvelle réponse (vf_gardee_sept_jours…).
+test("vf_gardee_quand_on_ne_peut_pas_la_relire", async () => {
   globalThis.fetch = async (url) => {
     const u = String(url);
     if (!u.startsWith("https://sf.test/c/stream/")) return new Response("{}");
@@ -230,11 +230,19 @@ test("vff_prouvee_gardee_quand_on_ne_peut_pas_la_relire", async () => {
     const plusTard = await lire(17, muet);
     assert.equal(plusTard.vf, true, "VFF prouvée gardée sans relecture possible");
     assert.equal(plusTard.vff, true);
-    // Une VF sans preuve de VFF (tt882 : FRENCH, sans TRUEFRENCH ni VFF) : 7 jours, pas plus.
+    // Une VF sans preuve de VFF (tt882 : FRENCH, sans TRUEFRENCH ni VFF) : gardée aussi, sans VFF.
     globalThis.fetch = async () => Response.json({ streams: [{ name: "instant / AllDebrid / (1080p)", title: "Film.2026.FRENCH.1080p.WEB" }] });
     assert.equal((await lire(0, e, "movie/tt882")).vf, true);
     store.clear();
-    assert.deepEqual(await lire(17, muet, "movie/tt882"), { plafond: true }, "VF sans preuve : périmée");
+    const vf = await lire(17, muet, "movie/tt882");
+    assert.equal(vf.vf, true, "VF sans preuve gardée");
+    assert.equal(vf.vff, undefined);
+    // Un an plus tard : plus rien.
+    store.clear();
+    assert.deepEqual(await lire(366, muet), { plafond: true });
+    // Un avis d'un ancien format (lu avec des règles plus lâches) : 7 jours seulement.
+    e.LIENS.avis.set("movie/tt883", { cle: "movie/tt883", avis: JSON.stringify({ vf: true, sources: 3, l: 3 }), t: debut, depuis: null });
+    assert.deepEqual(await lire(8, muet, "movie/tt883"), { plafond: true }, "ancien format : périmé");
   } finally { horloge.mock.restore(); }
 });
 

@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.13";
+const VERSION = "5.65.14";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -1048,7 +1048,7 @@ async function lireVfLumio(env, cles) {
 const AVIS_FORMAT = 4;
 /** L'avis sans son format (l), gardé seulement dans la mémoire. */
 const sansFormat = ({ l, ...a }) => a;
-const AVIS_VFF_SECOURS_MS = 60 * 86400000;   // une VFF prouvée, en secours quand on ne peut pas la relire (avisDuJour)
+const AVIS_VF_SECOURS_MS = 365 * 86400000;   // un avis « VF », en secours quand on ne peut pas le relire (avisDuJour)
 const AVIS_OUI_MS = 7 * 86400000, AVIS_NON_MS = 3 * 3600000, AVIS_NON_VIEUX_MS = 86400000, AVIS_NON_RECENT_MS = 7 * 86400000;
 // /5/ : vidée le 2026-11-04 avec la lecture des drapeaux et de l'année des fichiers de Lumio (The Mongoose, The Isolate
 // Thief : VF à tort) ; la mémoire commune reste.
@@ -1166,13 +1166,12 @@ async function avisDuJour(env, cles, origine = "affiches", opts = {}) {
   await garderAvis(env, neufs);
   // Pas relu (plafond, panne) : un avis « VF » d'un ancien format, encore dans ses 7 jours, plutôt que rien ; sans sa
   // VFF, prouvée par une règle plus lâche (L'Odyssée : un seul fichier d'une petite équipe) : le doute plutôt que l'erreur.
-  // Une VFF prouvée au format du jour : gardée bien au-delà (AVIS_VFF_SECOURS_MS), une VFF publiée ne disparaît pas
-  // (I Want Your Sex, le 27 novembre 2026 : avis périmé, plafond pris à minuit, retombée sur Torrentio, « Dispo vers le
-  // 29 nov. » sur la fiche et au 29 dans l'Agenda d'AppTV, alors que Lumio l'avait en VFF).
+  // Un avis « VF » au format du jour (VFF prouvée ou non) : gardé bien au-delà (AVIS_VF_SECOURS_MS), une VF publiée ne
+  // disparaît pas, et Torrentio en sait moins que Lumio (I Want Your Sex, le 27 novembre 2026 : avis VFF périmé, plafond
+  // pris à minuit, retombée sur Torrentio, « Dispo vers le 29 nov. » sur la fiche et au 29 dans l'Agenda d'AppTV).
   for (const [cle, d] of vieux) {
     if (avis.has(cle) || !d || !d.avis || d.avis.vf !== true || !(d.t > 0)) continue;
-    const vffSure = d.avis.vff === true && d.avis.l === AVIS_FORMAT;
-    if (now - d.t >= (vffSure ? AVIS_VFF_SECOURS_MS : AVIS_OUI_MS)) continue;
+    if (now - d.t >= (d.avis.l === AVIS_FORMAT ? AVIS_VF_SECOURS_MS : AVIS_OUI_MS)) continue;
     const { vff, vffDepuis, vffVu, ...sans } = sansFormat(d.avis);
     avis.set(cle, d.avis.l === AVIS_FORMAT ? sansFormat(d.avis) : sans);
   }
