@@ -335,7 +335,9 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
             : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
       if (!(avisJour && avisJour.vff)) quality = avecAvisDoute(quality);
       // Récent sans VF d'après l'avis du jour : « revoir », le serveur la redessine quelques heures plus tard.
-      const aRevoir = !!avisJour && avisJour.vf === false;
+      // Aussi sans avis du tout (plafond du jour, addon muet) : l'avis peut arriver dans l'heure par les rangées (Raison et
+      // Sentiments, le 27 novembre 2026 : « Au cinéma » sur l'affiche, « VFQ possible » sur la fiche, d'après Lumio).
+      const aRevoir = (!!avisJour && avisJour.vf === false) || (!!videoAvis && !avisJour);
       const saga = sagaVoulue ? rangSaga(filmsSaga, facts.tmdbId, aujourdhui) : null;
       // Une donnée qui manque pour une panne passagère (fichier IMDb pas lu : note TMDB en attendant ; photo des
       // tendances illisible : pas de N° ; image sans texte pas vérifiée) : cache court, pour l'avoir ensuite.

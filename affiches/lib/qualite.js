@@ -313,7 +313,9 @@ export const qualiteDeQ = (q) => (q && typeof q === "object"
  * coûte qu'une requête à l'addon, qui le relit dans sa mémoire commune sans appeler le débrideur.
  */
 let avisMemo = new Map();
-const AVIS_MEMO_MS = 3 * 3600000, AVIS_MEMO_NON_MS = 3600000;
+// Pas d'avis du tout (plafond du jour, addon muet) : redemandé une demi-heure plus tard, pas trois heures (Raison et
+// Sentiments, le 27 novembre 2026 : avis de Lumio arrivé par les rangées, affiche restée « Au cinéma »).
+const AVIS_MEMO_MS = 3 * 3600000, AVIS_MEMO_NON_MS = 3600000, AVIS_MEMO_RIEN_MS = 1800000;
 /** Oublie l'avis gardé d'un titre (« movie/tt… ») : redemandé à l'addon au prochain dessin (une VFF trouvée en journée). */
 export const oublierAvisDuJour = (video) => avisMemo.delete(video);
 
@@ -329,7 +331,10 @@ export function avisDuJour(addon, video, cle, fetchImpl = fetch) {
     } catch { return null; }
   })();
   const memo = { promesse, until: Date.now() + AVIS_MEMO_MS };
-  promesse.then((d) => { if (d && d.vf === false) memo.until = Math.min(memo.until, Date.now() + AVIS_MEMO_NON_MS); });
+  promesse.then((d) => {
+    if (!d) memo.until = Math.min(memo.until, Date.now() + AVIS_MEMO_RIEN_MS);
+    else if (d.vf === false) memo.until = Math.min(memo.until, Date.now() + AVIS_MEMO_NON_MS);
+  });
   avisMemo.delete(video);
   avisMemo.set(video, memo);
   while (avisMemo.size > MAX_MEMO) avisMemo.delete(avisMemo.keys().next().value);

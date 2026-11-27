@@ -858,8 +858,8 @@ test("avis_du_jour_de_l_addon_prime", async () => {
   const { image: sansVf, ...vu } = await lancer(true, { vf: false, sources: 68 });
   assert.deepEqual(vu, { vf: "false", etat: "revoir", cles: ["cle"] });
   assert.partialDeepStrictEqual(await lancer(false, { vf: true, sources: 9, qualite: { u: 1, x: "DV", p: 0, f: 1, a: 0 } }), { vf: "true", etat: "complete", cles: ["cle"] });
-  // L'addon sans avis (plafond, panne) : Torrentio.
-  assert.partialDeepStrictEqual(await lancer(true, { plafond: true }), { vf: "true", etat: "complete", cles: ["cle"] });
+  // L'addon sans avis (plafond, panne) : Torrentio, et l'affiche à revoir (l'avis peut arriver dans l'heure).
+  assert.partialDeepStrictEqual(await lancer(true, { plafond: true }), { vf: "true", etat: "revoir", cles: ["cle"] });
   // Ailleurs que sur le serveur (Vercel, machine GitHub) : jamais demandé.
   assert.partialDeepStrictEqual(await lancer(true, { vf: false, sources: 3 }, { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test" }), { vf: "true", etat: "complete", cles: [] });
   // Sans VF, pas de badge de qualité : celle de Torrentio (4K DV) est celle d'un fichier VFQ ou VO. La même affiche
@@ -897,6 +897,30 @@ test("affiche_a_revoir_une_heure", async () => {
     const apres = await makeHandler({ fetchImpl: f, env: e })(req("type=movie&shape=landscape&id=tt15239678"));
     assert.equal(apres.headers.get("X-Affiche-Etat"), "complete");
     assert.equal(demandes, 2);
+  } finally { Date.now.mock.restore(); }
+});
+
+// Pas d'avis du tout (plafond du jour) : l'affiche « à revoir » (une heure en cache), l'avis redemandé une demi-heure
+// plus tard (Raison et Sentiments, le 27 novembre 2026 : avis de Lumio arrivé par les rangées, affiche restée « Au
+// cinéma » pendant que la fiche disait « VFQ possible »).
+test("sans_avis_redemande_une_demi_heure_plus_tard", async () => {
+  const e = { ...env, RESERVE: "off", STREAMFUSION: "off", RELAIS_KEY: "cle", ADDON_URL: "https://addon.test", AVIS_DU_JOUR: "on" };
+  let avis = { plafond: true }, demandes = 0;
+  const base = internet({ detail: avecSorties([4, jour(-20)]), torrentio: () => json({ streams: [{ name: "Torrentio\n1080p", title: "Film.2026.1080p.WEB" }] }) });
+  const f = async (url, opts = {}) => {
+    if (String(url) === "https://addon.test/sf/movie/tt15239678.json") { demandes++; return json(avis); }
+    return base(url, opts);
+  };
+  const res = await makeHandler({ fetchImpl: f, env: e })(req("type=movie&shape=poster&id=tt15239678"));
+  assert.equal(res.headers.get("X-Affiche-Etat"), "revoir");
+  assert.ok(Number(/max-age=(\d+)/.exec(res.headers.get("Cache-Control"))[1]) <= 3600, res.headers.get("Cache-Control"));
+  avis = { vf: true, sources: 9 };
+  const maintenant = Date.now();
+  mock.method(Date, "now", () => maintenant + 31 * 60000);
+  try {
+    const apres = await makeHandler({ fetchImpl: f, env: e })(req("type=movie&shape=landscape&id=tt15239678"));
+    assert.equal(demandes, 2, "redemandé après 30 min");
+    assert.equal(apres.headers.get("X-Affiche-Etat"), "complete");
   } finally { Date.now.mock.restore(); }
 });
 
