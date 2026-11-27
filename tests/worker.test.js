@@ -2005,3 +2005,25 @@ test("notes.json : les notes IMDb de plusieurs titres, celles des rangées ; un 
   assert.deepEqual(await res.json(), {});
   assert.equal((await get("/abc/notes.json?ids=tt1")).status, 200);
 });
+
+// La Gradiva (film français) : en salle en France il y a 37 jours, des sorties WEB-DL d'une plateforme étrangère chez
+// Torrentio, sans « FRENCH » (sa VO est la VF), toutes avec des sous-titres incrustés. Regardable : « Déjà dispo »,
+// avec la précision ; sans source, la date française (le 27 novembre 2026, elle disait « Dispo vers le 21 févr. »).
+test("fiche_film_francais_sous_titres_incrustes", async () => {
+  const jour = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const table = { tt9011: { vf: false, sources: 7, langue: "vo", incruste: true }, tt9012: { vf: false, sources: 4, langue: "vo" } };
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.includes("/vf.json")) return sourcesDe(table)(u);
+    const m = /\/movie\/(801[123])\?/.exec(u);
+    if (m) return new Response(JSON.stringify({ id: Number(m[1]), title: "La Gradiva", imdb_id: "tt" + (Number(m[1]) + 1000), release_date: jour(-37), original_language: "fr",
+      release_dates: { results: [{ iso_3166_1: "FR", release_dates: [{ type: 3, release_date: jour(-37) + "T00:00:00.000Z" }] }] } }));
+    return new Response("{}");
+  };
+  const ligne = async (id) => ((await (await get(`/meta/movie/tmdb:${id}.json`)).json()).meta.description || "").split("\n")[0];
+  assert.equal(await ligne(8011), "📅 Déjà dispo · sous-titres incrustés, impossibles à enlever.");
+  assert.equal(await ligne(8012), "📅 Déjà dispo.");
+  // aucune source (tt9013 pas lu) : la date française estimée
+  assert.match(await ligne(8013), /^📅 Dispo vers le /);
+});

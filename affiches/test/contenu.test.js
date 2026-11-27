@@ -605,3 +605,23 @@ test("contenu_vff_en_avance", () => {
   assert.equal(posterContent(visiteurs, { quality: q }, "poster", undefined, "2026-11-13").statut, null);
   assert.notEqual(posterContent(visiteurs, { quality: { ...q, vffDepuis: "2026-11-12" } }, "poster", undefined, "2026-11-13").statut, "NOUVEAU EN VFF");
 });
+
+// Regardable seulement avec des sous-titres incrustés, impossibles à enlever (La Gradiva, film français, le 27 novembre
+// 2026 : « La Gradiva 2026 1080p HC WEB-DL ») : dit seul, ou sous un autre statut ; rien tant que le film n'est pas là.
+test("contenu_sous_titres_incrustes", () => {
+  const today = "2026-11-27";
+  const sorties = (...l) => l.map(([pays, type, d]) => ({ iso_3166_1: pays, release_dates: [{ type, release_date: `${d}T00:00:00.000Z` }] }));
+  const faits = { type: "movie", title: "La Gradiva", firstAir: null, poster: "/p.jpg", textlessPoster: "/t.jpg", logo: "/l.png", genreIds: [], originalLanguage: "fr", year: "2026",
+    releases: sorties(["FR", 3, "2026-10-21"]) };
+  const q = { uhd: false, extra: null, vf: true, sources: 3, langue: "vf", incruste: true };
+  const dit = (c) => [c.statut, c.statut2].includes("SOUS-TITRES INCRUSTÉS");
+  // tout juste sorti : « NOUVEAU », la mention dessous ; ensuite, seule
+  const c = posterContent(faits, { quality: q }, "poster", undefined, today);
+  assert.deepEqual([c.statut, c.statut2], ["NOUVEAU", "SOUS-TITRES INCRUSTÉS"]);
+  assert.equal(c.gris, false);
+  assert.equal(posterContent(faits, { quality: q }, "poster", undefined, "2027-06-01").statut, "SOUS-TITRES INCRUSTÉS");
+  // sans sous-titres incrustés : pas la mention
+  assert.equal(dit(posterContent(faits, { quality: { ...q, incruste: undefined } }, "poster", undefined, today)), false);
+  // pas encore là (sources sans VF) : pas la mention
+  assert.equal(dit(posterContent({ ...faits, originalLanguage: "en" }, { quality: { ...q, vf: false, langue: "vo" } }, "poster", undefined, today)), false);
+});

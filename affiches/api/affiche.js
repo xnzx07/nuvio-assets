@@ -12,7 +12,7 @@
 import { titleFacts } from "../lib/tmdb.js";
 import { lireNoteImdb } from "../lib/notes.js";
 import { lireRang, secondesAvantBascule, ADDON_URL } from "../lib/tendances.js";
-import { qualityOf, avisDuJour, qualiteDeQ, avecAvisDoute, vffProuvee } from "../lib/qualite.js";
+import { qualityOf, avisDuJour, qualiteDeQ, avecAvisDoute, vffProuvee, vfDuFrancais } from "../lib/qualite.js";
 import { posterContent, contentKey } from "../lib/contenu.js";
 import { etatSortie, sourcesUtiles, dispoChezSoi, estimationDe, besoinEstimation, LIBELLES_FIN } from "../lib/statut.js";
 import { lireEstimations } from "../lib/estimations.js";
@@ -334,6 +334,8 @@ export function makeHandler({ fetchImpl = fetch, env = process.env } = {}) {
           : avisJour ? avecAvisVf(qualiteTorrentio, avisJour.vf, avisJour.vf ? qualiteDeQ(avisJour.qualite) : SANS_QUALITE)
             : avecAvisVf(qualiteTorrentio, photoLue.vf, photoLue.qualite);
       if (!(avisJour && avisJour.vff)) quality = avecAvisDoute(quality);
+      // Film en français : une vraie sortie dans les sources suffit, sa VO est la VF (vfDuFrancais).
+      if (type === "movie" && facts.originalLanguage === "fr" && qualiteTorrentio && qualiteTorrentio.sources > 0) quality = vfDuFrancais({ ...quality, ...(qualiteTorrentio.incruste ? { incruste: true } : {}) });
       // Récent sans VF d'après l'avis du jour : « revoir », le serveur la redessine quelques heures plus tard.
       // Aussi sans avis du tout (plafond du jour, addon muet) : l'avis peut arriver dans l'heure par les rangées (Raison et
       // Sentiments, le 27 novembre 2026 : « Au cinéma » sur l'affiche, « VFQ possible » sur la fiche, d'après Lumio).

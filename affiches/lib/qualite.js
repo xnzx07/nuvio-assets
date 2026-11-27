@@ -54,6 +54,15 @@ const VOSTFR = /\b(VOSTFR|SUBFRENCH)\b/i;
 // mot après l'année dans le nom du fichier (pas avant : le film « Cam » de 2018 en sortie WEB reste un vrai flux).
 const SALLE_NOM = /\b(CAM|TeleSync|TeleCine)\b/i;
 const SALLE_FICHIER = /\b(19|20)\d{2}\b.*\b(HD-?CAM|CAM-?RIP|CAM|HD-?TS|TELESYNC|TS|HD-?TC|TELECINE|TC)\b/i;
+// Sous-titres incrustés dans l'image, impossibles à enlever (« HC », « HARDSUB ») : souvent la sortie d'une plateforme
+// étrangère (La Gradiva, film français, le 27 novembre 2026 : « La.Gradiva.2026.1080p.HC.WEB-DL »).
+const INCRUSTE = /\b(HC|HARD[ ._-]?SUBS?|HARD[ ._-]?SUBBED|HARDCODED|HC[ ._-]?SUBS?)\b/i;
+export const sousTitresIncrustes = (t) => INCRUSTE.test(t);
+const incrustees = (tous) => {
+  const fr = tous.filter((t) => /🇫🇷/u.test(t) || enVf(t));
+  const base = fr.length ? fr : tous;
+  return base.length > 0 && base.every(sousTitresIncrustes);
+};
 export const filmeEnSalle = (s) => SALLE_NOM.test(s.name || "") || SALLE_FICHIER.test(`${s.title || ""} ${s.description || ""}`);
 
 /** La meilleure langue des flux pour un Français : "multi", "vf", "vostfr", "vo", ou null sans aucun flux. */
@@ -90,7 +99,22 @@ export function parseQuality(streams) {
   const vf = tous.some(enVf);
   return { uhd: uhd.length > 0, extra, fhd: tous.some((t) => FHD.test(t)), hdr10p: uhd.some((t) => HDR10P.test(t)), atmos: tous.some((t) => ATMOS.test(t)),
     vf, sources: tous.length, langue: langueDe(tous), ...(vff ? { vff: true, vfq: qualiteCourte(tous.filter(enVf)) } : {}),
-    ...(!vff && tous.some((t) => VFQ.test(t)) ? { vfqDoute: true } : {}) };
+    ...(!vff && tous.some((t) => VFQ.test(t)) ? { vfqDoute: true } : {}),
+    // les sources en français (drapeau 🇫🇷 ou VF dans le nom ; sinon toutes) ont toutes des sous-titres incrustés : à dire
+    // (affiche, fiche). La Gradiva : les fichiers français « HC », les autres en russe.
+    ...(incrustees(tous) ? { incruste: true } : {}) };
+}
+
+/**
+ * Film en français : sa VO est la VF. Une vraie sortie dans les sources (les copies filmées en salle sont déjà écartées)
+ * le rend regardable, même sans « FRENCH » dans les noms (La Gradiva, le 27 novembre 2026 : « La Gradiva 2026 1080p HC
+ * WEB-DL », sortie d'une plateforme étrangère, sous-titres incrustés ; disait « Dispo vers le 21 févr. »). Ni VFQ ni
+ * date de VFF à attendre. La même règle que l'addon (worker/index.js, vfDuFrancais).
+ */
+export function vfDuFrancais(q) {
+  if (!q || !(q.sources > 0)) return q;
+  const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, vfqDoute, ...reste } = q;
+  return { ...reste, vf: true, langue: q.langue === "multi" ? "multi" : "vf" };
 }
 
 /**
@@ -230,7 +254,7 @@ async function lireRelais(relais, video, fetchImpl, cle, sf = false) {
         vf: typeof d.vf === "boolean" ? d.vf : null, sources: Number.isInteger(d.sources) ? d.sources : null, langue: LANGUES.includes(d.langue) ? d.langue : null,
         ...(d.vff === true && d.vfq && typeof d.vfq === "object" ? { vff: true, vfq: d.vfq } : {}), ...(d.quebec === true ? { quebec: true } : {}),
         ...(d.vfqPossible === true ? { vfqPossible: true } : {}), ...(d.vffImpossible === true ? { vffImpossible: true } : {}),
-        ...(/^\d{4}-\d{2}-\d{2}$/.test(d.vffLe || "") ? { vffLe: d.vffLe } : {}) }
+        ...(/^\d{4}-\d{2}-\d{2}$/.test(d.vffLe || "") ? { vffLe: d.vffLe } : {}), ...(d.incruste === true ? { incruste: true } : {}) }
       : null;
   } catch { return null; }
 }

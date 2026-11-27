@@ -357,3 +357,20 @@ test("french_seul_n_est_pas_une_vff", () => {
   assert.equal(vff(["Mutiny.2026.MULTi.VFF.2160p.WEB-DL.DDP5.1.HDR.AV1-WHY7726.mkv"]), true);
   assert.equal(vff(["Heart of the Beast MULTI TRUEFRENCH WEBRIP 1080p 2026"]), true);
 });
+
+// Sous-titres incrustés (« HC », « HARDSUB ») : les sources en français (drapeau ou VF dans le nom ; sinon toutes) les ont
+// toutes ; une seule propre suffit à ne rien dire. Les sources russes de La Gradiva ne comptent pas.
+test("sous_titres_incrustes", async () => {
+  const { parseQuality, vfDuFrancais } = await import("../lib/qualite.js");
+  const flux = (...t) => t.map((title) => ({ name: "Torrentio\n1080p", title }));
+  const gradiva = flux("La Gradiva 2026 1080p HC WEB-DL AAC2 0 H 264-SPWEB\n🇫🇷", "La.Gradiva.2026.P.WEB-DL.1080p",
+    "La Gradiva 2026 1080p HC WEB-DL AAC2 0 H 264-SPWEB\n🇬🇧 / 🇫🇷", "Градива / La Gradiva [2026 WEB-DLRip-AVC] MVO + Original Fra\n🇬🇧 / 🇷🇺");
+  assert.equal(parseQuality(gradiva).incruste, true);
+  assert.equal(parseQuality(flux("Film.2026.FRENCH.1080p.WEB", "Film.2026.HC.1080p\n🇫🇷")).incruste, undefined);
+  assert.equal(parseQuality(flux("Film.2026.HARDSUB.720p")).incruste, true);
+  assert.equal(parseQuality(flux("Schindler.HCJ.1080p")).incruste, undefined);
+  // un film en français : ses sources le rendent regardable, la mention reste
+  const fr = vfDuFrancais(parseQuality(gradiva));
+  assert.deepEqual([fr.vf, fr.langue, fr.incruste], [true, "vf", true]);
+  assert.equal(vfDuFrancais({ vf: false, sources: 0 }).vf, false);
+});

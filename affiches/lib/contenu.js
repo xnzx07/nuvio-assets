@@ -256,6 +256,12 @@ export function posterContent(facts, { imdbRating, rank, quality, notes, saga, s
   // dessous : la personne la trouvait inutile. Pas pour un film français ni sur une plateforme qui le double.
   if (r.statut.on && nouveauEnVff(facts, quality, today)) { libelle = "NOUVEAU EN VFF"; libelle2 = null; }
   else if (r.statut.on && vffEnAvance(facts, quality, today)) { libelle = "VFF EN AVANCE"; libelle2 = null; }
+  // Regardable, mais seulement avec des sous-titres incrustés dans l'image, impossibles à enlever (quality.incruste) :
+  // dit sous le statut, ou seul (La Gradiva, le 27 novembre 2026).
+  if (r.statut.on && sorti && quality && quality.incruste) {
+    if (!libelle) libelle = "SOUS-TITRES INCRUSTÉS";
+    else if (!libelle2) libelle2 = "SOUS-TITRES INCRUSTÉS";
+  }
   let place = r.tendance.on && rank >= 1 && rank <= 20 ? rank : null;
   // Bandeau en coin : il porte le statut ou le N° de tendance, qui ne sont alors plus écrits en haut.
   let bandeau = null;

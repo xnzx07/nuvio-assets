@@ -68,7 +68,7 @@ import { routeCpu } from "./cpu.js";
 import { routeReserve, nettoyerReserve } from "./reserve.js";
 import { looksDescriptive, aiTitles, aiMiss, resolveTitles, aiRecap, aiProfile, aiProfiles, aiRenewal, aiEnv, AI_WAIT_MS } from "./ai.js";
 
-const VERSION = "5.65.14";
+const VERSION = "5.65.15";
 // Format des réponses gardées dans le cache Cloudflare (pages de rangées, fiches) : à augmenter seulement quand
 // ce qu'elles contiennent change (champ ajouté, règle d'affichage…). Avec VERSION dans les clés, chaque mise à jour
 // vidait tous les caches d'un coup : pic d'appels TMDB et Gemini. Les réponses de Gemini ont leurs propres clés (ai.js).
@@ -753,11 +753,25 @@ function abonnementVf(wp, originalLanguage, kw) {
  * Les sources lues, en VF si le film est en abonnement sur une plateforme qui le double (abonnementVf) : la VFF, sans
  * doute VFQ (My Best Friend sur Netflix, « VFQ possible » le 4 novembre 2026 d'après une réponse gardée).
  */
-const avecAbonnement = (lu, abonnement) => {
+const avecAbonnement = (lu, abonnement, langue = null) => {
+  if (langue === "fr") lu = vfDuFrancais(lu);
   if (!lu || !abonnement) return lu;
   const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, ...reste } = lu;
   return { ...reste, vf: true };
 };
+
+/**
+ * Film en français : sa VO est la VF. Une vraie sortie chez Torrentio (tor : son nombre de sources, les copies filmées
+ * en salle déjà écartées) le rend regardable, même sans « FRENCH » dans les noms (La Gradiva, le 27 novembre 2026 : « La
+ * Gradiva 2026 1080p HC WEB-DL », sortie d'une plateforme étrangère ; la fiche disait « Dispo vers le 21 févr. »). Ni
+ * VFQ ni date de VFF à attendre. Pas d'après le seul avis de Lumio : son « aucun résultat » compte une source. La même
+ * règle que les affiches (affiches/lib/qualite.js).
+ */
+function vfDuFrancais(lu) {
+  if (!lu || !(lu.tor > 0)) return lu;
+  const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, ...reste } = lu;
+  return { ...reste, vf: true };
+}
 
 /**
  * Les sources lues n'ont pas la VF : des sources en VO seulement, ou aucune source (rien de publié, pas de VF non
@@ -820,7 +834,7 @@ const avisPhotoUtile = (lu) => !(lu && (lu.vff || lu.quebec));
  */
 function avecAvis(lu, a) {
   if (a.vff) {
-    const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, ...reste } = lu || {};
+    const { vfqPossible, vffImpossible, vffLe, vffVers, quebec, incruste, ...reste } = lu || {};
     return { ...reste, vf: true, vff: true, sources: Math.max(1, a.sources || 0), ...(a.vffDepuis ? { vffDepuis: a.vffDepuis } : {}), ...(a.vffVu ? { vffVu: a.vffVu } : {}) };
   }
   if (lu && lu.quebec) return lu;
@@ -849,6 +863,8 @@ async function sourcesVf(env, imdbs, lire = lireVf) {
   const ids = [...new Set((imdbs || []).filter((x) => /^tt\d{1,10}$/.test(x || "")))].slice(0, 40);
   if (!ids.length) return new Map();
   const lus = await lire(env, ids.map((i) => "movie/" + i));
+  // tor : les sources de Torrentio elles-mêmes, gardées sous les avis (un « aucun résultat » de Lumio en compte une)
+  if (lire === lireVf) for (const [k, x] of lus) if (x && x.sources > 0) lus.set(k, { ...x, tor: x.sources });
   const vus = await avecAvisPhoto(env, "movie", new Map(ids.map((i) => [i, lus.get("movie/" + i)]).filter(([, x]) => x)), lire);
   return lire === lireVf ? avecAvisDuJour(env, vus, ids.map((i) => [i, "movie/" + i])) : vus;
 }
@@ -1457,6 +1473,14 @@ function filmRecent(releases, today) {
  * une plateforme en France sans savoir si c'est en VF (sources pas lues) }. vod = estimationDe (voir dispoChezSoi).
  */
 function releaseNote(releases, langue, today, etat = {}, vod = null) {
+  const note = noteDeSortie(releases, langue, today, etat, vod);
+  // Regardable seulement avec des sous-titres incrustés dans l'image (etat.incruste : toutes les sources en français
+  // « HC », « HARDSUB ») : la fiche le précise (La Gradiva, le 27 novembre 2026).
+  if (!etat.incruste || (note && !/^(Déjà dispo|Dispo depuis|Dispo en VFF)/.test(note))) return note;
+  return note ? `${note} · ${INCRUSTE_NOTE}` : INCRUSTE_NOTE[0].toUpperCase() + INCRUSTE_NOTE.slice(1);
+}
+const INCRUSTE_NOTE = "sous-titres incrustés, impossibles à enlever";
+function noteDeSortie(releases, langue, today, etat = {}, vod = null) {
   // Le doute : VFF ou VFQ (affiches/lib/qualite.js, avecDatesVff), et la sortie française annoncée, avec laquelle la VFF arrive.
   // vffVers : une estimation (salle en France + 4 mois), pas une date annoncée.
   if (etat.vfq) return etat.vffLe ? `VFQ possible · VFF ${etat.vffVers ? "vers le" : "le"} ${shortDate(etat.vffLe)}` : "VFQ possible";
@@ -1550,7 +1574,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
   const cnc = kind === "movie" && opts.cfg && opts.cfg.f ? await agesCnc() : null;
   return results.map((it, i) => {
     const recent = kind === "movie" && filmRecent(infos[i].releases, today);
-    const lu = recent ? avecAbonnement(sources.get(ids[i]), infos[i].abonnementVf) : null;
+    const lu = recent ? avecAbonnement(sources.get(ids[i]), infos[i].abonnementVf, it.original_language) : null;
     // En VF chez soi aujourd'hui : la date américaine passée, ou les sources (voir enVfChezSoi), comme les affiches.
     const chezSoi = kind === "movie" ? dispoChezSoi(infos[i].releases, it.original_language, infos[i].vod, infos[i].abonnementVf) : { date: "", vers: false };
     const vf = kind === "movie" && enVfChezSoi(infos[i].releases, it.original_language, today, lu, infos[i].plateformeFr, infos[i].vod);
@@ -1565,7 +1589,7 @@ async function toMetas(env, ctx, results, kind, opts, today) {
       : sansVfConnus.has(ids[i]) ? "Sans VF"
       : opts.upcoming ? avecDispoChezSoi(cinemaNote(infos[i].releases, opts.region, date, today), chezSoi, today)
       : releaseNote(infos[i].releases, it.original_language, today,
-        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !infos[i].abonnementVf), vffDepuis: lu.vffDepuis, vffVu: lu.vffVu } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
+        lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !infos[i].abonnementVf), vffDepuis: lu.vffDepuis, vffVu: lu.vffVu, incruste: !!(lu.vf && lu.incruste) } : { vf: infos[i].plateformeFr, surPlateforme: !!infos[i].plateformeVo }, infos[i].vod);
     // Pas encore regardable : la date affichée par Nuvio (carrousel, « date de sortie
     // complète ») devient la date de dispo plutôt que la sortie en salle.
     const dispo = chezSoi.date;
@@ -1890,7 +1914,7 @@ async function fetchPage(env, ctx, def, kind, page, today, opts) {
         // Sans dates (TMDB muet) : gardé. Une ressortie (Les Diables, 1971) aussi : un vieux film a sa VF, mais il
         // revient au cinéma, sa place est ici.
         if (!info.releases || !filmRecent(info.releases, today)) return true;
-        return !enVfChezSoi(info.releases, it.original_language, today, avecAbonnement(sources.get(info.imdb), info.abonnementVf), info.plateformeFr, info.vod);
+        return !enVfChezSoi(info.releases, it.original_language, today, avecAbonnement(sources.get(info.imdb), info.abonnementVf, it.original_language), info.plateformeFr, info.vod);
       });
     };
     let gardes = await garder(data.results);
@@ -2027,7 +2051,7 @@ async function filmsRegardables(env, released, today, max, lire = lireVf) {
     if (!recent(it)) return true;
     const info = infos.get(it.id);
     if (sansImdb(info, it)) return false;
-    return enVfChezSoi(info.releases, it.original_language, today, avecAbonnement(sources.get(info.imdb), info.abonnementVf), info.plateformeFr, info.vod);
+    return enVfChezSoi(info.releases, it.original_language, today, avecAbonnement(sources.get(info.imdb), info.abonnementVf, it.original_language), info.plateformeFr, info.vod);
   }).slice(0, max);
   return { picked, infos, sources };
 }
@@ -2771,11 +2795,11 @@ async function meta(env, kind, id, cfg, today, ctx, opts = {}) {
   // Sans date numérique américaine : l'estimation d'après son distributeur (table lue seulement dans ce cas). Lues
   // ensemble.
   const [lu, vod] = await Promise.all([
-    recent ? sourcesVf(env, [imdb]).then((m) => avecAbonnement(m.get(imdb), abonnementVf(wp, d.original_language, d.keywords))) : null,
+    recent ? sourcesVf(env, [imdb]).then((m) => avecAbonnement(m.get(imdb), abonnementVf(wp, d.original_language, d.keywords), d.original_language)) : null,
     movie && besoinEstimation(releases) ? estimationsVod().then((table) => estimationDe(table, imdb)) : null,
   ]);
   // En VO seulement (comme pas sorti : seule la VF compte) : d'après les sources seulement (voir releaseNote).
-  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !abonnementVf(wp, d.original_language, d.keywords)), vffDepuis: lu.vffDepuis, vffVu: lu.vffVu } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
+  const etat = lu ? { vf: lu.vf, vo: sansVf(lu), vfq: !!lu.vfqPossible, vffLe: lu.vffLe, vffVers: !!lu.vffVers, vff: !!(lu.vf && lu.vff && !abonnementVf(wp, d.original_language, d.keywords)), vffDepuis: lu.vffDepuis, vffVu: lu.vffVu, incruste: !!(lu.vf && lu.incruste) } : { vf: movie && vfSurPlateforme(wp, d.original_language, d.keywords), surPlateforme: plateformeFrance(wp) };
   const note = (await sansVfListe()).has(imdb) ? "Sans VF"
     : movie ? releaseNote(releases, d.original_language, today, etat, vod) : await noteSerie(env, d, imdb, wp, today);
   // La même date que l'affiche et les rangées : la sortie numérique américaine (dispoChezSoi), ou son estimation.
